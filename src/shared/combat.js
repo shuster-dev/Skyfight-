@@ -21,7 +21,25 @@ export const MISSILE = {
   lockCone: 0.38, lockRange: 650,
   /** It arms after this long, so it cannot hit the plane that fired it. */
   arm: 0.25,
+  /**
+   * The proximity fuse: it goes off by any plane it passes within `fuse`
+   * metres of, locked on or not. The blast hurts everyone near: the whole
+   * `dmg` within `full` metres, less and less out to `blast`.
+   */
+  fuse: 14, full: 6, blast: 20, edge: 0.3,
 };
+
+/** How much of a missile's blast reaches a plane `d` metres from it. */
+export const blastDamage = (d) => d <= MISSILE.full ? MISSILE.dmg
+  : d >= MISSILE.blast ? 0
+  : MISSILE.dmg * (1 - (1 - MISSILE.edge) * (d - MISSILE.full) / (MISSILE.blast - MISSILE.full));
+
+/** The point along a→b nearest c: 0..1. */
+export function closestOn(ax, ay, az, bx, by, bz, cx, cy, cz) {
+  const dx = bx - ax, dy = by - ay, dz = bz - az, A = dx * dx + dy * dy + dz * dz;
+  if (A < 1e-9) return 0;
+  return Math.max(0, Math.min(1, ((cx - ax) * dx + (cy - ay) * dy + (cz - az) * dz) / A));
+}
 
 /**
  * Flares: hot decoys that pull a missile off its target. Each one fired

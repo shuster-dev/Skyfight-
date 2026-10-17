@@ -2,8 +2,8 @@
 // and the hangar's prices. `npm run qa`
 import { PLANES, PLANE_ORDER, UPGRADES, TIER_COST, TIER_LEVEL, statsOf, xpAt, xpStep, levelOf, levelProgress, killReward, cleanCallsign, nextTier, MAX_LEVEL } from '../src/shared/planes.js';
 import { ARENA, BRIDGE, BUILDINGS, groundAt, hitsSolid, inBay, spawnPoint, surfaceAt, terrainAt, underBridge } from '../src/shared/arena.js';
-import { fly, forward, newBody, plausibleMove, BOOST } from '../src/shared/flight.js';
-import { GUN, MISSILE, RAM, aimDir, offNose, pickTarget, ramDamage, segmentHit, steerMissile } from '../src/shared/combat.js';
+import { fly, flyQ, forward, newBody, newBodyQ, plausibleMove, BOOST, Q } from '../src/shared/flight.js';
+import { GUN, MISSILE, RAM, aimDir, blastDamage, closestOn, offNose, pickTarget, ramDamage, segmentHit, steerMissile } from '../src/shared/combat.js';
 import { newPilot, normalize, buyPlane, buyUpgrade, choosePlane, payKill, view } from '../src/server/pilot.js';
 
 let pass = 0, fail = 0;
@@ -114,6 +114,39 @@ console.log('\nflying');
   ok('a teleport is not', !plausibleMove({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: -900 }, 0.5, st));
 }
 
+console.log('\nfree flight: loops');
+{
+  const st = statsOf('sparrow');
+  ok('euler and quaternion agree on the nose', (() => { const q = Q.euler(0.7, 0.3, 0), f = Q.rot(q, 0, 0, -1), g = forward(0.7, 0.3); return near(f.x, g.x, 1e-9) && near(f.y, g.y, 1e-9) && near(f.z, g.z, 1e-9); })());
+  const b = newBodyQ({ x: 0, y: 300, z: 0, yaw: 0 }, st);
+  // hold the stick back: a full loop, the nose passing straight up and over
+  let maxUp = 0, wentOver = false, steps = 0;
+  const startYaw = b.yaw;
+  for (; steps < 30 * 12; steps++) {
+    flyQ(b, { climb: 1 }, st, 1 / 30);
+    const f = Q.rot(b.q, 0, 0, -1), u = Q.rot(b.q, 0, 1, 0);
+    maxUp = Math.max(maxUp, f.y);
+    if (u.y < -0.5) wentOver = true;
+    if (wentOver && f.y > -0.05 && f.y < 0.05 && u.y > 0.9) break;
+  }
+  ok('holding the stick back flies a whole loop', maxUp > 0.99 && wentOver, { maxUp, wentOver, steps });
+  ok('and comes out the way it went in', Math.abs(Math.atan2(Math.sin(b.yaw - startYaw), Math.cos(b.yaw - startYaw))) < 0.2, b.yaw);
+  ok('nothing stops the nose at the vertical', steps < 30 * 12);
+  // upside down, hands off: it rolls back upright
+  const i = newBodyQ({ x: 0, y: 300, z: 0 }, st);
+  i.q = Q.mul(i.q, Q.axis(0, 0, 1, Math.PI * 0.95));
+  for (let k = 0; k < 30 * 4; k++) flyQ(i, {}, st, 1 / 30);
+  ok('upside down with the stick let go, it rights itself', Q.rot(i.q, 0, 1, 0).y > 0.9);
+  // level turn: right is right, as in `fly`
+  const t = newBodyQ({ x: 0, y: 300, z: 0, yaw: 0 }, st);
+  for (let k = 0; k < 30; k++) flyQ(t, { turn: 1 }, st, 1 / 30);
+  ok('a right turn turns right', t.x > 5, t.x);
+  const c = newBodyQ({ x: 3000, y: 60, z: 3000 }, st);
+  let r = '';
+  for (let k = 0; k < 600 && r !== 'crash'; k++) r = flyQ(c, { climb: -1 }, st, 1 / 30);
+  ok('and the sea is still the sea', r === 'crash');
+}
+
 console.log('\nguns and missiles');
 ok('a segment through a sphere hits', segmentHit(0, 0, 0, 0, 0, -20, 0, 0, -10, 2) > 0.3);
 ok('a segment beside it does not', segmentHit(0, 0, 0, 0, 0, -20, 5, 0, -10, 2) === -1);
@@ -133,6 +166,10 @@ ok('a segment that stops short does not', segmentHit(0, 0, 0, 0, 0, -5, 0, 0, -1
 }
 
 console.log('\nmid-air collisions');
+ok('a missile passing close goes off by a plane it was not after', closestOn(0, 0, 0, 0, 0, -40, 9, 0, -20) === 0.5 && MISSILE.fuse > 9);
+ok('the blast hurts in full up close', blastDamage(2) === MISSILE.dmg && blastDamage(MISSILE.full) === MISSILE.dmg);
+ok('less further out, nothing past the blast', blastDamage(12) < MISSILE.dmg && blastDamage(12) > blastDamage(18) && blastDamage(MISSILE.blast + 1) === 0);
+ok('the fuse is inside the blast', blastDamage(MISSILE.fuse) > 0);
 ok('a graze side by side takes a bite', ramDamage(5) === RAM.min);
 ok('a head-on at speed brings down even the heaviest plane', ramDamage(60 + 70) >= 100 && ramDamage(120 + 120) >= statsOf('bulldog', { armor: 5 }).hp, ramDamage(240));
 ok('more speed, more damage', ramDamage(80) > ramDamage(40));

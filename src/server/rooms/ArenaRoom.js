@@ -14,8 +14,8 @@ import { Bomber } from '../boss.js';
 import { normalize, payKill, view } from '../pilot.js';
 import { PAINT_ORDER, PLANES, PLANE_ORDER, displayName, levelOf, statsOf, killReward } from '../../shared/planes.js';
 import { ARENA, hitsSolid, spawnPoint, surfaceAt } from '../../shared/arena.js';
-import { fly, forward, newBody, plausibleMove } from '../../shared/flight.js';
-import { ASSIST_SHARE, CREDIT_MS, FLARE, GUN, MISSILE, RAM, REPAIR, RESPAWN, ramDamage, aimDir, offNose, pickTarget, segmentHit, steerMissile } from '../../shared/combat.js';
+import { Q, fly, forward, newBody, plausibleMove } from '../../shared/flight.js';
+import { ASSIST_SHARE, CREDIT_MS, FLARE, GUN, MISSILE, RAM, REPAIR, RESPAWN, ramDamage, aimDir, blastDamage, closestOn, offNose, pickTarget, segmentHit, steerMissile } from '../../shared/combat.js';
 
 const TICK_MS = 1000 / 30;
 const SNAP_EVERY = 2;          // 15 snapshots a second
@@ -156,6 +156,7 @@ export class ArenaRoom extends Room {
       if (d > bestD) { bestD = d; best = s; }
     }
     Object.assign(p, newBody(best, p.stats));
+    p.q = null;
     p.hp = p.stats.hp; p.alive = true; p.firing = false;
     p.shieldUntil = this.now + RESPAWN.shield * 1000;
     p.ammo = p.stats.missiles; p.reloadT = 0; p.flares = p.stats.flares; p.flareT = 0;
@@ -175,7 +176,7 @@ export class ArenaRoom extends Room {
     // a flood is ignored, not obeyed
     if (Date.now() - p.poseWindow > 1000) p.poseWindow = Date.now(), p.poses = 0;
     if (++p.poses > MAX_POSES_PER_SEC) return;
-    const [x, y, z, yaw, pitch, roll, speed, flags] = m.map(Number);
+    const [x, y, z, yaw, pitch, roll, speed, flags, qx, qy, qz, qw] = m.map(Number);
     if (![x, y, z, yaw, pitch, roll, speed].every(Number.isFinite)) return;
     // the wall clock, not the tick's: two poses can land within one tick
     const now = Date.now();
@@ -193,7 +194,9 @@ export class ArenaRoom extends Room {
     const k = 1 / dt;
     p.vel.x = (x - p.x) * k; p.vel.y = (y - p.y) * k; p.vel.z = (z - p.z) * k;
     p.x = x; p.y = y; p.z = z;
-    p.yaw = yaw; p.pitch = Math.max(-1.3, Math.min(1.3, pitch)); p.roll = roll;
+    p.yaw = yaw; p.pitch = Math.max(-1.58, Math.min(1.58, pitch)); p.roll = roll;
+    // the attitude, any way up (loops): as sent, or from the angles
+    p.q = [qx, qy, qz, qw].every(Number.isFinite) && Math.abs(Math.hypot(qx, qy, qz, qw) - 1) < 0.05 ? { x: qx, y: qy, z: qz, w: qw } : null;
     p.speed = Math.max(0, Math.min(p.stats.boost * 1.1, speed));
     p.firing = !!(flags & 1);
     p.boosting = !!(flags & 2);
@@ -314,19 +317,27 @@ export class ArenaRoom extends Room {
       const px = m.x, py = m.y, pz = m.z;
       steerMissile(m, m.target === 'boss' ? this.bomber.target : this.planes.get(m.target), dt);
       m.t += dt;
-      let hit = null;
-      if (m.t > MISSILE.arm) for (const p of this.planes.values()) {
-        if (!p.alive || p.key === m.owner) continue;
-        if (segmentHit(px, py, pz, m.x, m.y, m.z, p.x, p.y, p.z, MISSILE.hitR) >= 0) { hit = p; break; }
+      // the fuse: the first plane it passes close by, whoever it is
+      let at = null;
+      if (m.t > MISSILE.arm) {
+        let best = 2;
+        for (const p of this.planes.values()) {
+          if (!p.alive || p.key === m.owner) continue;
+          const t = closestOn(px, py, pz, m.x, m.y, m.z, p.x, p.y, p.z);
+          const x = px + (m.x - px) * t, y = py + (m.y - py) * t, z = pz + (m.z - pz) * t;
+          if (t < best && Math.hypot(p.x - x, p.y - y, p.z - z) < MISSILE.fuse) best = t, at = { x, y, z };
+        }
+        if (!at && this.bomber.hitBy(px, py, pz, m.x, m.y, m.z, 4)) at = { x: m.x, y: m.y, z: m.z, boss: true };
       }
-      if (hit) {
-        this.broadcast('boom', [q(m.x), q(m.y), q(m.z)]);
-        this.hurt(hit, m.owner, MISSILE.dmg, 'missile');
-        continue;
-      }
-      if (m.t > MISSILE.arm && this.bomber.hitBy(px, py, pz, m.x, m.y, m.z, 2)) {
-        this.broadcast('boom', [q(m.x), q(m.y), q(m.z)]);
-        this.bomber.hurt(m.owner, MISSILE.dmg);
+      if (at) {
+        this.broadcast('boom', [q(at.x), q(at.y), q(at.z)]);
+        // the blast: everyone near takes some, the nearest the most
+        for (const p of [...this.planes.values()]) {
+          if (!p.alive || p.key === m.owner) continue;
+          const dmg = blastDamage(Math.hypot(p.x - at.x, p.y - at.y, p.z - at.z));
+          if (dmg > 0) this.hurt(p, m.owner, dmg, 'missile');
+        }
+        if (at.boss) this.bomber.hurt(m.owner, MISSILE.dmg);
         continue;
       }
       if (m.t > MISSILE.life || hitsSolid(m.x, m.y, m.z, 0)) {
@@ -448,7 +459,8 @@ export class ArenaRoom extends Room {
     const ps = [];
     for (const p of this.planes.values()) {
       const flags = (p.alive ? 1 : 0) | (p.firing ? 2 : 0) | (p.boosting ? 4 : 0) | (this.now < p.shieldUntil ? 8 : 0);
-      ps.push([p.key, q(p.x), q(p.y), q(p.z), q(p.yaw, 1000), q(p.pitch, 1000), q(p.roll, 1000), Math.round(Math.max(0, p.hp) / p.stats.hp * 100), flags, q(p.speed)]);
+      const a = p.q || Q.euler(p.yaw, p.pitch, p.roll);
+      ps.push([p.key, q(p.x), q(p.y), q(p.z), q(p.yaw, 1000), q(p.pitch, 1000), q(p.roll, 1000), Math.round(Math.max(0, p.hp) / p.stats.hp * 100), flags, q(p.speed), q(a.x, 1000), q(a.y, 1000), q(a.z, 1000), q(a.w, 1000)]);
     }
     const ms = this.missiles.map((m) => [m.id, q(m.x), q(m.y), q(m.z), q(m.yaw, 1000), q(m.pitch, 1000), m.target]);
     this.broadcast('s', { t: this.now, p: ps, m: ms, b: this.bomber.snap() });
