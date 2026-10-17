@@ -13,7 +13,7 @@ import { displayName } from '../shared/planes.js';
 
 // the board is for saved pilots only, each under their own number
 const board = (p, i) => ({ rank: i + 1, name: displayName(p), level: p.level, kills: p.kills || 0, plane: p.plane });
-const tagKey = (name) => String(name).trim().toLowerCase();
+export const tagKey = (name) => String(name).trim().toLowerCase();
 const BOARD_SORT = { level: (a, b) => (b.xp || 0) - (a.xp || 0), kills: (a, b) => (b.kills || 0) - (a.kills || 0) };
 
 class MemoryStore {
@@ -58,6 +58,12 @@ class MemoryStore {
   async leaderboard(kind = 'level', limit = 20) {
     return [...this.pilots.values()].filter((p) => p.name && p.registered).sort(BOARD_SORT[kind] || BOARD_SORT.level).slice(0, limit).map(board);
   }
+  /** A saved pilot by their name and number (מאיר#1), or null. */
+  async findPilotByCode(name, tag) {
+    const k = tagKey(name);
+    for (const p of this.pilots.values()) if (p.registered && p.tag === tag && tagKey(p.tagName || p.name) === k) return p;
+    return null;
+  }
   async nextTag(name) {
     const n = (this.tags.get(tagKey(name)) || 0) + 1;
     this.tags.set(tagKey(name), n);
@@ -87,6 +93,7 @@ class MongoStore {
     await this.pilotsC.createIndex({ id: 1 }, { unique: true });
     await this.pilotsC.createIndex({ xp: -1 });
     await this.pilotsC.createIndex({ kills: -1 });
+    await this.pilotsC.createIndex({ nameKey: 1, tag: 1 });
     return this;
   }
   async close() { await Promise.allSettled([...this.writes.values()]); await this.client?.close(); }
@@ -132,6 +139,12 @@ class MongoStore {
     const sort = kind === 'kills' ? { kills: -1 } : { xp: -1 };
     const rows = await this.pilotsC.find({ registered: true, name: { $exists: true, $ne: '' } }, { projection: { _id: 0 } }).sort(sort).limit(limit).toArray();
     return rows.map(board);
+  }
+  async findPilotByCode(name, tag) {
+    const q = { registered: true, tag, $or: [{ nameKey: tagKey(name) }, { tagName: String(name).trim() }] };
+    const p = await this.pilotsC.findOne(q, { projection: { _id: 0 } });
+    // the live object, if there is one: it is the one being changed
+    return p ? (this.live.get(p.id) || (this.live.set(p.id, p), p)) : null;
   }
   async nextTag(name) {
     // one counter per name, raised atomically: two pilots saving the same

@@ -1,130 +1,199 @@
-// The hangar: a dark, tall shed with the door open on a dusk sky, strip
-// lights in the roof, a polished floor, and the plane on a turntable under a
-// key light, blue rim lights behind. Its own scene: the menus are drawn here,
-// not over the world.
+// The hangar: a launch bay of the future. A long hexagonal tunnel of dark
+// steel framed in light, a glass floor with a grid glowing under it, and the
+// plane hovering over a pad of turning rings while a scanner rises and falls
+// round it. At the far end the bay opens on a night sky. Its own scene: the
+// menus are drawn here, not over the world.
 import {
-  AdditiveBlending, BoxGeometry, CanvasTexture, Color, CylinderGeometry, DirectionalLight, Fog, Group, HemisphereLight,
-  Mesh, MeshBasicMaterial, MeshStandardMaterial, PerspectiveCamera, PlaneGeometry, PMREMGenerator, PointLight,
-  RepeatWrapping, RingGeometry, Scene, SpotLight, SRGBColorSpace, TorusGeometry, Vector3,
+  AdditiveBlending, BoxGeometry, BufferGeometry, CanvasTexture, Color, CylinderGeometry, DirectionalLight, DoubleSide,
+  Float32BufferAttribute, Fog, Group, HemisphereLight, Mesh, MeshBasicMaterial, MeshStandardMaterial, PerspectiveCamera,
+  PlaneGeometry, PMREMGenerator, PointLight, Points, PointsMaterial, RepeatWrapping, RingGeometry, Scene, SpotLight,
+  SRGBColorSpace, TorusGeometry, Vector3,
 } from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { buildPlane, animatePlane } from './planes.js';
 
-const L = 70; // the hangar's depth
+const L = 90;           // the bay's depth
+const R = 20;           // the tunnel's radius, corner to corner
+const CYAN = 0x2fd3bd, ICE = 0x6fe6ff, VIOLET = 0x8a5cff;
 
-function floorTexture() {
+const canvas = (w, h, draw) => {
   const c = document.createElement('canvas');
-  c.width = c.height = 512;
-  const g = c.getContext('2d');
-  g.fillStyle = '#15181d'; g.fillRect(0, 0, 512, 512);
-  // concrete slabs with seams, and a little grime
-  for (let i = 0; i < 4000; i++) {
-    const v = 18 + Math.random() * 14;
-    g.fillStyle = `rgba(${v},${v + 2},${v + 5},0.5)`;
-    g.fillRect(Math.random() * 512, Math.random() * 512, 2 + Math.random() * 3, 2 + Math.random() * 3);
-  }
-  g.strokeStyle = 'rgba(0,0,0,0.55)'; g.lineWidth = 3;
-  for (let k = 0; k <= 512; k += 128) { g.beginPath(); g.moveTo(k, 0); g.lineTo(k, 512); g.stroke(); g.beginPath(); g.moveTo(0, k); g.lineTo(512, k); g.stroke(); }
-  // a yellow safety line
-  g.fillStyle = '#b8901c'; g.fillRect(0, 250, 512, 6);
+  c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
   const t = new CanvasTexture(c);
   t.colorSpace = SRGBColorSpace;
+  return t;
+};
+
+/** Dark glass tiles, a fine grid of light between them. */
+const floorTexture = () => {
+  const t = canvas(512, 512, (g, w) => {
+    g.fillStyle = '#06090e'; g.fillRect(0, 0, w, w);
+    for (let i = 0; i < 2500; i++) {
+      const v = 10 + Math.random() * 10;
+      g.fillStyle = `rgba(${v},${v + 4},${v + 9},0.6)`;
+      g.fillRect(Math.random() * w, Math.random() * w, 2, 2);
+    }
+    g.strokeStyle = 'rgba(47,211,189,0.28)'; g.lineWidth = 2;
+    for (let k = 0; k <= w; k += 64) { g.beginPath(); g.moveTo(k, 0); g.lineTo(k, w); g.stroke(); g.beginPath(); g.moveTo(0, k); g.lineTo(w, k); g.stroke(); }
+    g.strokeStyle = 'rgba(111,230,255,0.5)'; g.lineWidth = 3;
+    g.beginPath(); g.moveTo(0, 0); g.lineTo(w, 0); g.moveTo(0, 0); g.lineTo(0, w); g.stroke();
+  });
   t.wrapS = t.wrapT = RepeatWrapping;
-  t.repeat.set(6, 6);
+  t.repeat.set(10, 16);
   t.anisotropy = 8;
   return t;
-}
+};
 
-function duskTexture() {
-  const c = document.createElement('canvas');
-  c.width = 16; c.height = 256;
-  const g = c.getContext('2d');
+/** The night outside: deep blue up top, a violet band and a thin line of dawn. */
+const nightTexture = () => canvas(16, 256, (g) => {
   const gr = g.createLinearGradient(0, 0, 0, 256);
-  gr.addColorStop(0, '#1b2a4a'); gr.addColorStop(0.55, '#c0704a'); gr.addColorStop(0.7, '#f2b067'); gr.addColorStop(0.72, '#3b2a2a'); gr.addColorStop(1, '#141414');
+  gr.addColorStop(0, '#02040b'); gr.addColorStop(0.45, '#0b1640'); gr.addColorStop(0.62, '#3a1f6b');
+  gr.addColorStop(0.7, '#6fe6ff'); gr.addColorStop(0.71, '#0a0d16'); gr.addColorStop(1, '#05070c');
   g.fillStyle = gr; g.fillRect(0, 0, 16, 256);
-  const t = new CanvasTexture(c);
-  t.colorSpace = SRGBColorSpace;
-  return t;
+});
+
+/** A soft column of light: bright at the foot, gone at the top. */
+const beamTexture = () => canvas(4, 128, (g) => {
+  const gr = g.createLinearGradient(0, 128, 0, 0);
+  gr.addColorStop(0, 'rgba(255,255,255,0.9)'); gr.addColorStop(0.35, 'rgba(255,255,255,0.25)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 4, 128);
+});
+
+/** A round soft dot, for motes of dust caught in the light. */
+const dotTexture = () => canvas(32, 32, (g) => {
+  const gr = g.createRadialGradient(16, 16, 0, 16, 16, 16);
+  gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 32, 32);
+});
+
+/** Arcs of a ring, with gaps: the pad's turning dials. */
+function dashedRing(r0, r1, n, fill, mat) {
+  const g = new Group();
+  const step = (Math.PI * 2) / n;
+  for (let i = 0; i < n; i++) g.add(new Mesh(new RingGeometry(r0, r1, 24, 1, i * step, step * fill).rotateX(-Math.PI / 2), mat));
+  return g;
 }
 
 export class Hangar {
   constructor(renderer) {
     const scene = (this.scene = new Scene());
-    scene.background = new Color(0x07090d);
-    scene.fog = new Fog(0x07090d, 40, 120);
+    scene.background = new Color(0x04060a);
+    scene.fog = new Fog(0x04060a, 45, 135);
     this.camera = new PerspectiveCamera(40, 1, 0.1, 400);
     // a studio's light for the reflections on the paint and the glass
     const pm = new PMREMGenerator(renderer);
     scene.environment = pm.fromScene(new RoomEnvironment(), 0.03).texture;
-    scene.environmentIntensity = 0.55;
+    scene.environmentIntensity = 0.5;
     pm.dispose();
 
-    scene.add(new HemisphereLight(0x8fa4c4, 0x0a0a0c, 0.35));
-    const key = new SpotLight(0xfff1dc, 900, 60, 0.42, 0.55, 1.6);
+    scene.add(new HemisphereLight(0x7f9cc8, 0x05060a, 0.3));
+    const key = new SpotLight(0xf4f8ff, 950, 60, 0.42, 0.6, 1.6);
     key.position.set(-6, 22, 10);
     key.target.position.set(0, 0, 0);
     scene.add(key, key.target);
-    const rimL = new PointLight(0x2fd3bd, 260, 40, 1.7); rimL.position.set(-12, 5, -12);
-    const rimR = new PointLight(0x3a7bff, 260, 40, 1.7); rimR.position.set(12, 5, -12);
-    scene.add(rimL, rimR);
-    const sun = new DirectionalLight(0xf2a060, 0.9);
-    sun.position.set(0, 6, -60);
-    scene.add(sun);
+    const rimL = new PointLight(CYAN, 300, 40, 1.7); rimL.position.set(-12, 5, -10);
+    const rimR = new PointLight(VIOLET, 300, 40, 1.7); rimR.position.set(12, 5, -10);
+    const under = new PointLight(ICE, 120, 16, 1.8); under.position.set(0, 1, 0);
+    scene.add(rimL, rimR, under);
+    const back = new DirectionalLight(0x8a7cff, 0.6);
+    back.position.set(0, 6, -60);
+    scene.add(back);
 
-    // the floor, polished: it shines where the lights are
-    const floor = new Mesh(new PlaneGeometry(80, 140).rotateX(-Math.PI / 2), new MeshStandardMaterial({ map: floorTexture(), roughness: 0.6, metalness: 0.08 }));
-    floor.position.z = -L / 2 + 10;
+    // the glass floor
+    const floor = new Mesh(new PlaneGeometry(60, 160).rotateX(-Math.PI / 2), new MeshStandardMaterial({ map: floorTexture(), roughness: 0.42, metalness: 0.55 }));
+    floor.position.z = -L / 2 + 15;
     scene.add(floor);
 
-    // the arched ribs of the shed, and the roof's strip lights
-    const steel = new MeshStandardMaterial({ color: 0x1d2229, roughness: 0.6, metalness: 0.7 });
-    const glow = new MeshBasicMaterial({ color: 0xdff1ff });
-    for (let i = 0; i < 7; i++) {
-      const z = 14 - i * 11;
-      const rib = new Mesh(new TorusGeometry(26, 0.5, 6, 40, Math.PI), steel);
-      rib.position.set(0, 0, z);
-      scene.add(rib);
-      for (const x of [-9, 0, 9]) {
-        const strip = new Mesh(new BoxGeometry(0.35, 0.12, 6), glow);
-        strip.position.set(x, 24.5 - Math.abs(x) * 0.12, z - 5.5);
-        scene.add(strip);
+    // the tunnel: hexagonal frames (flat floor, flat roof), each with a line of light along its inside
+    const steel = new MeshStandardMaterial({ color: 0x141a22, roughness: 0.45, metalness: 0.85 });
+    const line = new MeshBasicMaterial({ color: ICE, transparent: true, opacity: 0.85, fog: true });
+    this.frames = [];
+    // all behind the pad: one between it and the camera would cut the view in two
+    for (let i = 0; i < 8; i++) {
+      const z = -16 - i * 10;
+      const frame = new Mesh(new TorusGeometry(R, 0.4, 4, 6), steel);
+      frame.position.set(0, R * 0.866 - 0.6, z);
+      const glow = new Mesh(new TorusGeometry(R - 1, 0.07, 3, 6), line.clone());
+      glow.position.copy(frame.position);
+      scene.add(frame, glow);
+      this.frames.push(glow);
+    }
+    // long light strips down the walls and along the floor's edges, from
+    // behind the pad on (nearer, they would streak across the camera)
+    const strip = new MeshBasicMaterial({ color: CYAN });
+    for (const x of [-1, 1]) {
+      const s = new Mesh(new BoxGeometry(0.12, 0.12, L - 6), strip);
+      s.position.set(x * 11.5, 0.1, -L / 2 - 6);
+      const w = new Mesh(new BoxGeometry(0.1, 0.1, L - 6), new MeshBasicMaterial({ color: VIOLET }));
+      w.position.set(x * 18.6, R * 0.866 - 0.6, -L / 2 - 6);
+      scene.add(s, w);
+    }
+    // the open end: night outside, and the runway's lights leading off into it
+    const sky = new Mesh(new PlaneGeometry(60, 40), new MeshBasicMaterial({ map: nightTexture(), fog: false }));
+    sky.position.set(0, 14, -L + 4);
+    scene.add(sky);
+    this.runway = [];
+    for (let i = 0; i < 14; i++) {
+      for (const x of [-4, 4]) {
+        const l = new Mesh(new BoxGeometry(0.3, 0.1, 0.9), new MeshBasicMaterial({ color: ICE, transparent: true, fog: false }));
+        l.position.set(x, 0.08, -14 - i * 5.5);
+        scene.add(l);
+        this.runway.push({ m: l, i });
       }
     }
-    // the open door at the back: dusk outside, a runway light or two
-    const sky = new Mesh(new PlaneGeometry(56, 30), new MeshBasicMaterial({ map: duskTexture(), fog: false }));
-    sky.position.set(0, 12, -L + 2);
-    scene.add(sky);
-    for (let i = 0; i < 9; i++) {
-      const l = new Mesh(new BoxGeometry(0.25, 0.25, 0.25), new MeshBasicMaterial({ color: i % 2 ? 0x3a7bff : 0xffd27a, fog: false }));
-      l.position.set(-16 + i * 4, 0.4, -L + 4);
-      scene.add(l);
-    }
 
-    // the turntable: a dark disc, a light ring round its edge
+    // the pad: a hexagon of steel, a glowing rim, dials turning both ways,
+    // and a column of light the plane hangs in
     this.table = new Group();
-    const disc = new Mesh(new CylinderGeometry(9, 9.4, 0.4, 64), new MeshStandardMaterial({ color: 0x171b21, roughness: 0.55, metalness: 0.45 }));
-    disc.position.y = 0.2;
-    const ring = new Mesh(new RingGeometry(9.1, 9.35, 96).rotateX(-Math.PI / 2), new MeshBasicMaterial({ color: 0x2fd3bd, transparent: true, opacity: 0.9, blending: AdditiveBlending }));
-    ring.position.y = 0.42;
-    const halo = new Mesh(new RingGeometry(9.35, 12, 96).rotateX(-Math.PI / 2), new MeshBasicMaterial({ color: 0x2fd3bd, transparent: true, opacity: 0.08, blending: AdditiveBlending, depthWrite: false }));
-    halo.position.y = 0.05;
-    this.table.add(disc, ring, halo);
+    const pad = new Mesh(new CylinderGeometry(8.6, 9.2, 0.5, 6), new MeshStandardMaterial({ color: 0x10151c, roughness: 0.35, metalness: 0.8 }));
+    pad.position.y = 0.25;
+    const rim = new Mesh(new TorusGeometry(8.9, 0.09, 3, 6).rotateX(Math.PI / 2).rotateY(Math.PI / 6), new MeshBasicMaterial({ color: ICE }));
+    rim.position.y = 0.52;
+    this.table.add(pad, rim);
     scene.add(this.table);
+    const add = (color, opacity) => new MeshBasicMaterial({ color, transparent: true, opacity, blending: AdditiveBlending, depthWrite: false, side: DoubleSide });
+    this.dialA = dashedRing(6.6, 7.0, 12, 0.7, add(CYAN, 0.9));
+    this.dialB = dashedRing(5.2, 5.4, 36, 0.5, add(ICE, 0.75));
+    this.dialC = dashedRing(10.2, 10.5, 3, 0.28, add(VIOLET, 0.8));
+    for (const d of [this.dialA, this.dialB]) d.position.y = 0.54;
+    this.dialC.position.y = 0.06;
+    const halo = new Mesh(new RingGeometry(9.2, 14, 6, 1).rotateX(-Math.PI / 2).rotateY(Math.PI / 6), add(CYAN, 0.06));
+    halo.position.y = 0.04;
+    scene.add(this.dialA, this.dialB, this.dialC, halo);
+    const beam = new Mesh(new CylinderGeometry(7.4, 7.4, 16, 6, 1, true), new MeshBasicMaterial({ map: beamTexture(), color: CYAN, transparent: true, opacity: 0.16, blending: AdditiveBlending, depthWrite: false, side: DoubleSide }));
+    beam.position.y = 8.5;
+    scene.add(beam);
+    // the scanner: a thin hexagon of light sweeping up and down the plane
+    this.scan = new Mesh(new TorusGeometry(7.6, 0.06, 3, 6).rotateX(Math.PI / 2).rotateY(Math.PI / 6), add(ICE, 0.9));
+    this.scanFill = new Mesh(new CylinderGeometry(7.6, 7.6, 0.6, 6, 1, true), add(ICE, 0.12));
+    scene.add(this.scan, this.scanFill);
+
+    // motes drifting in the light
+    const n = 160, pos = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) pos.set([(Math.random() - 0.5) * 30, Math.random() * 18, (Math.random() - 0.7) * 40], i * 3);
+    const mg = new BufferGeometry();
+    mg.setAttribute('position', new Float32BufferAttribute(pos, 3));
+    this.motes = new Points(mg, new PointsMaterial({ map: dotTexture(), color: ICE, size: 0.28, transparent: true, opacity: 0.7, blending: AdditiveBlending, depthWrite: false }));
+    scene.add(this.motes);
 
     this.holder = new Group();
     scene.add(this.holder);
-    this.plane = null; this.kind = ''; this.t = 0; this.swapT = 1; this.leaving = null;
+    this.plane = null; this.kind = ''; this.t = 0; this.swapT = 1;
+    this.leaving = [];
     this.drag = 0; this.spin = 0;
   }
 
-  /** Bring this plane onto the table (the last one rolls away). */
+  /** Bring this plane onto the pad (the last one lifts away). */
   show(kind, paint = 'stock') {
     if (kind === this.kind && paint === this.paint) return;
     this.paint = paint;
-    if (this.plane) this.leaving = { m: this.plane, t: 0 };
+    if (this.plane) this.leaving.push({ m: this.plane, t: 0 });
+    // flicking through fast: only the last one is still on its way out
+    while (this.leaving.length > 1) this.holder.remove(this.leaving.shift().m);
     this.kind = kind;
     this.plane = buildPlane(kind, paint);
-    // scaled to the table, whatever its size
+    // scaled to the pad, whatever its size
     const len = this.plane.userData.len || 10;
     this.plane.scale.setScalar(Math.min(1.25, 15 / len));
     this.holder.add(this.plane);
@@ -138,29 +207,43 @@ export class Hangar {
     this.camera.updateProjectionMatrix();
   }
 
-  /** A finger dragged across the screen turns the table. */
+  /** A finger dragged across the screen turns the pad. */
   turn(dx) { this.spin += dx * 0.008; }
 
   tick(dt) {
+    // a frame held back (the tab was away) must not throw things around
+    dt = Math.min(dt, 0.1);
     this.t += dt;
     const t = this.t;
     this.spin *= Math.max(0, 1 - dt * 2.5);
     this.table.rotation.y += dt * 0.18 + this.spin * dt * 10;
     this.holder.rotation.y = this.table.rotation.y;
+    this.dialA.rotation.y += dt * 0.35;
+    this.dialB.rotation.y -= dt * 0.6;
+    this.dialC.rotation.y += dt * 0.12;
+    const sy = 1.2 + (Math.sin(t * 0.9) * 0.5 + 0.5) * 9;
+    this.scan.position.y = sy; this.scanFill.position.y = sy - 0.3;
+    this.scan.rotation.y = this.scanFill.rotation.y = this.table.rotation.y;
+    this.motes.rotation.y = t * 0.02;
+    this.motes.position.y = Math.sin(t * 0.3) * 0.4;
+    // the frames' light runs down the tunnel, the runway lights out into the night
+    this.frames.forEach((f, i) => (f.material.opacity = 0.35 + 0.6 * Math.max(0, Math.sin(t * 2.2 - i * 0.7)) ** 3));
+    for (const r of this.runway) r.m.material.opacity = 0.25 + 0.75 * Math.max(0, Math.sin(t * 3 - r.i * 0.5)) ** 4;
     if (this.plane) {
-      // in from above, settling onto its wheels' height
+      // down from above, settling to hover over the pad
       this.swapT = Math.min(1, this.swapT + dt * 1.6);
       const e = 1 - (1 - this.swapT) ** 3;
-      this.plane.position.y = 3.1 + (1 - e) * 6 + Math.sin(t * 0.8) * 0.08;
+      this.plane.position.y = 3.6 + (1 - e) * 6 + Math.sin(t * 0.8) * 0.12;
+      this.plane.position.z = 0;
       this.plane.rotation.z = Math.sin(t * 0.6) * 0.02;
       animatePlane(this.plane, dt, { speed: 20, time: t, ammo: 9, ammoMax: 9 });
     }
-    if (this.leaving) {
-      const l = this.leaving;
+    for (let i = this.leaving.length - 1; i >= 0; i--) {
+      const l = this.leaving[i];
       l.t += dt * 1.8;
-      l.m.position.y = 3.1 + l.t * l.t * 10;
+      l.m.position.y = 3.6 + l.t * l.t * 10;
       l.m.position.z = -l.t * 14;
-      if (l.t > 1) { this.holder.remove(l.m); this.leaving = null; }
+      if (l.t > 1) { this.holder.remove(l.m); this.leaving.splice(i, 1); }
     }
     // the camera: low, a little off the nose, drifting slowly
     const wide = this.camera.aspect >= 1;
@@ -174,5 +257,11 @@ export class Hangar {
       look.addScaledVector(fwd.cross(this.camera.up).normalize(), 6.5);
     }
     this.camera.lookAt(look);
+  }
+
+  /** Off screen (flying): nothing on its way out is left hanging for next time. */
+  clear() {
+    for (const l of this.leaving) this.holder.remove(l.m);
+    this.leaving = [];
   }
 }
