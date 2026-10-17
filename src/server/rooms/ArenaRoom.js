@@ -396,7 +396,7 @@ export class ArenaRoom extends Room {
       const open = PLANE_ORDER.filter((k) => PLANES[k].level <= level);
       const plane = open[Math.floor(Math.random() * open.length)];
       const tier = Math.min(5, Math.floor(level / 5));
-      const p = this.addPlane({ name, plane, level, upgrades: { engine: tier, armor: tier, guns: tier, missiles: tier }, bot: { xp: 0, skill: 0.45 + Math.random() * 0.4, target: '', think: 0, jink: 0, jinkDir: 1, hurtAt: 0 } });
+      const p = this.addPlane({ name, plane, level, upgrades: { engine: tier, armor: tier, guns: tier, missiles: tier }, bot: { xp: 0, skill: 0.35 + Math.random() * 0.4, target: '', think: 0, jink: 0, jinkDir: 1, hurtAt: 0 } });
       this.spawn(p);
     }
   }
@@ -412,11 +412,14 @@ export class ArenaRoom extends Room {
     let t = this.planes.get(ai.target);
     if (ai.think <= 0 || !t || !t.alive) {
       ai.think = 1.5 + Math.random() * 1.5;
+      // the nearest, but one already hunted by others counts as further:
+      // a pack of bots on one pilot is no fun for that pilot
+      const hunted = new Map();
+      for (const o of this.planes.values()) if (o.bot && o !== p && o.bot.target) hunted.set(o.bot.target, (hunted.get(o.bot.target) || 0) + 1);
       let best = null, bestD = Infinity;
       for (const o of this.planes.values()) {
         if (o === p || !o.alive || this.now < o.shieldUntil) continue;
-        // real pilots are a little more interesting than other bots
-        const d = Math.hypot(o.x - p.x, o.y - p.y, o.z - p.z) * (o.bot ? 1.4 : 1);
+        const d = Math.hypot(o.x - p.x, o.y - p.y, o.z - p.z) * (1 + 0.8 * (hunted.get(o.key) || 0));
         if (d < bestD) bestD = d, best = o;
       }
       // whoever is shooting at it, if they are close

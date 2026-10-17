@@ -1,7 +1,7 @@
 // A pilot's record: who they are, what they have earned, what they own.
 // Everything that changes it goes through here, so the rules (a level to
 // open, gold to pay, one of each) are in one place.
-import { PLANES, START_PLANE, UPGRADES, killReward, levelOf, nextTier, planeOpen, planeOwned } from '../shared/planes.js';
+import { PLANES, START_PLANE, UPGRADES, killReward, levelBonus, levelOf, nextTier, planeOpen, planeOwned } from '../shared/planes.js';
 
 export function newPilot(id) {
   return {
@@ -74,6 +74,9 @@ export function payKill(p, victim, { streak = 0, assist = false } = {}) {
   p.xp += r.xp;
   p.gold += r.gold;
   p.level = levelOf(p.xp);
+  let bonus = 0;
+  for (let l = before + 1; l <= p.level; l++) bonus += levelBonus(l);
+  p.gold += bonus;
   if (!assist) p.kills++;
-  return { ...r, level: p.level, up: p.level > before };
+  return { ...r, bonus, level: p.level, up: p.level > before };
 }

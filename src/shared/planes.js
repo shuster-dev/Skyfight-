@@ -17,31 +17,31 @@ export const PLANES = {
   sparrow: {
     id: 'sparrow', he: 'דרור', role: 'מאוזן', level: 1, price: 0,
     desc: 'מטוס בוכנה ותיק. סולח על טעויות — מושלם לטיסה הראשונה.',
-    hp: 100, speed: 60, boost: 92, turn: 1.5, climb: 1.3, guns: 2, rate: 9, dmg: 6, missiles: 1,
+    hp: 100, speed: 60, boost: 92, turn: 1.5, climb: 1.3, guns: 2, rate: 9, dmg: 4.2, missiles: 1,
     color: 0x4f9dff, trim: 0xf4f7ff,
   },
   hornet: {
     id: 'hornet', he: 'צרעה', role: 'מהיר', level: 3, price: 1500,
     desc: 'סילון קל ומהיר. פוגע ובורח לפני שמספיקים להסתובב.',
-    hp: 85, speed: 70, boost: 112, turn: 1.6, climb: 1.4, guns: 2, rate: 11, dmg: 6, missiles: 1,
+    hp: 85, speed: 70, boost: 112, turn: 1.6, climb: 1.4, guns: 2, rate: 11, dmg: 4.2, missiles: 1,
     color: 0xffc23d, trim: 0x2a2f45,
   },
   bulldog: {
     id: 'bulldog', he: 'בולדוג', role: 'משוריין', level: 6, price: 4000,
     desc: 'דו־מנועי כבד עם ארבעה תותחים. איטי — אבל לא נופל.',
-    hp: 165, speed: 54, boost: 84, turn: 1.25, climb: 1.1, guns: 4, rate: 10, dmg: 6.5, missiles: 1,
+    hp: 165, speed: 54, boost: 84, turn: 1.25, climb: 1.1, guns: 4, rate: 10, dmg: 4.5, missiles: 1,
     color: 0x6f8f4e, trim: 0xe8dcc0,
   },
   viper: {
     id: 'viper', he: 'צפע', role: 'זריז', level: 10, price: 9000,
     desc: 'כנף משולשת. מסתובב בתוך העיגול של כל אחד אחר, ושני טילים.',
-    hp: 110, speed: 66, boost: 106, turn: 1.95, climb: 1.65, guns: 2, rate: 12, dmg: 6.5, missiles: 2,
+    hp: 110, speed: 66, boost: 106, turn: 1.95, climb: 1.65, guns: 2, rate: 12, dmg: 4.5, missiles: 2,
     color: 0xe0453a, trim: 0x1d1f2b,
   },
   phantom: {
     id: 'phantom', he: 'פנטום', role: 'עליון', level: 16, price: 20000,
     desc: 'מטוס החמקן של האלופים. הכל בו טוב יותר, ושלושה טילים.',
-    hp: 145, speed: 72, boost: 118, turn: 1.8, climb: 1.55, guns: 4, rate: 12, dmg: 7, missiles: 3,
+    hp: 145, speed: 72, boost: 118, turn: 1.8, climb: 1.55, guns: 4, rate: 12, dmg: 5, missiles: 3,
     color: 0x2b2f3d, trim: 0x39e6c8,
   },
 };
@@ -95,8 +95,10 @@ export function statsOf(planeId, upgrades = {}) {
 // ---- levels ---------------------------------------------------------------
 
 export const MAX_LEVEL = 30;
-/** XP to go from `level` to the next. */
-export const xpStep = (level) => 120 + 60 * (level - 1);
+/** XP to go from `level` to the next: the first few in minutes, the last in hours. */
+export const xpStep = (level) => 100 + 90 * (level - 1) + 4 * (level - 1) ** 2;
+/** Gold on reaching a level: a little push toward the next purchase. */
+export const levelBonus = (level) => 100 * level;
 /** Total XP at which `level` starts. */
 export function xpAt(level) {
   let s = 0;

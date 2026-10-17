@@ -11,12 +11,12 @@ export const GUN = {
   /** How fat a plane is to a round. Generous: lag eats the rest. */
   hitR: 6.5,
   /** Aim help: a target this close to the nose (radians) and in reach is led. */
-  assistCone: 0.12,
+  assistCone: 0.08,
   assistRange: 520,
 };
 
 export const MISSILE = {
-  speed: 155, life: 6, turn: 2.0, dmg: 48, hitR: 8,
+  speed: 155, life: 6, turn: 2.0, dmg: 40, hitR: 8,
   /** What can be locked: in front within this cone and range. */
   lockCone: 0.38, lockRange: 650,
   /** It arms after this long, so it cannot hit the plane that fired it. */
