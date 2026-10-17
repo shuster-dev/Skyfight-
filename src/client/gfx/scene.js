@@ -113,7 +113,9 @@ function makeSky() {
       top: { value: new Color(SKY.top) }, horizon: { value: new Color(SKY.horizon) }, sunC: { value: new Color(SKY.sun) },
       sunDir: { value: new Vector3(SUN_DIR.x, SUN_DIR.y, SUN_DIR.z).normalize() },
     },
-    vertexShader: `varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+    // pinned to the far plane: however short the view distance (the quality
+    // setting shortens it), the dome is never clipped into a pale disc
+    vertexShader: `varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); gl_Position.z = gl_Position.w * 0.99999; }`,
     fragmentShader: `uniform vec3 top; uniform vec3 horizon; uniform vec3 sunC; uniform vec3 sunDir; varying vec3 vDir;
       void main(){
         vec3 d = normalize(vDir);

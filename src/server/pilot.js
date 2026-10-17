@@ -24,6 +24,7 @@ export function normalize(p) {
   if (!p.planes.includes(p.plane)) p.plane = START_PLANE;
   p.paints = [...new Set(['stock', ...(p.paints || [])].filter((k) => PAINTS[k]))];
   if (!p.paints.includes(p.paint)) p.paint = 'stock';
+  p.friends = [...new Set((Array.isArray(p.friends) ? p.friends : []).filter((x) => typeof x === 'string'))].slice(0, 60);
   p.upgrades = Object.fromEntries(Object.keys(UPGRADES).map((k) => [k, Math.max(0, Math.min(5, p.upgrades?.[k] | 0))]));
   return p;
 }

@@ -118,10 +118,15 @@ async function run(label, viewport, mobile) {
   if (!mobile) {
     // nose down into the sea: the death screen, then back in the air
     // (software rendering draws a frame or two a second here, and the room
-    // would refuse a plane put down by hand: so wait out the dive)
-    await page.keyboard.down('ArrowDown');
+    // would refuse a plane put down by hand: so wait out the dive). The
+    // stick is held only while the nose is above a steep dive: held all the
+    // way, a plane that can loop just loops
+    await page.evaluate(() => {
+      const key = (t) => dispatchEvent(new KeyboardEvent(t, { code: 'ArrowDown', key: 'ArrowDown' }));
+      window.__dive = setInterval(() => key((window.__sky.me?.body?.pitch ?? 0) > -1.0 ? 'keydown' : 'keyup'), 20);
+    });
     const died = await page.waitForSelector('#death:not(.hidden)', { timeout: 120000 }).then(() => true, () => false);
-    await page.keyboard.up('ArrowDown');
+    await page.evaluate(() => { clearInterval(window.__dive); dispatchEvent(new KeyboardEvent('keyup', { code: 'ArrowDown', key: 'ArrowDown' })); });
     ok('diving into the sea brings the death screen', died);
     await wait(600);
     await snap('6-down');

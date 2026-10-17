@@ -65,7 +65,7 @@
   .coin { width: 13px; height: 13px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #fff3c4, #e2b23c 55%, #9a6f12); box-shadow: 0 0 6px rgba(240,200,90,0.5); }
   .icon-btn { width: 38px; height: 38px; display: grid; place-items: center; background: transparent; border: 1px solid rgba(255,255,255,0.18); border-radius: 50%; }
   .icon-btn svg { width: 18px; height: 18px; stroke: #dfe7f2; fill: none; stroke-width: 1.8; }
-  .h-tabs { position: absolute; top: max(66px, calc(env(safe-area-inset-top) + 58px)); right: 18px; display: flex; gap: 22px; }
+  .h-tabs { position: absolute; top: max(66px, calc(env(safe-area-inset-top) + 58px)); right: 18px; display: flex; gap: 18px; }
   .h-tabs button { background: none; padding: 6px 0; font-size: 14px; font-weight: 700; letter-spacing: 1.5px; color: rgba(255,255,255,0.45); border-bottom: 2px solid transparent; }
   .h-tabs button.on { color: #fff; border-bottom-color: var(--teal); }
   .h-plane { position: absolute; left: 18px; right: 18px; bottom: max(116px, calc(env(safe-area-inset-bottom) + 106px)); text-align: right; }
@@ -114,6 +114,22 @@
   .board td { padding: 10px 4px; border-bottom: 1px solid rgba(255,255,255,0.08); }
   .board td:first-child { width: 34px; color: var(--dim); }
   .board tr.me td { color: var(--teal); font-weight: 800; }
+  .friends .f-me { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.08); font-size: 14px; color: var(--dim); }
+  .friends .f-me b { color: #fff; font-size: 16px; letter-spacing: 0.5px; }
+  .friends .f-me button { padding: 6px 12px; font-size: 12px; font-weight: 700; color: #dfe7f2; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; }
+  .f-add { display: flex; gap: 8px; padding: 12px 0; }
+  .f-add input { flex: 1; min-width: 0; padding: 10px 12px; font: inherit; font-size: 15px; color: #fff; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.18); border-radius: 6px; outline: none; }
+  .f-add input:focus { border-color: var(--teal); }
+  .f-add button { padding: 0 18px; font-weight: 800; color: #04201c; background: var(--teal); border-radius: 6px; }
+  .f-row { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid rgba(255,255,255,0.08); }
+  .f-row .dot { width: 9px; height: 9px; border-radius: 50%; background: #4a525e; flex: none; }
+  .f-row.air .dot { background: #3df29a; box-shadow: 0 0 8px #3df29a; }
+  .f-row.hangar .dot { background: #f1d27a; }
+  .f-row .t { flex: 1; min-width: 0; }
+  .f-row .t b { font-size: 15px; }
+  .f-row .t small { display: block; color: var(--dim); font-size: 12px; margin-top: 2px; }
+  .f-row .join { padding: 9px 16px; font-weight: 800; font-size: 13px; color: #04201c; background: linear-gradient(90deg, #2fd3bd, #6fe6ff); border-radius: 999px; }
+  .f-row .rm { width: 30px; height: 30px; font-size: 18px; line-height: 1; color: rgba(255,255,255,0.4); background: none; }
   @media (orientation: landscape) {
     .h-plane { top: 96px; bottom: 96px; left: auto; width: min(420px, 42vw); display: flex; flex-direction: column; justify-content: center; }
     .h-panel { left: auto; width: min(560px, 56vw); }
@@ -303,6 +319,7 @@
     <button class="on" data-tab="planes" type="button">מטוסים</button>
     <button data-tab="ups" type="button">שדרוגים</button>
     <button data-tab="board" type="button">דירוג</button>
+    <button data-tab="friends" type="button">חברים</button>
   </div>
   <div class="h-plane" id="tab-planes">
     <div class="era" id="hp-era"></div>
@@ -318,6 +335,11 @@
   </div>
   <div class="h-panel ups hidden" id="tab-ups"></div>
   <div class="h-panel board hidden" id="tab-board"></div>
+  <div class="h-panel friends hidden" id="tab-friends">
+    <div class="f-me" id="f-me"></div>
+    <form class="f-add" id="f-add" autocomplete="off"><input id="f-code" placeholder="שם#מספר של חבר" maxlength="24" dir="auto"><button type="submit">הוסף</button></form>
+    <div id="f-list"></div>
+  </div>
   <div class="h-invite hidden" id="h-invite">הוזמנת לזירה של חבר — לחצו המראה</div>
   <div class="h-mode"><button type="button" data-mode="ffa" class="on">כולם נגד כולם</button><button type="button" data-mode="teams">קבוצות</button></div>
   <div class="h-launch">

@@ -33,7 +33,7 @@ async function pilot(token, room = 'arena') {
   const c = new Client(`ws://127.0.0.1:${PORT}`);
   const r = await c.joinOrCreate(room, { token });
   const s = { room: r, events: [], snap: null };
-  for (const type of ['welcome', 'spawn', 'fix', 'hit', 'hurt', 'down', 'reward', 'roster', 'fired', 'incoming', 'boom', 'pong', 'ram', 'flare', 'flared', 'score', 'bt', 'bossStart', 'bossDown', 'bossGone']) {
+  for (const type of ['welcome', 'spawn', 'fix', 'hit', 'hurt', 'down', 'reward', 'roster', 'fired', 'incoming', 'boom', 'pong', 'ram', 'flare', 'flared', 'score', 'bt', 'bossStart', 'bossDown', 'bossGone', 'friendIn']) {
     r.onMessage(type, (m) => { s.events.push({ type, m }); type === 'spawn' && (s.pose = { ...m }); type === 'welcome' && (s.key = m.key); });
   }
   r.onMessage('s', (m) => (s.snap = m));
@@ -199,6 +199,32 @@ try {
   const w1 = got(t1, 'welcome')[0].m, w2 = await until(() => got(fr, 'welcome')[0]) && got(fr, 'welcome')[0].m;
   ok('the two are put on opposite sides', w1.team && w2.team && w1.team !== w2.team, { a: w1.team, b: w2.team });
   await t1.room.leave(); await fr.room.leave();
+
+  console.log('\nfriends');
+  ok('a code must be name#number', (await api('/api/friends/add', { code: 'צייד' }, twin.token)).error === 'bad_code');
+  ok('a pilot who is not there is not found', (await api('/api/friends/add', { code: 'אין#77' }, twin.token)).status === 404);
+  ok('you are not your own friend', (await api('/api/friends/add', { code: 'נשר#1' }, twin.token)).error === 'self');
+  const add = await api('/api/friends/add', { code: 'צייד#1' }, twin.token);
+  ok('a friend is added by name and number', add.ok && add.friend?.code === 'צייד#1', add);
+  ok('and only once', (await api('/api/friends/add', { code: 'צייד#1' }, twin.token)).error === 'already_friends');
+  const mine = await api('/api/friends', null, back.token);
+  ok('both ways: the other has them too, and their own code', mine.me === 'צייד#1' && mine.rows?.[0]?.code === 'נשר#1', mine);
+  ok('someone in the hangar shows as there', mine.rows?.[0]?.state === 'hangar', mine.rows);
+  const fa = await pilot(back.token, 'arena_duel');
+  await until(() => fa.key, 3000);
+  const seen = await api('/api/friends', null, twin.token);
+  const row = seen.rows?.[0];
+  ok('a friend in the air shows where', row?.state === 'air' && row.room === got(fa, 'welcome')[0]?.m.room && row.mode === 'ffa', seen.rows);
+  const fc = new Client(`ws://127.0.0.1:${PORT}`);
+  const fj = await fc.joinById(row.room, { token: twin.token });
+  for (const type of ['welcome', 'spawn', 's', 'roster']) fj.onMessage(type, () => {});
+  fj.send('hello');
+  ok('join puts you in their room', fj.roomId === row.room);
+  ok('and they hear that you came', await until(() => got(fa, 'friendIn').some((e) => e.m.name === 'נשר#1'), 3000), got(fa, 'friendIn'));
+  await fj.leave(); await fa.room.leave();
+  await wait(200);
+  ok('landed again: back in the hangar', (await api('/api/friends', null, twin.token)).rows?.[0]?.state === 'hangar');
+  ok('a friend can be removed', (await api('/api/friends/remove', { code: 'צייד#1' }, twin.token)).ok && (await api('/api/friends', null, back.token)).rows?.length === 0);
 
   console.log('\nthe bomber');
   const bz = await pilot(back.token, 'arena_boss_test');

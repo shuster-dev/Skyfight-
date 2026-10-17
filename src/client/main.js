@@ -20,6 +20,8 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const ERR = {
   offline: 'אין חיבור לשרת — בדקו את האינטרנט', bad_name: 'שם בין 2 ל־14 תווים, אותיות ומספרים בלבד', bad_login: 'שם משתמש או סיסמה שגויים',
   username_taken: 'השם הזה כבר תפוס', invalid_username: 'שם משתמש: 3–16 אותיות אנגלית קטנות ומספרים', invalid_password: 'סיסמה: לפחות 4 תווים',
+  bad_code: 'כותבים שם#מספר, כמו מאיר#1', no_such_pilot: 'אין טייס כזה — בדקו את השם והמספר', self: 'אי אפשר להוסיף את עצמכם',
+  already_friends: 'כבר חברים', friends_full: 'רשימת החברים מלאה',
   gold: 'אין מספיק זהב', level: 'צריך רמה גבוהה יותר', too_many_requests: 'יותר מדי ניסיונות — חכו רגע', no_pilot: 'קודם בוחרים שם',
 };
 const err = (e) => ERR[e?.code] || 'משהו השתבש — נסו שוב';
@@ -243,10 +245,12 @@ function renderHangar() {
   show('#tab-planes', tab === 'planes');
   show('#tab-ups', tab === 'ups');
   show('#tab-board', tab === 'board');
+  show('#tab-friends', tab === 'friends');
   hangar.show(viewing || p.plane, paintView || p.paint);
   if (tab === 'planes') renderPlanes();
   if (tab === 'ups') renderUps();
   if (tab === 'board') renderBoard();
+  if (tab === 'friends') renderFriends();
   $('#btn-launch').textContent = `המראה · ${PLANES[p.plane].he}`;
 }
 
@@ -363,6 +367,61 @@ async function renderBoard() {
   } catch (x) { el.innerHTML = `<div class="note">${err(x)}</div>`; }
 }
 
+// ---- friends ------------------------------------------------------------------
+// Who is flying now, and a button that puts you in the same sky as them.
+const MODE_HE = { ffa: 'כולם נגד כולם', teams: 'קבוצות' };
+let friendsT = 0;
+async function renderFriends(quiet = false) {
+  clearTimeout(friendsT);
+  const list = $('#f-list');
+  if (!quiet) list.innerHTML = '<div class="note">טוען…</div>';
+  try {
+    const { me, rows } = await net.api('/api/friends');
+    $('#f-me').innerHTML = me
+      ? `<span>הקוד שלך <b dir="auto">${esc(me)}</b></span><button type="button" id="f-copy">העתק</button>`
+      : '<span>שמרו את ההתקדמות כדי לקבל קוד משלכם — כך חברים יוכלו להוסיף אתכם</span>';
+    list.innerHTML = rows.map((r) => `<div class="f-row ${r.state}">
+        <i class="dot"></i>
+        <div class="t"><b dir="auto">${esc(r.code)}</b><small>רמה ${r.level} · ${r.state === 'air' ? `בקרב · ${MODE_HE[r.mode] || ''}` : r.state === 'hangar' ? 'בהאנגר' : 'לא מחובר'}</small></div>
+        ${r.state === 'air' ? `<button class="join" type="button" data-room="${esc(r.room)}" data-mode="${esc(r.mode)}" data-code="${esc(r.code)}">הצטרף</button>` : ''}
+        <button class="rm" type="button" data-rm="${esc(r.code)}" aria-label="הסר">×</button>
+      </div>`).join('') || '<div class="note">עוד אין חברים. הוסיפו חבר לפי השם והמספר שלו — ותוכלו להצטרף אליו לקרב בלחיצה.</div>';
+  } catch (x) { if (!quiet) list.innerHTML = `<div class="note">${err(x)}</div>`; }
+  // while the list is open, it keeps up with who takes off and lands
+  if (S.mode === 'hangar' && tab === 'friends') friendsT = setTimeout(() => S.mode === 'hangar' && tab === 'friends' && renderFriends(true), 6000);
+}
+$('#f-add').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const code = $('#f-code').value.trim();
+  if (!code) return;
+  try {
+    const r = await net.api('/api/friends/add', { code });
+    $('#f-code').value = '';
+    toast(`${r.friend.code} נוסף לחברים`);
+    renderFriends(true);
+  } catch (x) { toast(err(x)); }
+});
+$('#tab-friends').addEventListener('click', async (e) => {
+  if (e.target.id === 'f-copy') {
+    const code = $('#f-me b')?.textContent || '';
+    try { await navigator.clipboard.writeText(code); toast('הקוד הועתק'); } catch { prompt('הקוד שלך:', code); }
+    return;
+  }
+  const j = e.target.closest('.join');
+  if (j) {
+    // straight into their room (or, if it has filled up, the same kind of sky)
+    S.gameMode = j.dataset.mode === 'teams' ? 'teams' : 'ffa';
+    S.invite = j.dataset.room;
+    sound.unlock();
+    toast(`מצטרפים ל־${j.dataset.code}`);
+    return launch();
+  }
+  const rm = e.target.closest('[data-rm]');
+  if (rm && confirm(`להסיר את ${rm.dataset.rm} מהחברים?`)) {
+    try { await net.api('/api/friends/remove', { code: rm.dataset.rm }); renderFriends(true); } catch (x) { toast(err(x)); }
+  }
+});
+
 $('#btn-save').addEventListener('click', () => openLogin('register'));
 $('#btn-launch').addEventListener('click', () => { sound.unlock(); launch(); });
 
@@ -381,6 +440,7 @@ async function launch() {
     hook(room);
     room.send('hello');
     S.mode = 'air';
+    hangar.clear();
     clearPreview();
     ['#screen-hangar', '#screen-title', '#death'].forEach((s) => show(s, false));
     show('#hud');
@@ -423,6 +483,7 @@ function hook(room) {
   room.onMessage('fix', (m) => { if (S.me?.body) Object.assign(S.me.body, m), (S.me.body.q = QQ.euler(m.yaw, m.pitch, 0)); });
   room.onMessage('s', onSnapshot);
   room.onMessage('score', (sc) => paintTeams(sc));
+  room.onMessage('friendIn', (m) => toast(`${m.name} הצטרף אליך`, 'lvl'));
   room.onMessage('roster', (list) => {
     S.roster = new Map(list.map((r) => [r.key, r]));
     paintScore();

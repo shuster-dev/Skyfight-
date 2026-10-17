@@ -8,6 +8,7 @@
 //
 // Bots fill the sky when it is empty, so a pilot who comes alone has someone
 // to fight; they step out as real pilots come in.
+import { presence } from '../presence.js';
 import { Room } from '@colyseus/core';
 import { verifyToken } from '../auth.js';
 import { Bomber } from '../boss.js';
@@ -82,6 +83,7 @@ export class ArenaRoom extends Room {
     const pilot = auth.pilot;
     const p = this.addPlane({ uid: auth.id, sid: client.sessionId, name: displayName(pilot), plane: pilot.plane, paint: pilot.paint, level: pilot.level, upgrades: pilot.upgrades, pilot, team: this.pickTeam(true) });
     this.bySession.set(client.sessionId, p.key);
+    presence.enter(auth.id, this.roomId, this.teams ? 'teams' : 'ffa');
     this.fillBots();
   }
 
@@ -96,6 +98,8 @@ export class ArenaRoom extends Room {
     p.greeted = true;
     client.send('welcome', { key: p.key, stats: p.stats, roster: this.roster(), pilot: view(p.pilot), mode: this.teams ? 'teams' : 'ffa', team: p.team, score: this.score, room: this.roomId });
     this.spawn(p);
+    // friends already in this sky hear that you came
+    for (const q of this.planes.values()) if (q !== p && q.pilot?.friends?.includes(p.uid)) this.sendTo(q, 'friendIn', { name: p.name });
   }
 
   onLeave(client) {
@@ -103,11 +107,13 @@ export class ArenaRoom extends Room {
     this.bySession.delete(client.sessionId);
     const p = key && this.planes.get(key);
     if (p?.pilot) this.store.savePilot(p.pilot);
+    if (p?.uid) presence.leave(p.uid, this.roomId), presence.seen(p.uid);
     key && this.drop(key);
     this.fillBots();
   }
 
   async onDispose() {
+    for (const p of this.planes.values()) if (p.uid) presence.leave(p.uid, this.roomId);
     for (const p of this.planes.values()) if (p.pilot) await this.store.savePilot(p.pilot);
   }
 

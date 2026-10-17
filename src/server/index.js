@@ -7,11 +7,12 @@ import express from 'express';
 import { Server } from '@colyseus/core';
 import { WebSocketTransport } from '@colyseus/ws-transport';
 import crypto from 'node:crypto';
-import { openStore } from './store.js';
+import { openStore, tagKey } from './store.js';
+import { presence } from './presence.js';
 import { hashPassword, verifyPassword, signToken, verifyToken, validateUsername } from './auth.js';
 import { buyPaint, buyPlane, buyUpgrade, choosePaint, choosePlane, newPilot, normalize, view } from './pilot.js';
 import { ArenaRoom } from './rooms/ArenaRoom.js';
-import { cleanCallsign } from '../shared/planes.js';
+import { cleanCallsign, displayName, levelOf } from '../shared/planes.js';
 
 process.on('unhandledRejection', (e) => console.error('[unhandled]', e));
 
@@ -49,6 +50,7 @@ const requireAuth = async (req, res, next) => {
   const user = claims && await store.findUser(claims.sub);
   if (!user) return res.status(401).json({ error: 'unauthorized' });
   req.user = user;
+  presence.seen(user.id);
   next();
 };
 const pilotOf = async (id) => {
@@ -65,6 +67,7 @@ async function tagPilot(user, p) {
   if (user.guest || !p.name || (p.registered && p.tag && p.tagName === p.name)) return p;
   p.registered = true;
   if (!p.tag || p.tagName !== p.name) p.tag = await store.nextTag(p.name), p.tagName = p.name;
+  p.nameKey = tagKey(p.name);
   await store.savePilot(p);
   return p;
 }
@@ -134,6 +137,54 @@ app.post('/api/pilot/buy-plane', requireAuth, hangar((p, b) => buyPlane(p, Strin
 app.post('/api/pilot/upgrade', requireAuth, hangar((p, b) => buyUpgrade(p, String(b.upgrade || ''))));
 app.post('/api/pilot/buy-paint', requireAuth, hangar((p, b) => buyPaint(p, String(b.paint || ''))));
 app.post('/api/pilot/paint', requireAuth, hangar((p, b) => choosePaint(p, String(b.paint || ''))));
+
+// --- friends ----------------------------------------------------------------
+// Added by name and number (מאיר#1), both ways at once: if I have you, you
+// have me. The list says who is flying right now and where, and "join" puts
+// you in the same room as them.
+const FRIENDS_MAX = 60;
+const parseCode = (c) => {
+  const m = /^(.+)#(\d{1,7})$/.exec(String(c || '').trim());
+  return m ? { name: m[1].trim(), tag: Number(m[2]) } : null;
+};
+const friendRow = async (id) => {
+  const f = await store.getPilot(id);
+  if (!f) return null;
+  const pr = presence.of(id);
+  return { code: displayName(f), level: levelOf(f.xp || 0), plane: f.plane, state: pr.state, mode: pr.mode || '', room: pr.room || '' };
+};
+const ORDER = { air: 0, hangar: 1, off: 2 };
+app.get('/api/friends', requireAuth, async (req, res) => {
+  const p = await pilotOf(req.user.id);
+  const rows = (await Promise.all((p.friends || []).map(friendRow))).filter(Boolean);
+  rows.sort((a, b) => ORDER[a.state] - ORDER[b.state] || b.level - a.level);
+  res.json({ me: p.registered && p.tag ? displayName(p) : '', rows });
+});
+app.post('/api/friends/add', requireAuth, knock.mw(), async (req, res) => {
+  const c = parseCode(req.body?.code);
+  if (!c) return res.status(400).json({ error: 'bad_code' });
+  const p = await pilotOf(req.user.id);
+  const f = await store.findPilotByCode(c.name, c.tag);
+  if (!f) return res.status(404).json({ error: 'no_such_pilot' });
+  if (f.id === p.id) return res.status(400).json({ error: 'self' });
+  p.friends ||= []; f.friends ||= [];
+  if (p.friends.includes(f.id)) return res.status(409).json({ error: 'already_friends' });
+  if (p.friends.length >= FRIENDS_MAX || f.friends.length >= FRIENDS_MAX) return res.status(400).json({ error: 'friends_full' });
+  p.friends.push(f.id);
+  if (!f.friends.includes(p.id)) f.friends.push(p.id);
+  await store.savePilot(p); await store.savePilot(f);
+  res.json({ ok: true, friend: await friendRow(f.id) });
+});
+app.post('/api/friends/remove', requireAuth, async (req, res) => {
+  const c = parseCode(req.body?.code);
+  const p = await pilotOf(req.user.id);
+  const f = c && await store.findPilotByCode(c.name, c.tag);
+  if (!f) return res.status(404).json({ error: 'no_such_pilot' });
+  p.friends = (p.friends || []).filter((x) => x !== f.id);
+  f.friends = (f.friends || []).filter((x) => x !== p.id);
+  await store.savePilot(p); await store.savePilot(f);
+  res.json({ ok: true });
+});
 
 app.get('/api/leaderboard', async (req, res) => res.json({ rows: await store.leaderboard(req.query.kind === 'kills' ? 'kills' : 'level', 20) }));
 
