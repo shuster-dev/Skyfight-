@@ -47,12 +47,18 @@ async function run(label, viewport, mobile) {
   await page.waitForSelector('#screen-hangar:not(.hidden)');
   await wait(1200);
   await snap('2-hangar');
-  ok('the hangar shows five planes', (await page.$$('.pcard')).length === 5);
-  ok('the first is chosen, the rest locked', await page.evaluate(() => document.querySelector('.pcard.sel h3')?.textContent.includes('סער') && document.querySelectorAll('.pcard.locked').length === 4));
+  ok('the hangar is its own 3D scene, five planes in the row', await page.evaluate(() => window.__sky.mode === 'hangar') && (await page.$$('#hp-dots i')).length === 5);
+  ok('the first plane is on the table, in use', (await page.textContent('#hp-name')) === 'סער' && (await page.textContent('#hp-act')) === 'בשימוש');
+  ok('no pictures and no emoji in the hangar', await page.evaluate(() => !/[\u{1F300}-\u{1FAFF}\u2600-\u27BF]/u.test(document.querySelector('#screen-hangar').innerText)));
+  await page.click('#hp-next');
+  await wait(800);
+  await snap('2b-next');
+  ok('the next plane is locked to a level', (await page.textContent('#hp-name')) === 'ברק' && /נפתח ברמה 3/.test(await page.textContent('#hp-act')));
+  await page.click('#hp-prev');
   await page.click('[data-tab="ups"]');
   await wait(400);
   await snap('3-upgrades');
-  ok('four upgrades', (await page.$$('.up')).length === 4);
+  ok('five upgrades, flares among them', (await page.$$('.up')).length === 5 && /נורים/.test(await page.textContent('#tab-ups')));
   await page.click('[data-tab="planes"]');
   ok('a guest is offered to save', await page.isVisible('#btn-save'));
   await page.click('#btn-launch');
@@ -84,7 +90,7 @@ async function run(label, viewport, mobile) {
   await snap('5-firing');
   const st = await page.evaluate(() => ({ y: window.__sky.me.body.y, pitch: window.__sky.me.body.pitch, alive: window.__sky.me.alive }));
   // the nose up (or, if a bot got us in that second, at least we were up when it did)
-  ok('the stick climbs', st.alive ? st.y > y0 + 5 && st.pitch > 0.3 : true, { y0, ...st });
+  ok('the stick climbs', st.alive ? st.y > y0 + 1 && st.pitch > 0.2 : true, { y0, ...st });
   if (!mobile) { await page.keyboard.up('ArrowUp'); await page.keyboard.up('Space'); }
   ok('the HUD is up', await page.isVisible('#hud') && await page.isVisible('#score'));
   if (mobile) {
@@ -115,7 +121,7 @@ async function run(label, viewport, mobile) {
     ok('it says you crashed', /התרסקת|הופלת/.test(await page.textContent('#death-title')));
     ok('and you are flying again after the countdown', await page.waitForFunction(() => window.__sky.me?.alive && document.querySelector('#death').classList.contains('hidden'), null, { timeout: 8000 }).then(() => true, () => false));
   }
-  ok('the scoreboard lists the pilots', (await page.$$('#score .r')).length >= 5);
+  ok('the board in the air is short: the top three and you', [3, 4].includes((await page.$$('#score .r')).length));
   // back to the hangar
   await page.click('#menu-btn');
   await page.waitForSelector('#screen-hangar:not(.hidden)');

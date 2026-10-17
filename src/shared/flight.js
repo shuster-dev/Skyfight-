@@ -52,7 +52,7 @@ export function fly(b, input, stats, dt) {
 
   // the afterburner
   b.boosting = !!input.boost && b.fuel > BOOST.min;
-  b.fuel = clamp(b.fuel + (b.boosting ? -BOOST.drain : BOOST.fill) * dt, 0, 1);
+  b.fuel = clamp(b.fuel + (b.boosting ? -BOOST.drain : stats.fill || BOOST.fill) * dt, 0, 1);
   // a climb costs speed and a dive gives it; the burner wins over both
   const want = (b.boosting ? stats.boost : stats.speed) - Math.sin(b.pitch) * stats.speed * 0.25;
   b.speed += (want - b.speed) * Math.min(1, dt * (b.boosting ? 2.2 : 1.2));

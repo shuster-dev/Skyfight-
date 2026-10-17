@@ -6,10 +6,11 @@ import { sound } from './audio.js';
 import { makeRenderer, makeWorld, inCloud } from './gfx/scene.js';
 import { buildPlane, animatePlane } from './gfx/planes.js';
 import { Fx } from './gfx/fx.js';
+import { Hangar } from './gfx/hangar.js';
 import { PLANES, PLANE_ORDER, UPGRADES, UPGRADE_ORDER, TIER_MAX, nextTier, statsOf, levelProgress, planeOpen, planeOwned, cleanCallsign, displayName } from '../shared/planes.js';
 import { ARENA, BRIDGE, groundAt, underBridge } from '../shared/arena.js';
 import { fly, forward, newBody } from '../shared/flight.js';
-import { FLARE, GUN, MISSILE, RESPAWN, aimDir, pickTarget } from '../shared/combat.js';
+import { FLARE, GUN, MISSILE, RESPAWN, aimDir, offNose, pickTarget } from '../shared/combat.js';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -29,6 +30,7 @@ const renderer = makeRenderer($('#game'));
 const world = makeWorld(renderer);
 const { scene, camera } = world;
 const fx = new Fx(scene);
+const hangar = new Hangar(renderer);
 
 const S = {
   mode: 'boot', pilot: null, account: { guest: true, username: '' },
@@ -105,7 +107,7 @@ async function boot() {
     took(me);
     const btn = $('#btn-go');
     btn.disabled = false;
-    btn.textContent = S.pilot.name ? '✈️ להאנגר' : '✈️ המראה!';
+    btn.textContent = S.pilot.name ? 'להאנגר' : 'המראה';
     if (S.pilot.name) $('#in-name').value = S.pilot.name;
   } catch (e) {
     $('#title-err').textContent = err(e);
@@ -151,7 +153,7 @@ let loginMode = 'login';
 function openLogin(mode) {
   loginMode = mode;
   $('#login-title').textContent = mode === 'login' ? 'התחברות לטייס שמור' : 'שמירת ההתקדמות';
-  $('#btn-login').textContent = mode === 'login' ? 'התחבר' : '💾 שמור';
+  $('#btn-login').textContent = mode === 'login' ? 'התחבר' : 'שמור';
   $('#in-pass').setAttribute('autocomplete', mode === 'login' ? 'current-password' : 'new-password');
   $('#login-note').textContent = mode === 'login'
     ? 'אחרי ההתחברות תמשיכו בדיוק מאיפה שעצרתם.'
@@ -171,7 +173,7 @@ $('#login-form').addEventListener('submit', async (e) => {
     $('#in-pass').value = '';
     if (S.mode === 'title') {
       if (S.pilot.name) $('#in-name').value = S.pilot.name, showHangar();
-      else $('#btn-go').textContent = '✈️ המראה!';
+      else $('#btn-go').textContent = 'המראה';
     } else renderHangar(), toast(loginMode === 'login' ? 'מחובר!' : 'נשמר! ✔');
   } catch (x) { $('#login-err').textContent = err(x); }
 });
@@ -191,7 +193,8 @@ $('#btn-settings-close').addEventListener('click', () => show('#sheet-settings',
 $('#set-sound').addEventListener('change', (e) => { sound.setMuted(!e.target.checked); paintSoundBtn(); });
 $('#set-invert').addEventListener('change', (e) => controls.setInvert(e.target.checked));
 $('#btn-sound').addEventListener('click', () => { sound.unlock(); sound.setMuted(!sound.muted); paintSoundBtn(); });
-const paintSoundBtn = () => ($('#btn-sound').textContent = sound.muted ? '🔇' : '🔊');
+// muted: the speaker crossed out
+const paintSoundBtn = () => $('#btn-sound').classList.toggle('muted', sound.muted);
 paintSoundBtn();
 $('#btn-logout').addEventListener('click', () => { net.logout(); location.reload(); });
 
@@ -205,13 +208,14 @@ function showHangar() {
   show('#corner', false);
   controls.enabled = false;
   sound.engine(false);
+  clearPreview();
   viewing = S.pilot.plane;
   renderHangar();
 }
 
-$$('.tabs button').forEach((b) => b.addEventListener('click', () => {
+$$('.h-tabs button').forEach((b) => b.addEventListener('click', () => {
   tab = b.dataset.tab;
-  $$('.tabs button').forEach((x) => x.classList.toggle('on', x === b));
+  $$('.h-tabs button').forEach((x) => x.classList.toggle('on', x === b));
   renderHangar();
 }));
 
@@ -225,47 +229,58 @@ function renderHangar() {
   show('#tab-planes', tab === 'planes');
   show('#tab-ups', tab === 'ups');
   show('#tab-board', tab === 'board');
-  setPreview([viewing || p.plane]);
+  hangar.show(viewing || p.plane);
   if (tab === 'planes') renderPlanes();
   if (tab === 'ups') renderUps();
   if (tab === 'board') renderBoard();
-  $('#btn-launch').textContent = `🚀 שגר ב${PLANES[p.plane].he}!`;
+  $('#btn-launch').textContent = `המראה · ${PLANES[p.plane].he}`;
 }
 
+/** The plane on the table: its name, its era, and what can be done with it. */
 function renderPlanes() {
-  const p = S.pilot, max = { hp: 200, speed: 80, turn: 1.95, dps: 80 };
-  $('#tab-planes').innerHTML = PLANE_ORDER.map((k) => {
-    const d = PLANES[k], own = planeOwned(p, k), open = planeOpen(p, k), sel = p.plane === k;
-    const st = statsOf(k, p.upgrades);
-    const bar = (label, v, m) => `<span>${label}</span><i><b style="width:${Math.min(100, (v / m) * 100)}%"></b></i>`;
-    const btn = sel ? '<button class="pbtn fly" disabled>✔ נבחר</button>'
-      : own ? `<button class="pbtn fly" data-pick="${k}">בחר</button>`
-        : open ? `<button class="pbtn buy" data-buy="${k}" ${p.gold < d.price ? 'disabled' : ''}>קנה · 💰 ${fmt(d.price)}</button>`
-          : `<button class="pbtn" disabled>🔒 נפתח ברמה ${d.level}</button>`;
-    return `<div class="pcard ${sel ? 'sel' : ''} ${open ? '' : 'locked'}" data-view="${k}">
-      <h3>${d.he} <span class="role">${d.role}</span></h3>
-      <div class="era"><span class="num">${d.era}</span> · ${d.kind}</div>
-      <p>${d.desc}</p>
-      <div class="bars">${bar('חיים', st.hp, max.hp)}${bar('מהירות', st.speed, max.speed)}${bar('תמרון', d.turn, max.turn)}${bar('אש', st.dmg * d.rate, max.dps)}</div>
-      <div class="arms">🔫 ${d.guns}<br>🚀 ${st.missiles} × ${d.missile} · 🎆 ${st.flares} נורים</div>
-      ${btn}
-    </div>`;
-  }).join('');
-  // the selected card in view
-  $('#tab-planes .sel')?.scrollIntoView({ inline: 'center', block: 'nearest' });
+  const p = S.pilot, k = viewing || p.plane, d = PLANES[k];
+  const own = planeOwned(p, k), open = planeOpen(p, k), sel = p.plane === k;
+  $('#hp-era').textContent = `${d.era} · ${d.kind}`;
+  $('#hp-name').textContent = d.he;
+  $('#hp-role').textContent = d.role;
+  $('#hp-dots').innerHTML = PLANE_ORDER.map((id) => `<i class="${id === k ? 'on' : ''} ${planeOwned(p, id) ? 'own' : ''}"></i>`).join('');
+  const act = $('#hp-act');
+  act.className = 'h-act';
+  act.disabled = false;
+  delete act.dataset.pick; delete act.dataset.buy;
+  if (sel) { act.textContent = 'בשימוש'; act.classList.add('ok'); act.disabled = true; }
+  else if (own) { act.textContent = 'בחר'; act.dataset.pick = k; }
+  else if (open) { act.innerHTML = `קנה · <span class="num">${fmt(d.price)}</span>`; act.classList.add('buy'); act.dataset.buy = k; act.disabled = p.gold < d.price; }
+  else { act.textContent = `נפתח ברמה ${d.level}`; act.disabled = true; }
 }
 
-$('#tab-planes').addEventListener('click', async (e) => {
-  const pick = e.target.closest('[data-pick]')?.dataset.pick, buy = e.target.closest('[data-buy]')?.dataset.buy;
-  const card = e.target.closest('[data-view]')?.dataset.view;
-  if (card && card !== viewing) { viewing = card; setPreview([card]); }
+const step = (dir) => {
+  const i = PLANE_ORDER.indexOf(viewing || S.pilot.plane);
+  viewing = PLANE_ORDER[(i + dir + PLANE_ORDER.length) % PLANE_ORDER.length];
+  hangar.show(viewing);
+  renderPlanes();
+};
+// in a right-to-left page the arrow on the right goes back
+$('#hp-prev').addEventListener('click', () => step(-1));
+$('#hp-next').addEventListener('click', () => step(1));
+// a swipe across the hangar turns the table
+{
+  let sx = null;
+  const scr = $('#screen-hangar');
+  scr.addEventListener('pointerdown', (e) => { if (!e.target.closest('button, .h-panel')) sx = e.clientX; });
+  scr.addEventListener('pointermove', (e) => { if (sx !== null) hangar.turn(e.clientX - sx), sx = e.clientX; });
+  addEventListener('pointerup', () => (sx = null));
+}
+
+$('#hp-act').addEventListener('click', async (e) => {
+  const b = e.currentTarget, pick = b.dataset.pick, buy = b.dataset.buy;
   if (!pick && !buy) return;
   sound.unlock();
   try {
     const r = await net.api(buy ? '/api/pilot/buy-plane' : '/api/pilot/plane', { plane: pick || buy });
     S.pilot = r.pilot;
     viewing = S.pilot.plane;
-    if (buy) sound.coin(), toast(`${PLANES[buy].he} שלך! ✈️`);
+    if (buy) sound.coin(), toast(`${PLANES[buy].he} בהאנגר שלך`);
     renderHangar();
   } catch (x) { toast(err(x)); }
 });
@@ -274,12 +289,12 @@ function renderUps() {
   const p = S.pilot;
   $('#tab-ups').innerHTML = UPGRADE_ORDER.map((k) => {
     const u = UPGRADES[k], have = p.upgrades[k] || 0, n = nextTier(p, k);
-    const pips = Array.from({ length: TIER_MAX }, (_, i) => `<i class="${i < have ? 'on' : ''}"></i>`).join('');
-    const btn = !n ? '<button disabled>מקסימום</button>'
-      : p.level < n.level ? `<button disabled>🔒 רמה ${n.level}</button>`
-        : `<button data-up="${k}" ${p.gold < n.cost ? 'disabled' : ''}>💰 ${fmt(n.cost)}</button>`;
-    return `<div class="up"><div class="ic">${u.icon}</div><div class="t"><b>${u.he}</b><small>${u.desc}</small><div class="pips">${pips}</div></div>${btn}</div>`;
-  }).join('') + '<div class="note" style="grid-column:1/-1">השדרוגים עוברים איתך לכל מטוס. מרוויחים זהב על כל הפלה.</div>';
+    const segs = Array.from({ length: TIER_MAX }, (_, i) => `<i class="${i < have ? 'on' : ''}"></i>`).join('');
+    const btn = !n ? '<button disabled>מלא</button>'
+      : p.level < n.level ? `<button disabled>רמה ${n.level}</button>`
+        : `<button data-up="${k}" ${p.gold < n.cost ? 'disabled' : ''}><span class="num">${fmt(n.cost)}</span><span class="coin"></span></button>`;
+    return `<div class="up"><div class="t"><b>${u.he}</b><small>${u.desc}</small><div class="segs">${segs}</div></div>${btn}</div>`;
+  }).join('') + '<div class="note" style="text-align:right">השדרוגים עוברים איתך לכל מטוס. זהב מרוויחים על כל הפלה.</div>';
 }
 
 $('#tab-ups').addEventListener('click', async (e) => {
@@ -289,7 +304,7 @@ $('#tab-ups').addEventListener('click', async (e) => {
     const r = await net.api('/api/pilot/upgrade', { upgrade: k });
     S.pilot = r.pilot;
     sound.coin();
-    toast(`${UPGRADES[k].he} ${r.tier}/5 ✔`);
+    toast(`${UPGRADES[k].he} · דרגה ${r.tier}`);
     renderHangar();
   } catch (x) { toast(err(x)); }
 });
@@ -301,8 +316,8 @@ async function renderBoard() {
     const { rows } = await net.api('/api/leaderboard');
     const mine = displayName(S.pilot);
     // only saved pilots are on the board: a guest is told how to get there
-    const hint = S.account.guest ? '<div class="note">רק טייסים שמורים מופיעים בטבלה. 💾 שמרו את ההתקדמות כדי להיכנס אליה — עם מספר משלכם, כמו מאיר#1.</div>' : '';
-    el.innerHTML = hint + `<table>${rows.map((r) => `<tr class="${r.name === mine ? 'me' : ''}"><td class="num">${r.rank}</td><td>${esc(r.name)}</td><td>רמה <span class="num">${r.level}</span></td><td>💥 <span class="num">${r.kills}</span></td></tr>`).join('') || '<tr><td>עוד אין אף אחד — תהיו הראשונים</td></tr>'}</table>`;
+    const hint = S.account.guest ? '<div class="note" style="text-align:right">רק טייסים שמורים מופיעים בדירוג. שמרו את ההתקדמות כדי להיכנס אליו — עם מספר משלכם, כמו מאיר#1.</div>' : '';
+    el.innerHTML = hint + `<table>${rows.map((r) => `<tr class="${r.name === mine ? 'me' : ''}"><td class="num">${r.rank}</td><td>${esc(r.name)}</td><td>רמה <span class="num">${r.level}</span></td><td><span class="num">${r.kills}</span> הפלות</td></tr>`).join('') || '<tr><td>עוד אין אף אחד — תהיו הראשונים</td></tr>'}</table>`;
   } catch (x) { el.innerHTML = `<div class="note">${err(x)}</div>`; }
 }
 
@@ -382,7 +397,7 @@ function hook(room) {
   room.onMessage('fired', (m) => { if (S.me) S.me.ammo = m.ammo; sound.launch(); });
   room.onMessage('flared', (m) => {
     if (S.me) S.me.flares = m.flares;
-    if (m.pulled) S.warnUntil = 0, toast('🎆 הטיל הוטעה!');
+    if (m.pulled) S.warnUntil = 0, toast('הטיל הוטעה');
   });
   room.onMessage('flare', (m) => {
     const p = m.k === S.myKey ? S.me?.mesh : S.others.get(m.k)?.mesh;
@@ -440,8 +455,8 @@ function onDown(m) {
   fx.explode(p, 1);
   sound.boom(near(p) + 0.3);
   const mine = m.k === S.myKey, me = m.v === S.myKey;
-  const how = m.how === 'missile' ? '🚀' : m.how === 'crash' ? '💥' : '🔫';
-  feed(m.k ? `${esc(nameOf(m.k))} ${how} ${esc(nameOf(m.v))}` : `${esc(nameOf(m.v))} התרסק`, mine || me);
+  const how = m.how === 'missile' ? 'טיל' : m.how === 'crash' ? 'התרסקות' : 'תותח';
+  feed(m.k ? `${esc(nameOf(m.k))} <span class="w">${how}</span> ${esc(nameOf(m.v))}` : `${esc(nameOf(m.v))} <span class="w">התרסק</span>`, mine || me);
   if (me && S.me) {
     S.me.alive = false;
     S.me.mesh.visible = false;
@@ -450,8 +465,8 @@ function onDown(m) {
     S.killer = m.k ? { name: nameOf(m.k), how: m.how } : null;
     sound.engine(false);
     show('#death');
-    $('#death-title').textContent = m.how === 'crash' && !m.k ? 'התרסקת!' : 'הופלת!';
-    $('#death-by').innerHTML = S.killer ? `על ידי <b>${esc(S.killer.name)}</b> ${how}` : 'שימו לב לגובה 😉';
+    $('#death-title').textContent = m.how === 'crash' && !m.k ? 'התרסקת' : 'הופלת';
+    $('#death-by').innerHTML = S.killer ? `על ידי <b>${esc(S.killer.name)}</b> · ${how}` : m.into === 'building' ? 'לתוך בניין' : m.into === 'bridge' ? 'לתוך הגשר' : 'שימו לב לגובה';
   }
   const o = S.others.get(m.v);
   if (o) o.mesh.visible = false;
@@ -460,11 +475,11 @@ function onDown(m) {
 function onReward(m) {
   const before = S.pilot.level;
   S.pilot = m.pilot;
-  toast(`${m.assist ? 'סיוע' : 'הפלה!'} +${m.xp} XP · +${m.gold} 💰`);
+  toast(`${m.assist ? 'סיוע' : 'הפלה'}  +${m.xp} XP  +${m.gold} זהב`);
   sound.coin();
-  if (m.streak >= 3 && !m.assist) toast(`🔥 רצף של ${m.streak}!`);
+  if (m.streak >= 3 && !m.assist) toast(`רצף של ${m.streak}`);
   if (m.up || S.pilot.level > before) {
-    setTimeout(() => toast(`⭐ רמה ${S.pilot.level}!`, 'lvl'), 500);
+    setTimeout(() => toast(`רמה ${S.pilot.level}`, 'lvl'), 500);
     sound.level();
   }
 }
@@ -501,6 +516,12 @@ function frame(t) {
   last = t;
   const time = t / 1000;
   const wide = innerWidth > innerHeight;
+  // the hangar is a scene of its own
+  if (S.mode === 'hangar') {
+    hangar.tick(dt);
+    renderer.render(hangar.scene, hangar.camera);
+    return;
+  }
   if (S.mode === 'air') air(dt, time);
   else if (S.mode !== 'look') showcase(time, dt, wide); // 'look': a tool holds the camera
   fx.syncMissiles(S.missiles, dt);
@@ -546,7 +567,7 @@ function air(dt, time) {
     animatePlane(me.mesh, dt, { boost: b.boosting, speed: b.speed, time, ammo: me.ammo, ammoMax: me.stats.missiles });
     if (input.missile && me.ammo > 0) S.room?.send('missile');
     if (input.flare && me.flares > 0) S.room?.send('flare');
-    if (me.flares < me.stats.flares) { me.flareT += dt; if (me.flareT >= FLARE.reload) me.flares++, me.flareT = 0; }
+    if (me.flares < me.stats.flares) { me.flareT += dt; if (me.flareT >= me.stats.flareReload) me.flares++, me.flareT = 0; }
     if (me.ammo < me.stats.missiles) { me.reloadT += dt; if (me.reloadT >= me.stats.reload) me.ammo++, me.reloadT = 0; }
     me.firing = input.fire;
     if (input.fire) guns({ ...b, key: S.myKey, alive: true, _me: me }, me.mesh, me.stats.rate, dt, true);
@@ -562,7 +583,7 @@ function air(dt, time) {
     }
     // under the bridge: a cheer (once per pass)
     const under = underBridge(b.x, b.y, b.z);
-    if (under && !me.under) toast('🌉 מתחת לגשר!');
+    if (under && !me.under) toast('מתחת לגשר');
     me.under = under;
     S.sendT += dt;
     if (S.sendT >= 0.05) {
@@ -669,6 +690,18 @@ function hud(dt, now) {
       lock.style.left = `${P.x}px`; lock.style.top = `${P.y}px`;
       lock.classList.toggle('ready', me.ammo > 0);
     } else show(lock, false);
+    // the crosshair where the guns point: 300 m down the nose
+    const f = forward(b.yaw, b.pitch), cross = $('#cross');
+    if (project(P.set(b.x + f.x * 300, b.y + f.y * 300, b.z + f.z * 300))) cross.style.left = `${P.x}px`, cross.style.top = `${P.y}px`;
+    // the aim pip: where the nearest plane ahead will be when the rounds get
+    // there. Crosshair on it and the guns are helped onto it (shared/combat.js)
+    const g = me.alive ? pickTarget({ ...b, alive: true }, [...S.others.values()].filter((o) => o.alive), 0.5, GUN.assistRange + 150) : null;
+    const lead = $('#lead');
+    if (g) {
+      const d = Math.hypot(g.x - b.x, g.y - b.y, g.z - b.z), tt = d / (GUN.speed + b.speed), v = g.vel || { x: 0, y: 0, z: 0 };
+      if (project(P.set(g.x + v.x * tt, g.y + v.y * tt, g.z + v.z * tt))) { show(lead); lead.style.left = `${P.x}px`; lead.style.top = `${P.y}px`; } else show(lead, false);
+      cross.classList.toggle('on', offNose(b, b.yaw, b.pitch, g) < GUN.assistCone && d < GUN.assistRange);
+    } else { show(lead, false); cross.classList.remove('on'); }
   }
   S.hudT += dt;
   if (S.hudT < 0.1 || !me) return;
@@ -727,9 +760,10 @@ function tags() {
 function paintScore() {
   const rows = [...S.roster.values()].sort((a, b) => b.kills - a.kills || a.deaths - b.deaths);
   const mine = rows.findIndex((r) => r.key === S.myKey);
-  const top = rows.slice(0, 5);
-  if (mine >= 5) top.push(rows[mine]);
-  $('#score').innerHTML = top.map((r) => `<div class="r ${r.key === S.myKey ? 'me' : ''}"><span class="num">${rows.indexOf(r) + 1}</span><span class="n">${esc(r.name)}${r.bot ? ' <span class="bot">בוט</span>' : ''}</span><span class="num">${r.kills}</span></div>`).join('');
+  // the top three and you: the rest is in the hangar's board
+  const top = rows.slice(0, 3);
+  if (mine >= 3) top.push(rows[mine]);
+  $('#score').innerHTML = top.map((r) => `<div class="r ${r.key === S.myKey ? 'me' : ''}"><span class="num">${rows.indexOf(r) + 1}</span><span class="n">${esc(r.name)}${r.bot ? ' <span class="bot">·</span>' : ''}</span><span class="num">${r.kills}</span></div>`).join('');
 }
 
 function feed(html, mine) {
@@ -748,7 +782,7 @@ function toast(text, cls = '') {
   cls && t.classList.add(cls);
   // over the hangar too
   const host = S.mode === 'air' ? $('#toast') : document.body;
-  if (host === document.body) Object.assign(t.style, { position: 'fixed', top: '42%', left: '50%', transform: 'translate(-50%,-50%)', zIndex: 60, pointerEvents: 'none', fontSize: '20px', fontWeight: 900, color: '#ffd25e', textShadow: '0 2px 8px rgba(0,0,0,.8)', animation: 'rise 1.8s forwards', textAlign: 'center' });
+  if (host === document.body) Object.assign(t.style, { position: 'fixed', top: '42%', left: '50%', transform: 'translate(-50%,-50%)', zIndex: 60, pointerEvents: 'none', fontSize: '20px', fontWeight: 900, color: '#eaf6ff', letterSpacing: '1px', textShadow: '0 2px 10px rgba(0,0,0,.8)', animation: 'rise 1.8s forwards', textAlign: 'center' });
   host.append(t);
   setTimeout(() => t.remove(), 1900);
 }
@@ -757,6 +791,7 @@ function resize() {
   renderer.setSize(innerWidth, innerHeight, false);
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
+  hangar.resize(innerWidth / innerHeight);
 }
 addEventListener('resize', resize);
 document.addEventListener('visibilitychange', () => { if (document.hidden) sound.engine(false); });

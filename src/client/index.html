@@ -53,52 +53,69 @@
   .corner { position: fixed; top: max(12px, env(safe-area-inset-top)); left: 12px; display: flex; gap: 8px; z-index: 30; }
   .round { width: 42px; height: 42px; border-radius: 50%; background: var(--panel); border: 1px solid var(--line); font-size: 19px; display: grid; place-items: center; }
 
-  /* ---------- the hangar ---------- */
-  #screen-hangar { justify-content: flex-start; align-items: stretch; padding-top: max(12px, env(safe-area-inset-top)); }
-  .hbar { display: flex; align-items: center; gap: 10px; width: 100%; max-width: 980px; margin: 0 auto; }
-  .who { flex: 1; min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 10px 14px; backdrop-filter: blur(10px); }
-  .who .name { font-size: 18px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .who .lv { color: var(--accent); }
-  .xpbar { height: 8px; border-radius: 6px; background: rgba(255, 255, 255, 0.1); margin-top: 6px; overflow: hidden; }
-  .xpbar > i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--teal), #7cf3ff); border-radius: 6px; transition: width 0.5s; }
-  .gold { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px; font-size: 18px; font-weight: 800; color: #ffd25e; white-space: nowrap; }
-  .tabs { display: flex; gap: 6px; margin: 10px auto 0; width: 100%; max-width: 980px; }
-  .tabs button { flex: 1; padding: 10px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); font-size: 15px; font-weight: 600; color: var(--dim); }
-  .tabs button.on { color: #11202f; background: var(--teal); border-color: var(--teal); }
-  .hbody { flex: 1; min-height: 0; width: 100%; max-width: 980px; margin: 10px auto 0; display: flex; flex-direction: column; }
-  .list { margin-top: auto; display: flex; gap: 10px; overflow-x: auto; padding: 4px 2px 10px; scroll-snap-type: x mandatory; scrollbar-width: none; }
-  .list::-webkit-scrollbar { display: none; }
-  .pcard { flex: 0 0 min(230px, 62vw); scroll-snap-align: center; background: var(--panel); border: 2px solid var(--line); border-radius: 18px; padding: 12px; text-align: right; backdrop-filter: blur(10px); }
-  .pcard.sel { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255, 176, 46, 0.25); }
-  .pcard.locked { opacity: 0.6; }
-  .pcard h3 { margin: 0; font-size: 19px; font-weight: 800; display: flex; align-items: center; gap: 8px; }
-  .pcard .role { font-size: 12px; font-weight: 600; color: #11202f; background: var(--teal); padding: 2px 8px; border-radius: 10px; }
-  .pcard p { margin: 6px 0 8px; font-size: 13px; color: var(--dim); line-height: 1.4; min-height: 36px; }
-  .bars { display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; align-items: center; font-size: 12px; color: var(--dim); }
-  .bars i { height: 6px; border-radius: 4px; background: rgba(255, 255, 255, 0.1); position: relative; overflow: hidden; }
-  .bars i b { position: absolute; inset: 0 auto 0 0; background: var(--accent); border-radius: 4px; }
-  .pbtn { width: 100%; margin-top: 10px; padding: 9px; border-radius: 12px; font-size: 15px; font-weight: 800; background: rgba(255, 255, 255, 0.1); }
-  .pbtn.buy { background: #ffd25e; color: #2a1600; }
-  .pbtn.fly { background: var(--teal); color: #11202f; }
-  .ups { margin-top: auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; padding-bottom: 10px; }
-  .up { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 12px; display: flex; gap: 12px; align-items: center; backdrop-filter: blur(10px); }
-  .up .ic { font-size: 30px; }
+  /* ---------- the hangar: words over the 3D shed, nothing else ---------- */
+  #screen-hangar { padding: 0; display: block; }
+  .h-top { position: absolute; top: max(14px, env(safe-area-inset-top)); left: 18px; right: 18px; display: flex; align-items: center; gap: 14px; }
+  .h-who { flex: 1; min-width: 0; }
+  .h-who .name { font-size: 17px; font-weight: 800; letter-spacing: 0.3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .h-who .lv { font-size: 12px; color: var(--dim); font-weight: 600; letter-spacing: 1px; margin-top: 2px; }
+  .h-who .xpline { height: 2px; width: min(220px, 50vw); background: rgba(255,255,255,0.12); margin-top: 6px; }
+  .h-who .xpline i { display: block; height: 100%; width: 0; background: var(--teal); transition: width 0.5s; }
+  .h-gold { font-size: 18px; font-weight: 800; color: #f1d27a; display: flex; align-items: center; gap: 7px; }
+  .coin { width: 13px; height: 13px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #fff3c4, #e2b23c 55%, #9a6f12); box-shadow: 0 0 6px rgba(240,200,90,0.5); }
+  .icon-btn { width: 38px; height: 38px; display: grid; place-items: center; background: transparent; border: 1px solid rgba(255,255,255,0.18); border-radius: 50%; }
+  .icon-btn svg { width: 18px; height: 18px; stroke: #dfe7f2; fill: none; stroke-width: 1.8; }
+  .h-tabs { position: absolute; top: max(66px, calc(env(safe-area-inset-top) + 58px)); right: 18px; display: flex; gap: 22px; }
+  .h-tabs button { background: none; padding: 6px 0; font-size: 14px; font-weight: 700; letter-spacing: 1.5px; color: rgba(255,255,255,0.45); border-bottom: 2px solid transparent; }
+  .h-tabs button.on { color: #fff; border-bottom-color: var(--teal); }
+  .h-plane { position: absolute; left: 18px; right: 18px; bottom: max(96px, calc(env(safe-area-inset-bottom) + 86px)); text-align: right; }
+  .h-plane .era { font-size: 12px; font-weight: 700; letter-spacing: 3px; color: var(--teal); }
+  .h-plane .pname { font-size: clamp(54px, 15vw, 96px); font-weight: 900; line-height: 1; letter-spacing: 1px; margin: 4px 0 2px; text-shadow: 0 6px 30px rgba(0,0,0,0.5); }
+  .h-plane .role { font-size: 15px; color: rgba(255,255,255,0.7); }
+  .h-plane .row { display: flex; align-items: center; gap: 12px; margin-top: 14px; justify-content: flex-start; }
+  .h-dots { display: flex; gap: 6px; }
+  .h-dots i { width: 18px; height: 3px; background: rgba(255,255,255,0.2); }
+  .h-dots i.on { background: #fff; }
+  .h-dots i.own { background: rgba(47,211,189,0.6); }
+  .h-dots i.on.own { background: #fff; }
+  .chev { width: 44px; height: 44px; display: grid; place-items: center; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.16); border-radius: 50%; }
+  .chev svg { width: 18px; height: 18px; stroke: #fff; fill: none; stroke-width: 2.2; }
+  .h-act { white-space: nowrap; padding: 11px 22px; border-radius: 999px; font-size: 15px; font-weight: 800; letter-spacing: 0.5px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.25); }
+  .h-act.buy { background: #f1d27a; color: #1d1405; border-color: #f1d27a; }
+  .h-act.ok { color: #04110f; background: var(--teal); border-color: var(--teal); opacity: 1 !important; }
+  .h-act:disabled { opacity: 0.55; }
+  .h-launch { position: absolute; left: 18px; right: 18px; bottom: max(18px, env(safe-area-inset-bottom)); display: flex; gap: 10px; }
+  .h-launch .go { flex: 1; height: 58px; border-radius: 6px; font-size: 19px; font-weight: 900; letter-spacing: 3px; color: #071014;
+    background: linear-gradient(90deg, #2fd3bd, #6fe6ff); box-shadow: 0 10px 40px rgba(47,211,189,0.25); clip-path: polygon(14px 0, 100% 0, calc(100% - 14px) 100%, 0 100%); }
+  .h-launch .go:active { filter: brightness(0.9); }
+  .h-launch .save { padding: 0 16px; border-radius: 6px; font-size: 13px; font-weight: 700; color: #dfe7f2; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.2); }
+  .h-panel { position: absolute; top: max(112px, calc(env(safe-area-inset-top) + 104px)); left: 18px; right: 18px; bottom: max(96px, calc(env(safe-area-inset-bottom) + 86px)); overflow: auto;
+    background: linear-gradient(180deg, rgba(8,12,18,0.82), rgba(8,12,18,0.7)); border: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); padding: 6px 16px; }
+  .up { display: flex; align-items: center; gap: 14px; padding: 14px 0; border-bottom: 1px solid rgba(255,255,255,0.08); }
+  .up:last-child { border-bottom: 0; }
   .up .t { flex: 1; min-width: 0; }
-  .up .t b { font-size: 16px; }
-  .up .t small { display: block; color: var(--dim); font-size: 12px; margin-top: 2px; }
-  .pips { display: flex; gap: 4px; margin-top: 6px; }
-  .pips i { width: 18px; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.14); }
-  .pips i.on { background: var(--teal); }
-  .up button { min-width: 84px; padding: 10px 8px; border-radius: 12px; font-weight: 800; font-size: 14px; background: #ffd25e; color: #2a1600; }
-  .up button:disabled { background: rgba(255, 255, 255, 0.1); color: var(--dim); }
-  .board { margin-top: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 8px 12px; max-height: 52vh; overflow: auto; }
+  .up .t b { font-size: 16px; letter-spacing: 0.5px; }
+  .up .t small { display: block; color: var(--dim); font-size: 12px; margin-top: 3px; }
+  .segs { display: flex; gap: 4px; margin-top: 8px; }
+  .segs i { width: 26px; height: 4px; background: rgba(255,255,255,0.14); }
+  .segs i.on { background: var(--teal); }
+  .up button { min-width: 96px; padding: 10px 12px; font-weight: 800; font-size: 14px; background: #f1d27a; color: #1d1405; border-radius: 999px; display: flex; gap: 6px; align-items: center; justify-content: center; }
+  .up button:disabled { background: rgba(255,255,255,0.08); color: var(--dim); }
   .board table { width: 100%; border-collapse: collapse; font-size: 15px; }
-  .board td { padding: 7px 4px; border-bottom: 1px solid var(--line); }
-  .board tr.me td { color: var(--accent); font-weight: 800; }
-  .launchbar { display: flex; gap: 10px; width: 100%; max-width: 980px; margin: 0 auto; padding-bottom: max(4px, env(safe-area-inset-bottom)); }
-  .launchbar .big { margin-top: 0; flex: 1; }
-  .launchbar .save { flex: 0 0 auto; padding: 0 16px; border-radius: 16px; background: var(--panel2); border: 1px solid var(--line); font-weight: 700; font-size: 14px; color: var(--ink); }
-
+  .board td { padding: 10px 4px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+  .board td:first-child { width: 34px; color: var(--dim); }
+  .board tr.me td { color: var(--teal); font-weight: 800; }
+  @media (orientation: landscape) {
+    .h-plane { top: 96px; bottom: 96px; left: auto; width: min(420px, 42vw); display: flex; flex-direction: column; justify-content: center; }
+    .h-panel { left: auto; width: min(560px, 56vw); }
+    .h-launch { left: auto; width: min(560px, 56vw); }
+  }
+  @media (orientation: landscape) and (max-height: 500px) {
+    .h-tabs { top: 50px; }
+    .h-plane .pname { font-size: 56px; }
+    .h-panel { top: 92px; bottom: 80px; }
+    .h-launch .go { height: 50px; }
+  }
   /* ---------- in the air ---------- */
   #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
   #hud .tl { position: absolute; top: max(10px, env(safe-area-inset-top)); right: 12px; width: min(240px, 46vw); }
@@ -107,14 +124,18 @@
   .hp { height: 10px; border-radius: 6px; background: rgba(255, 255, 255, 0.1); margin-top: 5px; overflow: hidden; }
   .hp > i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #47e08a, #b6f56b); transition: width 0.15s; }
   .hp.low > i { background: linear-gradient(90deg, #ff4d5e, #ff9a3c); }
-  #hud .tr { position: absolute; top: max(10px, env(safe-area-inset-top)); left: 12px; width: min(200px, 40vw); background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 6px 10px; font-size: 13px; backdrop-filter: blur(8px); }
+  /* the board in the air: small, the top three and you, out of the way */
+  #hud .tr { position: absolute; top: max(10px, env(safe-area-inset-top)); left: 12px; width: min(150px, 34vw); background: rgba(8, 12, 18, 0.45); border-radius: 8px; padding: 4px 8px; font-size: 11px; line-height: 1.35; }
   #hud .tr .r { display: flex; gap: 6px; padding: 2px 0; }
   #hud .tr .r .n { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #hud .tr .r.me { color: var(--accent); font-weight: 800; }
   #hud .tr .r .bot { opacity: 0.5; font-size: 11px; }
   #feed { position: absolute; top: max(64px, calc(env(safe-area-inset-top) + 54px)); left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 4px; align-items: center; width: min(420px, 70vw); }
-  #feed div { background: rgba(10, 18, 34, 0.65); padding: 4px 12px; border-radius: 10px; font-size: 13px; animation: fade 4.5s forwards; white-space: nowrap; }
-  #feed div.mine { background: rgba(255, 160, 40, 0.8); color: #241200; font-weight: 800; }
+  #feed div { background: rgba(8, 12, 18, 0.5); padding: 3px 10px; border-radius: 4px; font-size: 12px; animation: fade 4.5s forwards; white-space: nowrap; }
+  #feed div.mine { background: rgba(47, 211, 189, 0.85); color: #04110f; font-weight: 800; }
+  #feed .w { font-size: 10px; letter-spacing: 1px; opacity: 0.7; margin: 0 4px; }
+  #btn-sound.muted svg path:last-child { opacity: 0; }
+  #btn-sound.muted { opacity: 0.5; }
   @keyframes fade { 0%, 80% { opacity: 1; } 100% { opacity: 0; } }
   #cross { position: absolute; left: 50%; top: 46%; width: 34px; height: 34px; margin: -17px; border: 2px solid rgba(255, 255, 255, 0.75); border-radius: 50%; }
   #cross::before, #cross::after { content: ''; position: absolute; background: rgba(255, 255, 255, 0.85); }
@@ -129,7 +150,7 @@
   .tagp .mini i { display: block; height: 100%; background: var(--red); }
   .tagp.off { color: #ff8a95; }
   .arrow { position: absolute; width: 0; height: 0; border-left: 9px solid transparent; border-right: 9px solid transparent; border-bottom: 16px solid var(--red); filter: drop-shadow(0 0 3px #000); }
-  #warn { position: absolute; top: 30%; left: 50%; transform: translateX(-50%); padding: 8px 18px; border-radius: 12px; background: rgba(255, 50, 70, 0.85); font-weight: 900; font-size: 18px; animation: blink 0.5s infinite alternate; }
+  #warn { position: absolute; top: 30%; left: 50%; transform: translateX(-50%); padding: 7px 18px; border-radius: 4px; background: rgba(200, 30, 45, 0.85); font-weight: 800; font-size: 16px; letter-spacing: 1px; animation: blink 0.5s infinite alternate; }
   #edge { position: absolute; top: 38%; left: 50%; transform: translateX(-50%); padding: 6px 14px; border-radius: 12px; background: rgba(255, 176, 46, 0.85); color: #241200; font-weight: 800; }
   @keyframes blink { to { opacity: 0.45; } }
   #vig { position: absolute; inset: 0; box-shadow: inset 0 0 140px 40px rgba(255, 30, 50, 0.65); opacity: 0; transition: opacity 0.35s; }
@@ -138,13 +159,19 @@
   #toast div { font-size: 22px; font-weight: 900; color: #ffd25e; text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7); animation: rise 1.6s forwards; }
   #toast div.lvl { font-size: 32px; color: var(--teal); }
   @keyframes rise { 0% { opacity: 0; transform: translateY(14px) scale(0.9); } 15% { opacity: 1; transform: none; } 75% { opacity: 1; } 100% { opacity: 0; transform: translateY(-30px); } }
-  .gauges { position: absolute; bottom: max(14px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); display: flex; gap: 10px; align-items: center; font-size: 13px; font-weight: 700; background: var(--panel); padding: 6px 12px; border-radius: 14px; border: 1px solid var(--line); }
+  .gauges { position: absolute; bottom: max(14px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); display: flex; gap: 8px; align-items: center; font-size: 13px; font-weight: 700; background: rgba(8, 12, 18, 0.45); padding: 5px 12px; border-radius: 8px; }
+  .gauges .u { font-size: 10px; font-weight: 600; letter-spacing: 1px; opacity: 0.6; }
   .fuel { width: 70px; height: 6px; border-radius: 4px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
   .fuel i { display: block; height: 100%; background: #ff9a3c; }
   .msl { display: flex; gap: 3px; }
   .msl i { width: 7px; height: 16px; border-radius: 3px; background: rgba(255, 255, 255, 0.2); }
   .msl i.on { background: #fff; }
-  #menu-btn { pointer-events: auto; position: absolute; bottom: max(14px, env(safe-area-inset-bottom)); right: 12px; }
+  #menu-btn { pointer-events: auto; position: absolute; bottom: max(14px, env(safe-area-inset-bottom)); right: 12px; background: rgba(8, 12, 18, 0.35); }
+  #corner .icon-btn { background: rgba(8, 12, 18, 0.45); }
+  /* the aim pip: where to put the crosshair to hit the plane in the box */
+  #lead { position: absolute; width: 16px; height: 16px; margin: -8px; border: 2px solid #ffd25e; border-radius: 50%; box-shadow: 0 0 6px rgba(255,210,94,0.8); }
+  #lead::after { content: ''; position: absolute; left: 5px; top: 5px; width: 2px; height: 2px; background: #ffd25e; }
+  #cross.on { border-color: #ff4d5e; box-shadow: 0 0 10px rgba(255,77,94,0.7); }
   /* phones: the stick on the left half, the buttons on the right */
   #touch { position: absolute; inset: 0; pointer-events: none; }
   #touch-pad { position: absolute; top: 25%; bottom: 0; left: 0; width: 50%; pointer-events: auto; touch-action: none; }
@@ -152,9 +179,10 @@
   #look-pad { position: absolute; top: 25%; bottom: 0; right: 0; width: 50%; pointer-events: auto; touch-action: none; }
   #stick { position: absolute; left: 0; top: 0; width: 140px; height: 140px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.35); background: rgba(255, 255, 255, 0.08); pointer-events: none; }
   #stick-knob { position: absolute; left: 40px; top: 40px; width: 60px; height: 60px; border-radius: 50%; background: rgba(255, 255, 255, 0.55); }
-  .tbtn { position: absolute; pointer-events: auto; touch-action: none; border-radius: 50%; display: grid; place-items: center; font-weight: 900; color: #fff; border: 2px solid rgba(255, 255, 255, 0.4); background: rgba(10, 18, 34, 0.45); backdrop-filter: blur(4px); font-size: 14px; }
+  .tbtn { position: absolute; pointer-events: auto; touch-action: none; border-radius: 50%; display: grid; place-items: center; color: #fff; border: 1.5px solid rgba(255, 255, 255, 0.35); background: rgba(8, 12, 18, 0.35); backdrop-filter: blur(4px); }
+  .tbtn svg { width: 46%; height: 46%; stroke: #fff; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
   .tbtn.on { background: rgba(255, 255, 255, 0.35); }
-  #btn-fire { right: max(18px, env(safe-area-inset-right)); bottom: max(80px, calc(env(safe-area-inset-bottom) + 70px)); width: 96px; height: 96px; background: rgba(255, 77, 94, 0.55); font-size: 30px; }
+  #btn-fire { right: max(18px, env(safe-area-inset-right)); bottom: max(80px, calc(env(safe-area-inset-bottom) + 70px)); width: 96px; height: 96px; background: rgba(255, 77, 94, 0.32); border-color: rgba(255, 120, 130, 0.7); }
   #btn-missile { right: max(124px, calc(env(safe-area-inset-right) + 110px)); bottom: max(140px, calc(env(safe-area-inset-bottom) + 130px)); width: 64px; height: 64px; font-size: 24px; }
   #btn-flare { right: max(132px, calc(env(safe-area-inset-right) + 118px)); bottom: max(220px, calc(env(safe-area-inset-bottom) + 210px)); width: 54px; height: 54px; font-size: 22px; }
   .pcard .era { font-size: 12px; color: var(--teal); margin-top: 2px; }
@@ -191,8 +219,8 @@
 <div id="boot"><div><div class="spinner"></div><div id="boot-msg">טוען…</div></div></div>
 
 <div class="corner hidden" id="corner">
-  <button class="round" id="btn-sound" type="button" aria-label="קול">🔊</button>
-  <button class="round" id="btn-settings" type="button" aria-label="הגדרות">⚙️</button>
+  <button class="icon-btn" id="btn-sound" type="button" aria-label="קול"><svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9a4 4 0 010 6M18.5 6.5a7.5 7.5 0 010 11"/></svg></button>
+  <button class="icon-btn" id="btn-settings" type="button" aria-label="הגדרות"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg></button>
 </div>
 
 <!-- the front door: a name, and off you go -->
@@ -222,29 +250,38 @@
   </form>
 </div>
 
-<!-- the hangar: planes, upgrades, the board, and the launch -->
+<!-- the hangar: the plane on its table, and a few words -->
 <div id="screen-hangar" class="screen hidden">
-  <div class="hbar">
-    <div class="who">
-      <div class="name"><span id="h-name"></span> · <span class="lv">רמה <span class="num" id="h-level">1</span></span></div>
-      <div class="xpbar"><i id="h-xp"></i></div>
+  <div class="h-top">
+    <div class="h-who">
+      <div class="name" id="h-name"></div>
+      <div class="lv">רמה <span class="num" id="h-level">1</span></div>
+      <div class="xpline"><i id="h-xp"></i></div>
     </div>
-    <div class="gold">💰 <span class="num" id="h-gold">0</span></div>
-    <button class="round" id="btn-settings2" type="button" aria-label="הגדרות">⚙️</button>
+    <div class="h-gold"><span class="num" id="h-gold">0</span><span class="coin"></span></div>
+    <button class="icon-btn" id="btn-settings2" type="button" aria-label="הגדרות"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg></button>
   </div>
-  <div class="tabs">
-    <button class="on" data-tab="planes" type="button">✈️ מטוסים</button>
-    <button data-tab="ups" type="button">🔧 שדרוגים</button>
-    <button data-tab="board" type="button">🏆 טבלה</button>
+  <div class="h-tabs">
+    <button class="on" data-tab="planes" type="button">מטוסים</button>
+    <button data-tab="ups" type="button">שדרוגים</button>
+    <button data-tab="board" type="button">דירוג</button>
   </div>
-  <div class="hbody">
-    <div class="list" id="tab-planes"></div>
-    <div class="ups hidden" id="tab-ups"></div>
-    <div class="board hidden" id="tab-board"></div>
+  <div class="h-plane" id="tab-planes">
+    <div class="era" id="hp-era"></div>
+    <div class="pname" id="hp-name"></div>
+    <div class="role" id="hp-role"></div>
+    <div class="row">
+      <button class="chev" id="hp-prev" type="button" aria-label="הקודם"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
+      <div class="h-dots" id="hp-dots"></div>
+      <button class="chev" id="hp-next" type="button" aria-label="הבא"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <button class="h-act" id="hp-act" type="button"></button>
+    </div>
   </div>
-  <div class="launchbar">
-    <button class="save hidden" id="btn-save" type="button">💾 שמור<br>התקדמות</button>
-    <button class="big" id="btn-launch" type="button">🚀 שגר!</button>
+  <div class="h-panel ups hidden" id="tab-ups"></div>
+  <div class="h-panel board hidden" id="tab-board"></div>
+  <div class="h-launch">
+    <button class="save hidden" id="btn-save" type="button">שמור התקדמות</button>
+    <button class="go" id="btn-launch" type="button">המראה</button>
   </div>
 </div>
 
@@ -253,6 +290,7 @@
   <div class="tags" id="tags"></div>
   <div id="cross"></div>
   <div id="lock" class="hidden"></div>
+  <div id="lead" class="hidden"></div>
   <div class="tl">
     <div class="hpbox">
       <div class="row"><span id="hud-name"></span><span>רמה <span class="num" id="hud-level">1</span></span></div>
@@ -263,35 +301,35 @@
   <div class="tr" id="score"></div>
   <div id="feed"></div>
   <div id="toast"></div>
-  <div id="warn" class="hidden">⚠️ טיל ננעל עליך! שחרר נורים 🎆</div>
-  <div id="edge" class="hidden">↩ קצה הזירה — חוזרים פנימה</div>
+  <div id="warn" class="hidden">טיל ננעל עליך — נורים!</div>
+  <div id="edge" class="hidden">קצה הזירה — חוזרים פנימה</div>
   <div id="vig"></div>
   <div id="white"></div>
   <div class="gauges">
-    <span class="num" id="hud-speed">0</span><span style="font-weight:400;opacity:.7">קמ"ש</span>
-    <span>🔥</span><div class="fuel"><i id="hud-fuel"></i></div>
-    <span>🚀</span><div class="msl" id="hud-msl"></div>
-    <span>🎆</span><div class="msl flr" id="hud-flr"></div>
+    <span class="num" id="hud-speed">0</span><span class="u">קמ"ש</span>
+    <span class="u">מבער</span><div class="fuel"><i id="hud-fuel"></i></div>
+    <span class="u">טילים</span><div class="msl" id="hud-msl"></div>
+    <span class="u">נורים</span><div class="msl flr" id="hud-flr"></div>
   </div>
   <div class="keys-help" id="keys-help">חצים / WASD — טיסה<br>רווח / עכבר שמאלי — ירי<br>Shift — מבער · E — טיל · Q — נורים<br>גרירה עם עכבר ימני — הסתכלות</div>
   <div id="touch" class="hidden">
     <div id="touch-pad"></div>
     <div id="look-pad"></div>
     <div id="stick" class="hidden"><div id="stick-knob"></div></div>
-    <button class="tbtn" id="btn-fire" type="button">🔫</button>
-    <button class="tbtn" id="btn-missile" type="button">🚀</button>
-    <button class="tbtn" id="btn-flare" type="button">🎆</button>
-    <button class="tbtn" id="btn-boost" type="button">🔥</button>
+    <button class="tbtn" id="btn-fire" type="button" aria-label="ירי"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/><circle cx="12" cy="12" r="1.2" fill="#fff"/></svg></button>
+    <button class="tbtn" id="btn-missile" type="button" aria-label="טיל"><svg viewBox="0 0 24 24"><path d="M5 19l3-3M12 4l6 2 2 6-9 9-4-4 5-13z"/><path d="M7 13l-3 1 2 2M11 17l-1 3-2-2"/></svg></button>
+    <button class="tbtn" id="btn-flare" type="button" aria-label="נורים"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.2" fill="#fff"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8"/></svg></button>
+    <button class="tbtn" id="btn-boost" type="button" aria-label="מבער"><svg viewBox="0 0 24 24"><path d="M5 6l6 6-6 6M12 6l6 6-6 6"/></svg></button>
   </div>
-  <button class="round" id="menu-btn" type="button" aria-label="האנגר">🏠</button>
+  <button class="icon-btn" id="menu-btn" type="button" aria-label="האנגר"><svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7M6 10v10h12V10"/></svg></button>
 </div>
 
 <div id="death" class="screen hidden">
-  <h2 id="death-title">הופלת!</h2>
+  <h2 id="death-title">הופלת</h2>
   <div class="by" id="death-by"></div>
   <div class="count" id="death-count"></div>
   <div class="card" style="margin-top:18px;width:min(300px,100%)">
-    <button class="ghost" id="btn-to-hangar" type="button" style="margin-top:0">🏠 להאנגר — לשדרג ולהחליף מטוס</button>
+    <button class="ghost" id="btn-to-hangar" type="button" style="margin-top:0">להאנגר — לשדרג ולהחליף מטוס</button>
   </div>
 </div>
 
