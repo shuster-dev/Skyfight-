@@ -57,12 +57,13 @@ export const START_PLANE = 'sparrow';
  * gold. `per` is what one tier adds (a fraction of the plane's own number).
  */
 export const UPGRADES = {
-  engine: { id: 'engine', he: 'מנוע', icon: '🔥', desc: 'מהירות ומבער אחורי', per: 0.05 },
-  armor: { id: 'armor', he: 'שריון', icon: '🛡️', desc: 'עוד חיים', per: 0.12 },
-  guns: { id: 'guns', he: 'תותחים', icon: '💥', desc: 'עוד נזק לכל כדור', per: 0.1 },
-  missiles: { id: 'missiles', he: 'טילים', icon: '🚀', desc: 'טעינה מהירה יותר · בדרגה 3 טיל נוסף', per: 0.12 },
+  engine: { id: 'engine', he: 'מנוע', desc: 'מהירות, ומבער שמתמלא מהר יותר', per: 0.05, fill: 0.15 },
+  armor: { id: 'armor', he: 'שריון', desc: 'עוד חיים', per: 0.12 },
+  guns: { id: 'guns', he: 'תותחים', desc: 'קצב אש ונזק לכל כדור', per: 0.06 },
+  missiles: { id: 'missiles', he: 'טילים', desc: 'טעינה מהירה יותר · בדרגה 3 טיל נוסף', per: 0.12 },
+  flares: { id: 'flares', he: 'נורים', desc: 'טעינה מהירה יותר · בדרגה 3 נור נוסף', per: 0.14 },
 };
-export const UPGRADE_ORDER = ['engine', 'armor', 'guns', 'missiles'];
+export const UPGRADE_ORDER = ['engine', 'armor', 'guns', 'missiles', 'flares'];
 export const TIER_MAX = 5;
 export const TIER_COST = [600, 1400, 3000, 6000, 11000];
 export const TIER_LEVEL = [2, 5, 9, 14, 20];
@@ -74,8 +75,10 @@ export function nextTier(pilot, id) {
   return { tier: have + 1, cost: TIER_COST[have], level: TIER_LEVEL[have] };
 }
 
-/** Missile reload, seconds, before upgrades. */
+/** Missile and flare reloads, and the burner's refill, before upgrades. */
 export const MISSILE_RELOAD = 7;
+export const FLARE_RELOAD = 10;
+export const FUEL_FILL = 0.14;
 
 /** A plane as this pilot flies it: the plane's numbers with their upgrades on. */
 export function statsOf(planeId, upgrades = {}) {
@@ -88,10 +91,14 @@ export function statsOf(planeId, upgrades = {}) {
     speed: p.speed * eng,
     boost: p.boost * eng,
     turn: p.turn, climb: p.climb,
-    rate: p.rate, flares: p.flares,
+    // the guns tier: both faster and harder hitting
+    rate: p.rate * (1 + UPGRADES.guns.per * t('guns')),
     dmg: p.dmg * (1 + UPGRADES.guns.per * t('guns')),
     missiles: p.missiles + (t('missiles') >= 3 ? 1 : 0),
     reload: MISSILE_RELOAD * (1 - UPGRADES.missiles.per * t('missiles')),
+    flares: p.flares + (t('flares') >= 3 ? 1 : 0),
+    flareReload: FLARE_RELOAD * (1 - UPGRADES.flares.per * t('flares')),
+    fill: FUEL_FILL * (1 + UPGRADES.engine.fill * t('engine')),
   };
 }
 

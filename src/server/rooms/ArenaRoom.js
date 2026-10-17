@@ -232,7 +232,8 @@ export class ArenaRoom extends Room {
     while (p.fireT >= every) {
       p.fireT -= every;
       const f = forward(p.yaw, p.pitch);
-      const target = pickTarget(p, others, GUN.assistCone, GUN.assistRange);
+      // the aim help is for people: a bot gets a sliver of it
+      const target = pickTarget(p, others, p.bot ? GUN.assistCone * 0.4 : GUN.assistCone, GUN.assistRange);
       const d = aimDir(p, target);
       // from the wing the barrel is on, alternating
       const side = (p.gun++ % 2 ? 1 : -1) * 2.2, rx = Math.cos(p.yaw), rz = -Math.sin(p.yaw);
@@ -257,7 +258,7 @@ export class ArenaRoom extends Room {
   reload(p, dt) {
     if (p.flares < p.stats.flares) {
       p.flareT += dt;
-      if (p.flareT >= FLARE.reload) p.flares++, p.flareT = 0;
+      if (p.flareT >= p.stats.flareReload) p.flares++, p.flareT = 0;
     }
     if (p.ammo >= p.stats.missiles) return void (p.reloadT = 0);
     p.reloadT += dt;
@@ -417,7 +418,7 @@ export class ArenaRoom extends Room {
       const open = PLANE_ORDER.filter((k) => PLANES[k].level <= level);
       const plane = open[Math.floor(Math.random() * open.length)];
       const tier = Math.min(5, Math.floor(level / 5));
-      const p = this.addPlane({ name, plane, level, upgrades: { engine: tier, armor: tier, guns: tier, missiles: tier }, bot: { xp: 0, skill: 0.35 + Math.random() * 0.4, target: '', think: 0, jink: 0, jinkDir: 1, hurtAt: 0 } });
+      const p = this.addPlane({ name, plane, level, upgrades: { engine: tier, armor: tier, guns: tier, missiles: tier, flares: tier }, bot: { xp: 0, skill: 0.35 + Math.random() * 0.4, target: '', think: 0, jink: 0, jinkDir: 1, hurtAt: 0 } });
       this.spawn(p);
     }
   }

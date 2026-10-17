@@ -25,7 +25,7 @@ export class Fx {
     this.sm.setColorAt(0, C.set(0xffffff));
     this.puffs = [];
     // fireballs: glowing, additive
-    this.fb = new InstancedMesh(new IcosahedronGeometry(1, 1), new MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, blending: AdditiveBlending, depthWrite: false }), 120);
+    this.fb = new InstancedMesh(new IcosahedronGeometry(1, 1), new MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, blending: AdditiveBlending, depthWrite: false }), 260);
     this.fb.instanceMatrix.setUsage(DynamicDrawUsage);
     this.fb.frustumCulled = false;
     this.fb.setColorAt(0, C.set(0xffffff));
@@ -79,16 +79,17 @@ export class Fx {
    */
   flares(p, rot) {
     const yaw = rot.y;
-    for (let i = 0; i < 8; i++) {
-      const side = (i % 2 ? 1 : -1) * (0.4 + (i >> 1) * 0.25);
-      const v = new Vector3(Math.cos(yaw) * side * 18 + Math.sin(yaw) * 14, -4 - i * 0.8, -Math.sin(yaw) * side * 18 + Math.cos(yaw) * 14);
-      this.hot.push({ p: p.clone(), v, t: 0, life: 2.2 + i * 0.05, smokeT: 0 });
+    // two fans of six, thrown out to both sides and back: the "angel" shape
+    for (let i = 0; i < 12; i++) {
+      const side = (i % 2 ? 1 : -1) * (0.35 + (i >> 1) * 0.18);
+      const v = new Vector3(Math.cos(yaw) * side * 26 + Math.sin(yaw) * 18, 6 - i * 0.9, -Math.sin(yaw) * side * 26 + Math.cos(yaw) * 18);
+      this.hot.push({ p: p.clone(), v, t: 0, life: 2.6 + (i % 4) * 0.15, smokeT: 0 });
     }
   }
 
   /** The flash at a muzzle. */
   muzzle(p) {
-    if (this.balls.length < 110) this.balls.push({ p: p.clone(), s: 0.7, t: 0, life: 0.045, flare: true });
+    if (this.balls.length < 240) this.balls.push({ p: p.clone(), s: 0.7, t: 0, life: 0.045, flare: true });
   }
 
   /** Sparks where a round hits a plane. */
@@ -125,9 +126,10 @@ export class Fx {
       h.v.y -= 9 * dt;
       h.v.multiplyScalar(1 - dt * 0.6);
       h.p.addScaledVector(h.v, dt);
-      this.balls.push({ p: h.p.clone(), s: 1.4, t: 0, life: 0.06, flare: true });
+      // a white-hot core, flickering
+      this.balls.push({ p: h.p.clone(), s: 2.4 + Math.random() * 1.2, t: 0, life: 0.07, flare: true });
       h.smokeT += dt;
-      if (h.smokeT > 0.05) { h.smokeT = 0; this.puff(h.p, { color: 0xf4f4f4, size: 0.9, grow: 3, life: 1.4, rise: 0.4 }); }
+      if (h.smokeT > 0.035) { h.smokeT = 0; this.puff(h.p, { color: 0xf4f4f4, size: 1.2, grow: 4.5, life: 2.2, rise: 0.3 }); }
     }
     let n = 0;
     for (let i = this.tracers.length - 1; i >= 0; i--) {

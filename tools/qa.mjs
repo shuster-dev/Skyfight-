@@ -18,11 +18,13 @@ ok('the first plane is free and open at level 1', PLANES.sparrow.price === 0 && 
 ok('every plane has a Hebrew name and a description', PLANE_ORDER.every((k) => PLANES[k].he && PLANES[k].desc));
 ok('prices rise with level', PLANE_ORDER.every((k, i) => !i || PLANES[k].price > PLANES[PLANE_ORDER[i - 1]].price));
 {
-  const base = statsOf('sparrow'), up = statsOf('sparrow', { engine: 5, armor: 5, guns: 5, missiles: 5 });
+  const base = statsOf('sparrow'), up = statsOf('sparrow', { engine: 5, armor: 5, guns: 5, missiles: 5, flares: 5 });
   ok('no upgrades: the plane as it is', base.hp === 100 && base.speed === 60 && base.missiles === 1);
   ok('engine 5: a quarter faster', near(up.speed, 60 * 1.25) && near(up.boost, 92 * 1.25));
   ok('armor 5: 60% more health', up.hp === 160);
-  ok('guns 5: half again the damage', near(up.dmg, base.dmg * 1.5));
+  ok('guns 5: 30% more damage and 30% faster fire', near(up.dmg, base.dmg * 1.3) && near(up.rate, base.rate * 1.3));
+  ok('engine 5: the burner refills faster', up.fill > base.fill * 1.7);
+  ok('flares 3+: one more flare, and faster reload', up.flares === base.flares + 1 && up.flareReload < base.flareReload * 0.4);
   ok('missiles 3+: one more missile, and faster reload', up.missiles === 2 && up.reload < base.reload);
   ok('nonsense tiers are clamped', statsOf('sparrow', { engine: 99 }).speed === up.speed && statsOf('sparrow', { engine: -4 }).speed === 60);
   ok('an unknown plane flies as the first', statsOf('nope').plane === 'sparrow');
@@ -163,7 +165,7 @@ console.log('\nthe hangar');
   const lv = payKill(z, { level: 5, bot: false });
   ok('a level up pays a gold bonus on top', lv.up && lv.bonus === 200 && z.gold === lv.gold + 200, lv);
   const broken = normalize({ id: 'x', xp: -5, plane: 'jet', planes: ['jet'], upgrades: { engine: 77 } });
-  ok('a broken record is mended', broken.xp === 0 && broken.plane === 'sparrow' && broken.upgrades.engine === 5 && broken.upgrades.armor === 0);
+  ok('a broken record is mended', broken.xp === 0 && broken.plane === 'sparrow' && broken.upgrades.engine === 5 && broken.upgrades.armor === 0 && broken.upgrades.flares === 0);
   ok('the view has no id', !('id' in view(p)));
 }
 

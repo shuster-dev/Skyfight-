@@ -9,7 +9,7 @@ export function newPilot(id) {
     xp: 0, level: 1, gold: 0,
     kills: 0, deaths: 0, best: 0,
     plane: START_PLANE, planes: [START_PLANE],
-    upgrades: { engine: 0, armor: 0, guns: 0, missiles: 0 },
+    upgrades: { engine: 0, armor: 0, guns: 0, missiles: 0, flares: 0 },
   };
 }
 

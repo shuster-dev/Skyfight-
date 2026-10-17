@@ -9,9 +9,9 @@ export const GUN = {
   /** Seconds a round flies before it is spent: the guns' reach. */
   life: 1.0,
   /** How fat a plane is to a round. Generous: lag eats the rest. */
-  hitR: 6.5,
+  hitR: 7.5,
   /** Aim help: a target this close to the nose (radians) and in reach is led. */
-  assistCone: 0.08,
+  assistCone: 0.13,
   assistRange: 520,
 };
 
@@ -26,9 +26,9 @@ export const MISSILE = {
 /**
  * Flares: hot decoys that pull a missile off its target. Each one fired
  * throws every missile chasing you with this chance; one comes back every
- * `reload` seconds.
+ * so many seconds (the plane's flareReload, shortened by upgrades).
  */
-export const FLARE = { decoy: 0.85, reload: 10 };
+export const FLARE = { decoy: 0.85 };
 
 /** Seconds of no damage before the airframe starts patching itself. */
 export const REPAIR = { after: 6, perSec: 5 };
