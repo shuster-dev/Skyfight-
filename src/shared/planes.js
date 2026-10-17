@@ -15,37 +15,38 @@
  *   turn    yaw rate, rad/s      climb   pitch rate, rad/s
  *   rate    rounds per second    dmg     per round
  *   missiles  carried at once    flares  decoys carried
+ *   reload  seconds a missile    fill    burner refill a second
  */
 export const PLANES = {
   sparrow: {
     id: 'sparrow', he: 'סער', role: 'מאוזן', era: '1944', kind: 'מטוס בוכנה', level: 1, price: 0,
-    desc: 'לוחם הבוכנה האחרון של מלחמת העולם השנייה. סולח על טעויות — מושלם לטיסה הראשונה.',
+    desc: 'לוחם הבוכנה האחרון של מלחמת העולם השנייה. כבד ויורה לאט — אבל כל שדרוג מקרב אותו לגדולים.',
     guns: 'שישה מקלעים 12.7 מ"מ', missile: 'רקטות',
-    hp: 100, speed: 60, boost: 92, turn: 1.5, climb: 1.3, rate: 12, dmg: 3.2, missiles: 1, flares: 2,
+    hp: 100, speed: 56, boost: 86, turn: 1.25, climb: 1.1, rate: 8, dmg: 3.2, missiles: 1, flares: 2, reload: 10, fill: 0.12,
   },
   hornet: {
     id: 'hornet', he: 'ברק', role: 'מהיר', era: '1953', kind: 'סילון כנף משוכה', level: 3, price: 1500,
     desc: 'דור הסילונים הראשון: כנף משוכה ומתכת חשופה. פוגע ובורח לפני שמספיקים להסתובב.',
     guns: 'שישה מקלעים 12.7 מ"מ', missile: 'טיל מונחה חום',
-    hp: 85, speed: 70, boost: 112, turn: 1.6, climb: 1.4, rate: 13, dmg: 3.5, missiles: 1, flares: 2,
+    hp: 85, speed: 70, boost: 112, turn: 1.6, climb: 1.4, rate: 13, dmg: 3.5, missiles: 1, flares: 2, reload: 9, fill: 0.15,
   },
   bulldog: {
     id: 'bulldog', he: 'רעם', role: 'משוריין', era: '1976', kind: 'לוחם עליונות אווירית', level: 6, price: 4000,
     desc: 'דו־מנועי כבד עם שני זנבות ותותח רב־קני. איטי בפניות — אבל כמעט לא נופל.',
     guns: 'תותח רב־קני 20 מ"מ', missile: 'טיל מונחה חום',
-    hp: 165, speed: 54, boost: 84, turn: 1.25, climb: 1.1, rate: 16, dmg: 2.8, missiles: 1, flares: 3,
+    hp: 165, speed: 54, boost: 84, turn: 1.25, climb: 1.1, rate: 16, dmg: 2.8, missiles: 1, flares: 3, reload: 8, fill: 0.13,
   },
   viper: {
     id: 'viper', he: 'כפיר', role: 'זריז', era: '1975', kind: 'כנף משולשת', level: 10, price: 9000,
     desc: 'כנף משולשת עם כנפונים. מסתובב בתוך העיגול של כל אחד אחר, ושני טילים.',
     guns: 'שני תותחים 30 מ"מ', missile: 'טיל מונחה חום',
-    hp: 110, speed: 66, boost: 106, turn: 1.95, climb: 1.65, rate: 8, dmg: 6.75, missiles: 2, flares: 2,
+    hp: 110, speed: 66, boost: 106, turn: 1.95, climb: 1.65, rate: 8, dmg: 6.75, missiles: 2, flares: 2, reload: 7.5, fill: 0.14,
   },
   phantom: {
     id: 'phantom', he: 'אדיר', role: 'עליון', era: '2016', kind: 'חמקן', level: 16, price: 20000,
     desc: 'מטוס חמקן מהדור החמישי. הכל בו טוב יותר, ושלושה טילים.',
     guns: 'תותח 25 מ"מ', missile: 'טיל מונחה מכ"ם',
-    hp: 145, speed: 72, boost: 118, turn: 1.8, climb: 1.55, rate: 11, dmg: 5.45, missiles: 3, flares: 3,
+    hp: 145, speed: 72, boost: 118, turn: 1.8, climb: 1.55, rate: 11, dmg: 5.45, missiles: 3, flares: 3, reload: 6.5, fill: 0.16,
   },
 };
 /**
@@ -67,53 +68,72 @@ export const PLANE_ORDER = ['sparrow', 'hornet', 'bulldog', 'viper', 'phantom'];
 export const START_PLANE = 'sparrow';
 
 /**
- * Upgrades: the pilot's, not the plane's — what you bought goes with you to
- * every plane you fly. Each has five tiers; a tier opens at a level and costs
- * gold. `per` is what one tier adds (a fraction of the plane's own number).
+ * Upgrades: each plane its own. What you put into one plane stays with that
+ * plane. Five tiers each; a tier opens at a level and costs gold (a better
+ * plane's tiers cost more).
+ *
+ * Every upgrade moves a plane's numbers toward a mark, a fifth of the way a
+ * tier: the engine and the turbo toward the best plane in the game — a
+ * starter with the engine at five flies like the best — and the guns, the
+ * armour, the missiles and the flares toward the third best, so a plane
+ * that is born better stays better there. A plane already at the mark still
+ * gains (`least`, at tier five).
  */
 export const UPGRADES = {
-  engine: { id: 'engine', he: 'מנוע', desc: 'מהירות, ומבער שמתמלא מהר יותר', per: 0.05, fill: 0.15 },
-  armor: { id: 'armor', he: 'שריון', desc: 'עוד חיים', per: 0.12 },
-  guns: { id: 'guns', he: 'תותחים', desc: 'קצב אש ונזק לכל כדור', per: 0.06 },
-  missiles: { id: 'missiles', he: 'טילים', desc: 'טעינה מהירה יותר · בדרגה 3 טיל נוסף', per: 0.12 },
-  flares: { id: 'flares', he: 'נורים', desc: 'טעינה מהירה יותר · בדרגה 3 נור נוסף', per: 0.14 },
+  engine: { id: 'engine', he: 'תנועה', desc: 'מהירות, פניות וטיפוס', mark: 'best', least: 0.08 },
+  turbo: { id: 'turbo', he: 'טורבו', desc: 'מבער מהיר יותר שמתמלא מהר יותר', mark: 'best', least: 0.1 },
+  guns: { id: 'guns', he: 'ירי', desc: 'קצב אש ונזק', mark: 'third', least: 0.15 },
+  armor: { id: 'armor', he: 'מיגון', desc: 'עוד חיים', mark: 'third', least: 0.25 },
+  missiles: { id: 'missiles', he: 'טילים', desc: 'טעינה מהירה יותר · בדרגה 3 טיל נוסף', mark: 'third', least: 0.2 },
+  flares: { id: 'flares', he: 'נורים', desc: 'טעינה מהירה יותר · בדרגה 3 נור נוסף', mark: 'third', least: 0.3 },
 };
-export const UPGRADE_ORDER = ['engine', 'armor', 'guns', 'missiles', 'flares'];
+export const UPGRADE_ORDER = ['engine', 'turbo', 'guns', 'armor', 'missiles', 'flares'];
 export const TIER_MAX = 5;
 export const TIER_COST = [600, 1400, 3000, 6000, 11000];
 export const TIER_LEVEL = [2, 5, 9, 14, 20];
+/** A tier of a better plane costs more: the starter's are cheap. */
+export const PLANE_COST = { sparrow: 0.5, hornet: 0.8, bulldog: 1, viper: 1.3, phantom: 1.6 };
 
-/** What the next tier of an upgrade asks for, or null at the top. */
-export function nextTier(pilot, id) {
-  const have = pilot.upgrades?.[id] || 0;
+/** The tiers a pilot has put into a plane. */
+export const tiersOf = (pilot, plane) => pilot?.upgrades?.[plane] || {};
+
+/** What the next tier of an upgrade on a plane asks for, or null at the top. */
+export function nextTier(pilot, id, plane = pilot?.plane) {
+  const have = tiersOf(pilot, plane)[id] || 0;
   if (have >= TIER_MAX) return null;
-  return { tier: have + 1, cost: TIER_COST[have], level: TIER_LEVEL[have] };
+  return { tier: have + 1, cost: Math.round(TIER_COST[have] * (PLANE_COST[plane] || 1) / 50) * 50, level: TIER_LEVEL[have] };
 }
 
-/** Missile and flare reloads, and the burner's refill, before upgrades. */
-export const MISSILE_RELOAD = 7;
+/** The flare reload before upgrades. */
 export const FLARE_RELOAD = 10;
-export const FUEL_FILL = 0.14;
 
-/** A plane as this pilot flies it: the plane's numbers with their upgrades on. */
-export function statsOf(planeId, upgrades = {}) {
+// the marks: the best plane (the last), and the third best
+const MARK = { best: PLANE_ORDER[PLANE_ORDER.length - 1], third: PLANE_ORDER[PLANE_ORDER.length - 3] };
+/** From `base` toward `mark` (at least `least` better), tier t of five. More is better unless `less`. */
+function toward(base, mark, least, t, less = false) {
+  const end = less ? Math.min(mark, base * (1 - least)) : Math.max(mark, base * (1 + least));
+  return base + (end - base) * (t / TIER_MAX);
+}
+
+/** A plane as this pilot flies it: the plane's numbers with its upgrades on. */
+export function statsOf(planeId, tiers = {}) {
   const p = PLANES[planeId] || PLANES[START_PLANE];
-  const t = (k) => Math.max(0, Math.min(TIER_MAX, upgrades[k] | 0));
-  const eng = 1 + UPGRADES.engine.per * t('engine');
+  const t = (k) => Math.max(0, Math.min(TIER_MAX, tiers[k] | 0));
+  const U = UPGRADES, m = (k) => PLANES[MARK[U[k].mark]];
+  const go = (k, field, less) => toward(p[field], m(k)[field], U[k].least, t(k), less);
+  // the guns: rounds a second and damage a round rise together, by what it
+  // takes to bring the damage a second to the mark
+  const dps = p.rate * p.dmg, gunK = Math.sqrt(toward(dps, m('guns').rate * m('guns').dmg, U.guns.least, t('guns')) / dps);
   return {
     plane: p.id,
-    hp: Math.round(p.hp * (1 + UPGRADES.armor.per * t('armor'))),
-    speed: p.speed * eng,
-    boost: p.boost * eng,
-    turn: p.turn, climb: p.climb,
-    // the guns tier: both faster and harder hitting
-    rate: p.rate * (1 + UPGRADES.guns.per * t('guns')),
-    dmg: p.dmg * (1 + UPGRADES.guns.per * t('guns')),
+    hp: Math.round(go('armor', 'hp')),
+    speed: go('engine', 'speed'), turn: go('engine', 'turn'), climb: go('engine', 'climb'),
+    boost: go('turbo', 'boost'), fill: go('turbo', 'fill'),
+    rate: p.rate * gunK, dmg: p.dmg * gunK,
     missiles: p.missiles + (t('missiles') >= 3 ? 1 : 0),
-    reload: MISSILE_RELOAD * (1 - UPGRADES.missiles.per * t('missiles')),
+    reload: go('missiles', 'reload', true),
     flares: p.flares + (t('flares') >= 3 ? 1 : 0),
-    flareReload: FLARE_RELOAD * (1 - UPGRADES.flares.per * t('flares')),
-    fill: FUEL_FILL * (1 + UPGRADES.engine.fill * t('engine')),
+    flareReload: FLARE_RELOAD * (1 - U.flares.least * t('flares') / TIER_MAX),
   };
 }
 

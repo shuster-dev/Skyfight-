@@ -63,7 +63,7 @@ async function run(label, viewport, mobile) {
   await page.click('[data-tab="ups"]');
   await wait(400);
   await snap('3-upgrades');
-  ok('five upgrades, flares among them', (await page.$$('.up')).length === 5 && /נורים/.test(await page.textContent('#tab-ups')));
+  ok('six upgrades for the plane on the table, turbo and flares among them', (await page.$$('.up')).length === 6 && /טורבו/.test(await page.textContent('#tab-ups')) && /נורים/.test(await page.textContent('#tab-ups')));
   await page.click('[data-tab="planes"]');
   ok('a guest is offered to save', await page.isVisible('#btn-save'));
   await page.click('#btn-launch');
@@ -125,7 +125,7 @@ async function run(label, viewport, mobile) {
       const key = (t) => dispatchEvent(new KeyboardEvent(t, { code: 'ArrowDown', key: 'ArrowDown' }));
       window.__dive = setInterval(() => key((window.__sky.me?.body?.pitch ?? 0) > -1.0 ? 'keydown' : 'keyup'), 20);
     });
-    const died = await page.waitForSelector('#death:not(.hidden)', { timeout: 120000 }).then(() => true, () => false);
+    const died = await page.waitForSelector('#death:not(.hidden)', { timeout: 180000 }).then(() => true, () => false);
     await page.evaluate(() => { clearInterval(window.__dive); dispatchEvent(new KeyboardEvent('keyup', { code: 'ArrowDown', key: 'ArrowDown' })); });
     ok('diving into the sea brings the death screen', died);
     await wait(600);

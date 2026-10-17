@@ -18,7 +18,8 @@ export function forward(yaw, pitch, out = { x: 0, y: 0, z: 0 }) {
 
 export const PITCH_MAX = 1.25;
 /** Afterburner tank: drains while lit, refills while not. */
-export const BOOST = { drain: 0.32, fill: 0.14, min: 0.08 };
+/** The burner: run dry (`min`), it lights again only once the tank is back to `relight`. */
+export const BOOST = { drain: 0.32, fill: 0.14, min: 0.08, relight: 0.25 };
 
 /** A plane's flying state, fresh. */
 export function newBody(at, stats) {
@@ -51,7 +52,8 @@ export function fly(b, input, stats, dt) {
   }
 
   // the afterburner
-  b.boosting = !!input.boost && b.fuel > BOOST.min;
+  if (b.fuel <= BOOST.min) b.dry = true; else if (b.fuel >= BOOST.relight) b.dry = false;
+  b.boosting = !!input.boost && !b.dry;
   b.fuel = clamp(b.fuel + (b.boosting ? -BOOST.drain : stats.fill || BOOST.fill) * dt, 0, 1);
   // a climb costs speed and a dive gives it; the burner wins over both
   const want = (b.boosting ? stats.boost : stats.speed) - Math.sin(b.pitch) * stats.speed * 0.25;
@@ -163,7 +165,8 @@ export function flyQ(b, input, stats, dt) {
   b.yaw = Math.atan2(-f.x, -f.z);
   b.pitch = Math.asin(clamp(f.y));
 
-  b.boosting = !!input.boost && b.fuel > BOOST.min;
+  if (b.fuel <= BOOST.min) b.dry = true; else if (b.fuel >= BOOST.relight) b.dry = false;
+  b.boosting = !!input.boost && !b.dry;
   b.fuel = clamp(b.fuel + (b.boosting ? -BOOST.drain : stats.fill || BOOST.fill) * dt, 0, 1);
   const want = (b.boosting ? stats.boost : stats.speed) - f.y * stats.speed * 0.25;
   b.speed += (want - b.speed) * Math.min(1, dt * (b.boosting ? 2.2 : 1.2));

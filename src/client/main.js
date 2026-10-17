@@ -3,14 +3,14 @@ import { Euler, Vector3, MathUtils, Quaternion } from 'three';
 import { Net } from './net.js';
 import { Controls } from './controls.js';
 import { sound } from './audio.js';
-import { makeRenderer, makeWorld, inCloud } from './gfx/scene.js';
+import { makeRenderer, makeWorld, inCloud, makePads } from './gfx/scene.js';
 import { buildPlane, buildBomber, animatePlane } from './gfx/planes.js';
 import { Fx } from './gfx/fx.js';
 import { Hangar } from './gfx/hangar.js';
-import { PAINTS, PAINT_ORDER, PLANES, PLANE_ORDER, UPGRADES, UPGRADE_ORDER, TIER_MAX, nextTier, statsOf, levelProgress, planeOpen, planeOwned, cleanCallsign, displayName } from '../shared/planes.js';
-import { ARENA, BRIDGE, groundAt, underBridge } from '../shared/arena.js';
+import { PAINTS, PAINT_ORDER, PLANES, PLANE_ORDER, UPGRADES, UPGRADE_ORDER, TIER_MAX, nextTier, statsOf, tiersOf, levelProgress, planeOpen, planeOwned, cleanCallsign, displayName } from '../shared/planes.js';
+import { ARENA, BRIDGE, HEAL, HEALS, groundAt, underBridge } from '../shared/arena.js';
 import { flyQ, forward, newBodyQ, drawnQ, Q as QQ } from '../shared/flight.js';
-import { FLARE, GUN, MISSILE, RESPAWN, aimDir, offNose, pickTarget } from '../shared/combat.js';
+import { DODGE, FLARE, GUN, MISSILE, RESPAWN, aimDir, offNose, pickTarget } from '../shared/combat.js';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -31,6 +31,7 @@ const controls = new Controls();
 const renderer = makeRenderer($('#game'));
 const world = makeWorld(renderer);
 const { scene, camera } = world;
+const pads = makePads(scene, HEALS, HEAL);
 const fx = new Fx(scene);
 const hangar = new Hangar(renderer);
 
@@ -331,26 +332,47 @@ $('#hp-act').addEventListener('click', async (e) => {
   } catch (x) { toast(err(x)); }
 });
 
+/** What an upgrade does, in the numbers a pilot reads: now, and after the next tier. */
+const KMH = (v) => Math.round(v * 3.6 * 4);
+const UP_SHOW = {
+  engine: (st) => `${KMH(st.speed)} קמ"ש · פנייה ${st.turn.toFixed(2)}`,
+  turbo: (st) => `${KMH(st.boost)} קמ"ש במבער`,
+  guns: (st) => `${Math.round(st.rate * st.dmg)} נזק לשנייה`,
+  armor: (st) => `${st.hp} חיים`,
+  missiles: (st) => `${st.missiles} ${st.missiles > 1 ? 'טילים' : 'טיל'} · טעינה ${st.reload.toFixed(1)} ש׳`,
+  flares: (st) => `${st.flares} נורים · טעינה ${st.flareReload.toFixed(1)} ש׳`,
+};
+
+/** The upgrades of the plane on the table: each plane is upgraded on its own. */
 function renderUps() {
-  const p = S.pilot;
-  $('#tab-ups').innerHTML = UPGRADE_ORDER.map((k) => {
-    const u = UPGRADES[k], have = p.upgrades[k] || 0, n = nextTier(p, k);
+  const p = S.pilot, k0 = viewing || p.plane, d = PLANES[k0];
+  const head = `<div class="up-head"><b>${d.he}</b><small>השדרוגים של המטוס הזה בלבד</small></div>`;
+  if (!planeOwned(p, k0)) {
+    $('#tab-ups').innerHTML = head + `<div class="note">קנו את ה${d.he} כדי לשדרג אותו — או בחרו מטוס שלכם בלשונית המטוסים.</div>`;
+    return;
+  }
+  const tiers = tiersOf(p, k0), now = statsOf(k0, tiers);
+  $('#tab-ups').innerHTML = head + UPGRADE_ORDER.map((k) => {
+    const u = UPGRADES[k], have = tiers[k] || 0, n = nextTier(p, k, k0);
     const segs = Array.from({ length: TIER_MAX }, (_, i) => `<i class="${i < have ? 'on' : ''}"></i>`).join('');
+    const after = n ? statsOf(k0, { ...tiers, [k]: n.tier }) : null;
+    const nums = `<small class="nums">${UP_SHOW[k](now)}${after ? ` <em>← ${UP_SHOW[k](after)}</em>` : ''}</small>`;
     const btn = !n ? '<button disabled>מלא</button>'
       : p.level < n.level ? `<button disabled>רמה ${n.level}</button>`
         : `<button data-up="${k}" ${p.gold < n.cost ? 'disabled' : ''}><span class="num">${fmt(n.cost)}</span><span class="coin"></span></button>`;
-    return `<div class="up"><div class="t"><b>${u.he}</b><small>${u.desc}</small><div class="segs">${segs}</div></div>${btn}</div>`;
-  }).join('') + '<div class="note" style="text-align:right">השדרוגים עוברים איתך לכל מטוס. זהב מרוויחים על כל הפלה.</div>';
+    return `<div class="up"><div class="t"><b>${u.he}</b><small>${u.desc}</small>${nums}<div class="segs">${segs}</div></div>${btn}</div>`;
+  }).join('') + '<div class="note" style="text-align:right">תנועה וטורבו מביאים בדרגה 5 עד המטוס הטוב במשחק. ירי, מיגון, טילים ונורים — עד המטוס השלישי בחוזקו. זהב מרוויחים על כל הפלה.</div>';
 }
 
 $('#tab-ups').addEventListener('click', async (e) => {
   const k = e.target.closest('[data-up]')?.dataset.up;
   if (!k) return;
   try {
-    const r = await net.api('/api/pilot/upgrade', { upgrade: k });
+    const plane = viewing || S.pilot.plane;
+    const r = await net.api('/api/pilot/upgrade', { upgrade: k, plane });
     S.pilot = r.pilot;
     sound.coin();
-    toast(`${UPGRADES[k].he} · דרגה ${r.tier}`);
+    toast(`${PLANES[plane].he} · ${UPGRADES[k].he} · דרגה ${r.tier}`);
     renderHangar();
   } catch (x) { toast(err(x)); }
 });
@@ -458,6 +480,7 @@ function hook(room) {
     S.myKey = m.key;
     S.teams = m.mode === 'teams'; S.myTeam = m.team || ''; S.roomId = m.room || room.roomId;
     paintTeams(m.score);
+    (m.pads || []).forEach((t, i) => pads.spend(i, t));
     S.pilot = m.pilot;
     for (const r of m.roster) S.roster.set(r.key, r);
     const mesh = buildPlane(S.pilot.plane, S.pilot.paint);
@@ -513,7 +536,18 @@ function hook(room) {
     const p = m.k === S.myKey ? S.me?.mesh : S.others.get(m.k)?.mesh;
     if (p) fx.flares(p.position, p.rotation), sound.flare();
   });
+  // a repair pad: one is spent (by anyone), and it was me who flew through
+  room.onMessage('pad', (m) => pads.spend(m.i, m.s));
+  room.onMessage('healed', (m) => {
+    if (S.me) S.me.hp = m.hp;
+    toast(`תוקן · +${m.gain} חיים`, 'lvl');
+    sound.coin();
+    $('#heal-flash').classList.remove('on'); void $('#heal-flash').offsetWidth; $('#heal-flash').classList.add('on');
+  });
   room.onMessage('incoming', () => { S.warnUntil = performance.now() + 3500; sound.warn(); });
+  // out-flown: it goes on past, blind
+  room.onMessage('dodged', () => { S.warnUntil = 0; toast('התחמקת מהטיל!', 'lvl'); sound.whoosh(); });
+  room.onMessage('missed', () => toast('הטיל שלך הוטעה בתמרון'));
   // two planes met: sparks, a burst, and a jolt if one of them was us
   room.onMessage('ram', (m) => {
     const p = new Vector3(m.at[0] / 10, m.at[1] / 10, m.at[2] / 10);
@@ -581,6 +615,7 @@ function onSnapshot(s) {
   }
   for (const [k, o] of S.others) if (!seen.has(k)) { scene.remove(o.mesh); o.tag?.remove(); S.others.delete(k); }
   S.missiles = s.m.map(([id, x, y, z, yaw, pitch, target]) => ({ id, x: x / 10, y: y / 10, z: z / 10, yaw: yaw / 1000, pitch: pitch / 1000, target }));
+  S.mAt = performance.now();
   bossSnap(s.b, now);
   if (S.missiles.some((m) => m.target === S.myKey)) S.warnUntil = Math.max(S.warnUntil, now + 300);
 }
@@ -676,7 +711,7 @@ async function leaveSky(why) {
   S.others.clear();
   clearBoss();
   fx.syncMissiles([], 0);
-  $('#tags').innerHTML = '';
+  for (const t of tagEls) t.d.style.display = 'none';
   // the pilot as the server has them now (the pay is in)
   try { took(await net.api('/api/me')); } catch {}
   showHangar();
@@ -702,9 +737,10 @@ function frame(t) {
   }
   if (S.mode === 'air') air(dt, time), watchFrames(t);
   else if (S.mode !== 'look') showcase(time, dt, wide); // 'look': a tool holds the camera
-  fx.syncMissiles(S.missiles, dt);
+  fx.syncMissiles(S.missiles, dt, Math.min(0.3, (performance.now() - (S.mAt || 0)) / 1000));
   fx.tick(dt, camera);
   world.tick(time, dt);
+  pads.tick(dt, time);
   renderer.render(scene, camera);
 }
 
@@ -889,6 +925,46 @@ function hitFrom(key) {
 // ---- the head-up display ------------------------------------------------------
 
 const P = new Vector3();
+/**
+ * A missile on your tail: a red ring round it on screen (an arrow at the
+ * edge when it is behind), how far it is, a beep that quickens as it
+ * closes — and, when it is close enough that a hard break could shake it,
+ * the word to break.
+ */
+function threat(dt) {
+  const me = S.me, el = $('#threat');
+  const b = me?.alive && me.body;
+  let m = null, d = Infinity;
+  if (b) for (const x of S.missiles) {
+    if (x.target !== S.myKey) continue;
+    const dd = Math.hypot(x.x - b.x, x.y - b.y, x.z - b.z);
+    if (dd < d) d = dd, m = x;
+  }
+  if (!m) { show(el, false); $('#warn').textContent = 'טיל ננעל עליך — נורים!'; S.beepT = 0; return; }
+  show(el);
+  const inWindow = d <= DODGE.far && d >= DODGE.near;
+  $('#warn').textContent = inWindow ? 'שבור עכשיו! פנייה חדה' : `טיל ${Math.round(d)}m — נורים או שבור ברגע האחרון`;
+  $('#warn').classList.toggle('now', inWindow);
+  $('#threat-d').textContent = `${Math.round(d)}m`;
+  // on screen: a ring on it. Behind: an arrow on the edge, pointing the way
+  P.set(m.x, m.y, m.z).project(camera);
+  const W = innerWidth, H = innerHeight, behind = P.z > 1;
+  let sx = (P.x * 0.5 + 0.5) * W, sy = (-P.y * 0.5 + 0.5) * H;
+  const onScreen = !behind && sx > 30 && sx < W - 30 && sy > 30 && sy < H - 30;
+  if (!onScreen) {
+    let dx = sx - W / 2, dy = sy - H / 2;
+    if (behind) dx = -dx, dy = -dy;
+    const k = Math.min((W / 2 - 44) / Math.abs(dx || 1e-6), (H / 2 - 44) / Math.abs(dy || 1e-6));
+    sx = W / 2 + dx * k; sy = H / 2 + dy * k;
+    el.style.setProperty('--a', `${Math.atan2(dy, dx)}rad`);
+  }
+  el.classList.toggle('edge', !onScreen);
+  el.style.left = `${sx}px`; el.style.top = `${sy}px`;
+  // the beep: slow far off, a buzz up close
+  S.beepT = (S.beepT || 0) - dt;
+  if (S.beepT <= 0) { sound.beep(inWindow); S.beepT = Math.max(0.07, Math.min(0.8, d / 700)); }
+}
+
 function hud(dt, now) {
   const me = S.me;
   // the crosshair kicks when a round lands
@@ -896,12 +972,14 @@ function hud(dt, now) {
   $('#cross').classList.toggle('hit', S.hitFlash > 0);
   show('#cross', !!me?.alive);
   show('#warn', now < S.warnUntil && !!me?.alive);
+  threat(dt);
+  tags();
   if (me?.body) {
     const b = me.body;
     show('#edge', Math.hypot(b.x, b.z) > ARENA.radius - 30 && me.alive);
     // through a cloud the world goes white
     const c = inCloud(world.clouds, b.x, b.y, b.z);
-    $('#white').style.opacity = me.alive ? Math.min(0.85, c * 1.6) : 0;
+    $('#white').style.opacity = me.alive ? Math.min(0.5, c * 1.2) : 0;
     // the lock: what a missile would go after now
     const t = me.alive ? pickTarget({ ...b, alive: true }, aimables().filter((o) => o.alive && !o.shield), MISSILE.lockCone, MISSILE.lockRange) : null;
     // shown only with a missile on the rail, gliding rather than jumping
@@ -944,7 +1022,7 @@ function hud(dt, now) {
   }
   $('#hud-msl').innerHTML = Array.from({ length: me.stats.missiles }, (_, i) => `<i class="${i < me.ammo ? 'on' : ''}"></i>`).join('');
   $('#hud-flr').innerHTML = Array.from({ length: me.stats.flares }, (_, i) => `<i class="${i < (me.flares ?? 0) ? 'on' : ''}"></i>`).join('');
-  tags();
+  radar();
 }
 
 /** Screen position of a world point; false when behind the camera. */
@@ -962,31 +1040,50 @@ function project(v) {
  * health) only on the two nearest — the radar has the rest. No arrows at the
  * edges any more: the radar says where everyone is.
  */
+/**
+ * Over each plane in sight, a dot — and over the nearest two, the name and
+ * how far. Every frame, where the plane is drawn (not where the room last
+ * said it was), on elements kept from frame to frame.
+ */
+const tagEls = [];
+function tagEl(i) {
+  if (!tagEls[i]) { const d = document.createElement('div'); $('#tags').appendChild(d); tagEls[i] = { d, cls: '', html: '' }; }
+  return tagEls[i];
+}
+function setTag(i, cls, html, x, y) {
+  const t = tagEl(i);
+  if (t.cls !== cls) t.d.className = t.cls = cls;
+  if (t.html !== html) t.d.innerHTML = t.html = html;
+  t.d.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0)${cls.startsWith('tagp') ? ' translate(-50%, -100%)' : ''}`;
+  t.d.style.display = '';
+}
 function tags() {
-  const box = $('#tags');
-  const me = S.me?.body;
-  if (!me) return;
-  const list = [...S.others.values()].filter((o) => o.alive).map((o) => ({ o, d: Math.hypot(o.x - me.x, o.y - me.y, o.z - me.z) })).sort((a, b) => a.d - b.d);
-  let html = '', named = 0;
-  for (const { o, d } of list) {
-    if (d > 1600) break;
-    const r = S.roster.get(o.key);
-    P.set(o.x, o.y + 3.5, o.z);
-    if (P.clone().project(camera).z > 1 || !project(P)) continue;
-    const side = S.teams ? (r?.team === S.myTeam ? ' mate' : ' foe') : '';
-    if (named < 2 && d < 900) {
-      named++;
-      const bar = o.hp < 100 ? `<div class="mini"><i style="width:${o.hp}%"></i></div>` : '';
-      html += `<div class="tagp${side}" style="left:${P.x}px;top:${P.y}px">${esc(r?.name || '')} · <span class="num">${Math.round(d)}</span>${bar}</div>`;
-    } else html += `<div class="tagdot${side}" style="left:${P.x}px;top:${P.y}px"></div>`;
+  const me = S.me?.mesh?.position;
+  let n = 0;
+  if (me && S.me.alive) {
+    const list = [];
+    for (const o of S.others.values()) if (o.alive) list.push({ o, d: o.mesh.position.distanceTo(me) });
+    list.sort((a, b) => a.d - b.d);
+    let named = 0;
+    for (const { o, d } of list) {
+      if (d > 1600) break;
+      P.copy(o.mesh.position); P.y += 3.5;
+      if (P.clone().project(camera).z > 1 || !project(P)) continue;
+      const r = S.roster.get(o.key);
+      const side = S.teams ? (r?.team === S.myTeam ? ' mate' : ' foe') : '';
+      if (named < 2 && d < 900) {
+        named++;
+        const bar = o.hp < 100 ? `<div class="mini"><i style="width:${o.hp}%"></i></div>` : '';
+        setTag(n++, `tagp${side}`, `${esc(r?.name || '')} · <span class="num">${Math.round(d / 10) * 10}</span>${bar}`, P.x, P.y);
+      } else setTag(n++, `tagdot${side}`, '', P.x, P.y);
+    }
+    const B = S.boss;
+    if (B?.mesh) {
+      P.copy(B.mesh.position); P.y += 9;
+      if (P.clone().project(camera).z <= 1 && project(P)) setTag(n++, 'tagp boss', `מפציץ · <span class="num">${Math.round(B.mesh.position.distanceTo(me) / 10) * 10}</span>`, P.x, P.y);
+    }
   }
-  const B = S.boss;
-  if (B) {
-    P.set(B.x, B.y + 9, B.z);
-    if (P.clone().project(camera).z <= 1 && project(P)) html += `<div class="tagp boss" style="left:${P.x}px;top:${P.y}px">מפציץ · <span class="num">${Math.round(Math.hypot(B.x - me.x, B.y - me.y, B.z - me.z))}</span></div>`;
-  }
-  box.innerHTML = html;
-  radar();
+  for (let i = n; i < tagEls.length; i++) if (tagEls[i].d.style.display !== 'none') tagEls[i].d.style.display = 'none';
 }
 
 /**
@@ -1035,6 +1132,14 @@ function radar() {
     put(o.x, o.y, o.z, mate ? '#6aa8ff' : '#ff5a64', 3, true);
     if (!mate) { const d = Math.hypot(o.x - me.x, o.y - me.y, o.z - me.z); if (!near || d < near.d) near = { d, dy: o.y - me.y }; }
   }
+  // the repair pads: a green cross, grey while one recharges
+  HEALS.forEach((h, i) => {
+    const sx = h.x - me.x, sz = h.z - me.z, fx = -sin * sx - cos * sz, rx = cos * sx - sin * sz, dd = Math.hypot(rx, fx);
+    if (dd > RADAR.range) return;
+    const px = rx * (R - 6) / RADAR.range, py = -fx * (R - 6) / RADAR.range, a = 3 * dpr, b = 1 * dpr;
+    g.fillStyle = pads.ready(i) ? '#4dff9a' : 'rgba(160,170,180,0.5)';
+    g.fillRect(px - a, py - b, a * 2, b * 2); g.fillRect(px - b, py - a, b * 2, a * 2);
+  });
   if (S.boss) put(S.boss.x, S.boss.y, S.boss.z, '#ffd27a', 5, true);
   for (const m of S.missiles) if (m.target === S.myKey && Math.floor(performance.now() / 150) % 2) put(m.x, m.y, m.z, '#ffffff', 2.5, false);
   $('#radar-near').textContent = near ? `${Math.round(near.d)}m${near.dy > 60 ? ' ▲' : near.dy < -60 ? ' ▼' : ''}` : '';

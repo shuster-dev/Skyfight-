@@ -29,6 +29,16 @@ export const MISSILE = {
   fuse: 14, full: 6, blast: 20, edge: 0.3,
 };
 
+/**
+ * Out-flying a missile: break hard (the nose swung through `turn` radians in
+ * the last `over` seconds) while it is between `far` and `near` metres away,
+ * and it may lose you — the later the break, the better the odds: `best` at
+ * the last moment, `worst` at the edge of the window. One try a missile: a
+ * break begun too early is spent before it counts for much.
+ */
+export const DODGE = { near: 28, far: 170, turn: 0.35, over: 0.4, best: 0.9, worst: 0.2 };
+export const dodgeChance = (d) => (d < DODGE.near || d > DODGE.far ? 0 : DODGE.best - (DODGE.best - DODGE.worst) * (d - DODGE.near) / (DODGE.far - DODGE.near));
+
 /** How much of a missile's blast reaches a plane `d` metres from it. */
 export const blastDamage = (d) => d <= MISSILE.full ? MISSILE.dmg
   : d >= MISSILE.blast ? 0

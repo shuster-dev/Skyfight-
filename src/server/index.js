@@ -134,7 +134,7 @@ app.post('/api/pilot/name', requireAuth, async (req, res) => {
 });
 app.post('/api/pilot/plane', requireAuth, hangar((p, b) => choosePlane(p, String(b.plane || ''))));
 app.post('/api/pilot/buy-plane', requireAuth, hangar((p, b) => buyPlane(p, String(b.plane || ''))));
-app.post('/api/pilot/upgrade', requireAuth, hangar((p, b) => buyUpgrade(p, String(b.upgrade || ''))));
+app.post('/api/pilot/upgrade', requireAuth, hangar((p, b) => buyUpgrade(p, String(b.upgrade || ''), b.plane ? String(b.plane) : p.plane)));
 app.post('/api/pilot/buy-paint', requireAuth, hangar((p, b) => buyPaint(p, String(b.paint || ''))));
 app.post('/api/pilot/paint', requireAuth, hangar((p, b) => choosePaint(p, String(b.paint || ''))));
 
@@ -210,6 +210,7 @@ gameServer.define('arena_teams', ArenaRoom, { store, mode: 'teams', noBots: proc
 if (TESTING) {
   gameServer.define('arena_duel', ArenaRoom, { store, noBots: true, boss: false });
   gameServer.define('arena_teams_test', ArenaRoom, { store, mode: 'teams', noBots: true, boss: false });
+  gameServer.define('arena_pad_test', ArenaRoom, { store, noBots: true, boss: false, startHp: 0.4 });
   gameServer.define('arena_boss_test', ArenaRoom, { store, noBots: true, bossFirst: 300, bossHp: 60 });
 }
 await gameServer.listen(PORT);

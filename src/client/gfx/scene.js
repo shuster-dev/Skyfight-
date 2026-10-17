@@ -9,7 +9,7 @@ import {
   InstancedBufferAttribute, InstancedMesh, LinearFilter, LinearMipmapLinearFilter, LineBasicMaterial, LineSegments,
   BufferGeometry, Float32BufferAttribute, Mesh, MeshBasicMaterial, MeshStandardMaterial, Object3D, PerspectiveCamera,
   PlaneGeometry, PMREMGenerator, RGBAFormat, RepeatWrapping, Scene, ShaderMaterial, SphereGeometry, SRGBColorSpace, Sprite,
-  SpriteMaterial, TubeGeometry, Vector3, WebGLRenderer, ClampToEdgeWrapping,
+  SpriteMaterial, TubeGeometry, Vector3, WebGLRenderer, ClampToEdgeWrapping, RingGeometry, CircleGeometry,
 } from 'three';
 import { ARENA, BRIDGE, BUILDINGS, GRID, ISLANDS, cityAt, noise, terrainAt, inBay } from '../../shared/arena.js';
 
@@ -33,7 +33,7 @@ const SPAN = 3600, SEG = MOBILE ? 220 : 300;
 export function makeWorld(renderer) {
   const scene = new Scene();
   scene.background = new Color(SKY.horizon);
-  scene.fog = new Fog(SKY.fog, 700, 3400);
+  scene.fog = new Fog(SKY.fog, 1300, 4400);
   const camera = new PerspectiveCamera(62, 1, 0.5, 7000);
 
   scene.add(new HemisphereLight(0xdcecff, 0x6a7a5a, 1.0));
@@ -84,9 +84,10 @@ export function makeWorld(renderer) {
     ships.group.visible = !low;
     clouds.children.forEach((c, i) => (c.visible = !low || i % 3 === 0));
     sea.material.uniforms.detail.value = low ? 0 : 1;
-    const far = low ? 2400 : med ? 3000 : 3400;
-    scene.fog.far = far; scene.fog.near = far * 0.2;
-    sea.material.uniforms.fogFar.value = far; sea.material.uniforms.fogNear.value = far * 0.2;
+    // clear air: the haze starts far out, where it only softens the horizon
+    const far = low ? 3000 : med ? 3800 : 4400;
+    scene.fog.far = far; scene.fog.near = far * 0.3;
+    sea.material.uniforms.fogFar.value = far; sea.material.uniforms.fogNear.value = far * 0.3;
     camera.far = far + 2000; camera.updateProjectionMatrix();
   }
 
@@ -252,7 +253,7 @@ function makeSea(H) {
     uniforms: {
       time: { value: 0 }, detail: { value: 1 }, depth: { value: depth }, span: { value: SPAN },
       deep: { value: new Color(0x0b3a63) }, mid: { value: new Color(0x16608c) }, shallow: { value: new Color(0x2fa7a4) }, foam: { value: new Color(0xf2f7fa) },
-      skyC: { value: new Color(SKY.horizon) }, fogColor: { value: new Color(SKY.fog) }, fogNear: { value: 700 }, fogFar: { value: 3400 },
+      skyC: { value: new Color(SKY.horizon) }, fogColor: { value: new Color(SKY.fog) }, fogNear: { value: 1300 }, fogFar: { value: 4400 },
       sunDir: { value: new Vector3(SUN_DIR.x, SUN_DIR.y, SUN_DIR.z).normalize() },
     },
     vertexShader: `varying vec3 vW; varying float vFog;
@@ -611,10 +612,12 @@ function makeClouds() {
   const tex = puffTexture();
   const mat = new SpriteMaterial({ map: tex, transparent: true, depthWrite: false, fog: true, color: 0xffffff });
   const shade = new SpriteMaterial({ map: tex, transparent: true, depthWrite: false, fog: true, color: 0xd5dde6 });
-  for (let c = 0; c < 34; c++) {
-    const a = r() * Math.PI * 2, d = 200 + r() * (ARENA.radius + 500);
-    const cx = Math.cos(a) * d, cz = Math.sin(a) * d, cy = 300 + r() * 120;
-    const n = 6 + Math.floor(r() * 7), size = 60 + r() * 50;
+  // few, and high: up near the ceiling and out toward the edge, where they
+  // are scenery and a place to hide — not a wall across every fight
+  for (let c = 0; c < 14; c++) {
+    const a = r() * Math.PI * 2, d = 450 + r() * (ARENA.radius + 300);
+    const cx = Math.cos(a) * d, cz = Math.sin(a) * d, cy = 470 + r() * 60;
+    const n = 5 + Math.floor(r() * 5), size = 50 + r() * 40;
     for (let i = 0; i < n; i++) {
       const s = new Sprite(i % 3 ? mat : shade);
       const sx = size * (0.8 + r() * 0.7);
@@ -636,4 +639,58 @@ export function inCloud(clouds, x, y, z) {
     if (d < 1) best = Math.max(best, 1 - d);
   }
   return best;
+}
+
+// ---- repair pads ---------------------------------------------------------------
+
+/**
+ * The repair pads: a ring of green light on the ground, a column of light
+ * standing up out of it, and a cross turning over it — grey and dark while
+ * a spent pad recharges, a countdown ring filling back up.
+ */
+export function makePads(scene, list, rule) {
+  const glow = (color, opacity) => new MeshBasicMaterial({ color, transparent: true, opacity, blending: AdditiveBlending, depthWrite: false, side: DoubleSide });
+  const beamTex = (() => {
+    const c = document.createElement('canvas'); c.width = 4; c.height = 128;
+    const g = c.getContext('2d'), gr = g.createLinearGradient(0, 128, 0, 0);
+    gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.5, 'rgba(255,255,255,0.35)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 4, 128);
+    const t = new CanvasTexture(c); t.colorSpace = SRGBColorSpace; return t;
+  })();
+  const pads = list.map((p) => {
+    const g = new Group();
+    g.position.set(p.x, p.y + 0.6, p.z);
+    const ring = new Mesh(new RingGeometry(rule.r - 2.2, rule.r, 48).rotateX(-Math.PI / 2), glow(0x4dff9a, 0.9));
+    const inner = new Mesh(new RingGeometry(rule.r * 0.55, rule.r * 0.6, 48).rotateX(-Math.PI / 2), glow(0x4dff9a, 0.6));
+    const disc = new Mesh(new CircleGeometry(rule.r, 48).rotateX(-Math.PI / 2), glow(0x1f8f55, 0.18));
+    const beam = new Mesh(new CylinderGeometry(rule.r * 0.95, rule.r, rule.h, 32, 1, true).translate(0, rule.h / 2, 0), new MeshBasicMaterial({ map: beamTex, color: 0x4dff9a, transparent: true, opacity: 0.32, blending: AdditiveBlending, depthWrite: false, side: DoubleSide }));
+    const cross = new Group();
+    const arm = new BoxGeometry(9, 2.6, 2.6);
+    const mat = new MeshBasicMaterial({ color: 0x6dffb0, fog: false });
+    cross.add(new Mesh(arm, mat), new Mesh(arm, mat).rotateZ(Math.PI / 2));
+    cross.position.y = rule.h * 0.55;
+    g.add(disc, ring, inner, beam, cross);
+    scene.add(g);
+    return { g, ring, inner, disc, beam, cross, mat, until: 0, total: 1 };
+  });
+  return {
+    /** Spent: dark for `secs` seconds. */
+    spend(i, secs) { const p = pads[i]; if (!p) return; p.until = performance.now() + secs * 1000; p.total = Math.max(1, secs); },
+    ready: (i) => !!pads[i] && performance.now() >= pads[i].until,
+    tick(dt, time) {
+      const now = performance.now();
+      for (const p of pads) {
+        const left = Math.max(0, (p.until - now) / 1000), on = left === 0;
+        p.beam.visible = on;
+        p.cross.visible = on;
+        p.cross.rotation.y = time * 1.4;
+        p.cross.position.y = rule.h * 0.55 + Math.sin(time * 2) * 2;
+        p.ring.material.color.setHex(on ? 0x4dff9a : 0x59626b);
+        p.ring.material.opacity = on ? 0.75 + Math.sin(time * 4) * 0.2 : 0.5;
+        // recharging: the inner ring fills back round
+        p.inner.scale.setScalar(on ? 1 : 1 - left / p.total);
+        p.disc.material.opacity = on ? 0.18 : 0.06;
+      }
+    },
+  };
 }

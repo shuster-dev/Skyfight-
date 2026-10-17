@@ -4,6 +4,7 @@
 import { spawn } from 'node:child_process';
 import { Client } from 'colyseus.js';
 import { forward } from '../src/shared/flight.js';
+import { ARENA, HEAL, HEALS } from '../src/shared/arena.js';
 
 const PORT = 2700 + Math.floor(Math.random() * 200);
 const BASE = `http://127.0.0.1:${PORT}`;
@@ -33,7 +34,7 @@ async function pilot(token, room = 'arena') {
   const c = new Client(`ws://127.0.0.1:${PORT}`);
   const r = await c.joinOrCreate(room, { token });
   const s = { room: r, events: [], snap: null };
-  for (const type of ['welcome', 'spawn', 'fix', 'hit', 'hurt', 'down', 'reward', 'roster', 'fired', 'incoming', 'boom', 'pong', 'ram', 'flare', 'flared', 'score', 'bt', 'bossStart', 'bossDown', 'bossGone', 'friendIn']) {
+  for (const type of ['welcome', 'spawn', 'fix', 'hit', 'hurt', 'down', 'reward', 'roster', 'fired', 'incoming', 'boom', 'pong', 'ram', 'flare', 'flared', 'score', 'bt', 'bossStart', 'bossDown', 'bossGone', 'friendIn', 'healed', 'pad', 'dodged', 'missed']) {
     r.onMessage(type, (m) => { s.events.push({ type, m }); type === 'spawn' && (s.pose = { ...m }); type === 'welcome' && (s.key = m.key); });
   }
   r.onMessage('s', (m) => (s.snap = m));
@@ -225,6 +226,32 @@ try {
   await wait(200);
   ok('landed again: back in the hangar', (await api('/api/friends', null, twin.token)).rows?.[0]?.state === 'hangar');
   ok('a friend can be removed', (await api('/api/friends/remove', { code: 'צייד#1' }, twin.token)).ok && (await api('/api/friends', null, back.token)).rows?.length === 0);
+
+  console.log('\nrepair pads');
+  const rp = await pilot(back.token, 'arena_pad_test');
+  await until(() => rp.pose, 3000);
+  ok('it starts hurt (the test room)', got(rp, 'spawn')[0]?.m.hp < 100);
+  ok('the pads are told on arrival, all ready', (got(rp, 'welcome')[0]?.m.pads || []).length === HEALS.length && got(rp, 'welcome')[0].m.pads.every((t) => t === 0));
+  // over the first pad, high, then straight down through it
+  const pad = HEALS[0];
+  const go = async (gx, gy, gz) => {
+    for (let i = 0; i < 400; i++) {
+      const dx = gx - rp.pose.x, dy = gy - rp.pose.y, dz = gz - rp.pose.z, d = Math.hypot(dx, dy, dz);
+      if (d < 1 || got(rp, 'healed').length) return;
+      const k = Math.min(1, 12 / d);
+      rp.pose.x += dx * k; rp.pose.y += dy * k; rp.pose.z += dz * k;
+      send(rp);
+      await wait(50);
+    }
+  };
+  await go(rp.pose.x, ARENA.ceiling - 30, rp.pose.z);
+  await go(pad.x, ARENA.ceiling - 30, pad.z);
+  await go(pad.x, pad.y + HEAL.h * 0.5, pad.z);
+  await until(() => got(rp, 'healed').length > 0, 1500);
+  const healed = got(rp, 'healed')[0]?.m;
+  ok('flying low through a pad patches the plane up to full', healed && healed.gain > 0 && healed.hp >= 100, { healed, fixes: got(rp, 'fix').length });
+  ok('and the pad is spent for a while, for everyone', got(rp, 'pad').some((e) => e.m.i === 0 && e.m.s === HEAL.every));
+  await rp.room.leave();
 
   console.log('\nthe bomber');
   const bz = await pilot(back.token, 'arena_boss_test');

@@ -3,13 +3,15 @@
 // open, gold to pay, one of each) are in one place.
 import { PAINTS, PLANES, START_PLANE, UPGRADES, killReward, levelBonus, levelOf, nextTier, planeOpen, planeOwned } from '../shared/planes.js';
 
+const noTiers = () => Object.fromEntries(Object.keys(UPGRADES).map((k) => [k, 0]));
+
 export function newPilot(id) {
   return {
     id, name: '', created: Date.now(),
     xp: 0, level: 1, gold: 0,
     kills: 0, deaths: 0, best: 0,
     plane: START_PLANE, planes: [START_PLANE],
-    upgrades: { engine: 0, armor: 0, guns: 0, missiles: 0, flares: 0 },
+    upgrades: { [START_PLANE]: noTiers() }, // each plane its own
     paint: 'stock', paints: ['stock'],
   };
 }
@@ -25,7 +27,12 @@ export function normalize(p) {
   p.paints = [...new Set(['stock', ...(p.paints || [])].filter((k) => PAINTS[k]))];
   if (!p.paints.includes(p.paint)) p.paint = 'stock';
   p.friends = [...new Set((Array.isArray(p.friends) ? p.friends : []).filter((x) => typeof x === 'string'))].slice(0, 60);
-  p.upgrades = Object.fromEntries(Object.keys(UPGRADES).map((k) => [k, Math.max(0, Math.min(5, p.upgrades?.[k] | 0))]));
+  // upgrades used to be the pilot's, for every plane: an old record keeps
+  // them, now on each plane it owns
+  const u = p.upgrades || {};
+  const old = Object.keys(UPGRADES).some((k) => typeof u[k] === 'number');
+  const tiers = (t) => Object.fromEntries(Object.keys(UPGRADES).map((k) => [k, Math.max(0, Math.min(5, t?.[k] | 0))]));
+  p.upgrades = Object.fromEntries(p.planes.map((id) => [id, tiers(old ? u : u[id])]));
   return p;
 }
 
@@ -44,6 +51,7 @@ export function buyPlane(p, id) {
   if (p.gold < PLANES[id].price) return { error: 'gold' };
   p.gold -= PLANES[id].price;
   p.planes.push(id);
+  p.upgrades[id] ||= noTiers();
   p.plane = id;
   return { ok: true };
 }
@@ -73,16 +81,18 @@ export function choosePaint(p, id) {
   return { ok: true };
 }
 
-/** Buy the next tier of an upgrade. */
-export function buyUpgrade(p, id) {
+/** Buy the next tier of an upgrade, for one plane (the one flown, unless said). */
+export function buyUpgrade(p, id, plane = p.plane) {
   if (!UPGRADES[id]) return { error: 'no_such_upgrade' };
-  const n = nextTier(p, id);
+  if (!PLANES[plane]) return { error: 'no_such_plane' };
+  if (!planeOwned(p, plane)) return { error: 'not_owned' };
+  const n = nextTier(p, id, plane);
   if (!n) return { error: 'max' };
   if (p.level < n.level) return { error: 'level' };
   if (p.gold < n.cost) return { error: 'gold' };
   p.gold -= n.cost;
-  p.upgrades[id] = n.tier;
-  return { ok: true, tier: n.tier };
+  (p.upgrades[plane] ||= noTiers())[id] = n.tier;
+  return { ok: true, tier: n.tier, plane };
 }
 
 /** Pay a lump of xp and gold (the bomber's share), level-up bonuses included. */
