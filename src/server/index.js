@@ -56,7 +56,19 @@ const pilotOf = async (id) => {
   if (!p) p = await store.savePilot(newPilot(id));
   return normalize(p);
 };
-const me = async (user) => ({ guest: !!user.guest, username: user.username || '', pilot: view(await pilotOf(user.id)) });
+/**
+ * A saved pilot's number: given the first time a saved account has a name,
+ * and again when the name changes (מאיר#1 who becomes דני is a new דני#n).
+ * Guests have none, and are not on the board.
+ */
+async function tagPilot(user, p) {
+  if (user.guest || !p.name || (p.registered && p.tag && p.tagName === p.name)) return p;
+  p.registered = true;
+  if (!p.tag || p.tagName !== p.name) p.tag = await store.nextTag(p.name), p.tagName = p.name;
+  await store.savePilot(p);
+  return p;
+}
+const me = async (user) => ({ guest: !!user.guest, username: user.username || '', pilot: view(await tagPilot(user, await pilotOf(user.id))) });
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 
@@ -108,12 +120,15 @@ const hangar = (fn) => async (req, res) => {
   await store.savePilot(p);
   res.json({ ok: true, ...r, pilot: view(p) });
 };
-app.post('/api/pilot/name', requireAuth, hangar((p, b) => {
-  const name = cleanCallsign(b.name);
-  if (!name) return { error: 'bad_name' };
+app.post('/api/pilot/name', requireAuth, async (req, res) => {
+  const name = cleanCallsign(req.body?.name);
+  if (!name) return res.status(400).json({ error: 'bad_name' });
+  const p = await pilotOf(req.user.id);
   p.name = name;
-  return {};
-}));
+  await store.savePilot(p);
+  await tagPilot(req.user, p);
+  res.json({ ok: true, pilot: view(p) });
+});
 app.post('/api/pilot/plane', requireAuth, hangar((p, b) => choosePlane(p, String(b.plane || ''))));
 app.post('/api/pilot/buy-plane', requireAuth, hangar((p, b) => buyPlane(p, String(b.plane || ''))));
 app.post('/api/pilot/upgrade', requireAuth, hangar((p, b) => buyUpgrade(p, String(b.upgrade || ''))));

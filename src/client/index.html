@@ -148,6 +148,8 @@
   /* phones: the stick on the left half, the buttons on the right */
   #touch { position: absolute; inset: 0; pointer-events: none; }
   #touch-pad { position: absolute; top: 25%; bottom: 0; left: 0; width: 50%; pointer-events: auto; touch-action: none; }
+  /* the right half: drag to look around (the buttons sit on top of it) */
+  #look-pad { position: absolute; top: 25%; bottom: 0; right: 0; width: 50%; pointer-events: auto; touch-action: none; }
   #stick { position: absolute; left: 0; top: 0; width: 140px; height: 140px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.35); background: rgba(255, 255, 255, 0.08); pointer-events: none; }
   #stick-knob { position: absolute; left: 40px; top: 40px; width: 60px; height: 60px; border-radius: 50%; background: rgba(255, 255, 255, 0.55); }
   .tbtn { position: absolute; pointer-events: auto; touch-action: none; border-radius: 50%; display: grid; place-items: center; font-weight: 900; color: #fff; border: 2px solid rgba(255, 255, 255, 0.4); background: rgba(10, 18, 34, 0.45); backdrop-filter: blur(4px); font-size: 14px; }
@@ -265,9 +267,10 @@
     <span>🔥</span><div class="fuel"><i id="hud-fuel"></i></div>
     <span>🚀</span><div class="msl" id="hud-msl"></div>
   </div>
-  <div class="keys-help" id="keys-help">חצים / WASD — טיסה<br>רווח / עכבר — ירי<br>Shift — מבער · E — טיל</div>
+  <div class="keys-help" id="keys-help">חצים / WASD — טיסה<br>רווח / עכבר שמאלי — ירי<br>Shift — מבער · E — טיל<br>גרירה עם עכבר ימני — הסתכלות</div>
   <div id="touch" class="hidden">
     <div id="touch-pad"></div>
+    <div id="look-pad"></div>
     <div id="stick" class="hidden"><div id="stick-knob"></div></div>
     <button class="tbtn" id="btn-fire" type="button">🔫</button>
     <button class="tbtn" id="btn-missile" type="button">🚀</button>

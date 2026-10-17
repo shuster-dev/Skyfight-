@@ -138,6 +138,12 @@ export const planeOwned = (pilot, id) => id === START_PLANE || (pilot.planes || 
 
 // ---- names ----------------------------------------------------------------
 
+/**
+ * How a pilot is shown: a saved pilot carries a number after the name, so
+ * three pilots called מאיר are מאיר#1, מאיר#2 and מאיר#3. A guest has none.
+ */
+export const displayName = (p) => (p?.tag ? `${p.name}#${p.tag}` : p?.name || '');
+
 /** A callsign: 2–14 letters (Hebrew or Latin), digits, spaces, _ and -. */
 export function cleanCallsign(s) {
   const v = String(s ?? '').replace(/\s+/g, ' ').trim();

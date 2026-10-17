@@ -135,13 +135,25 @@ try {
   ok('flying into the sea is a crash', crash?.v === b.key && crash?.how === 'crash', { crash, downs: got(b, 'down').map((e) => e.m), hurt: got(b, 'hurt').slice(-3).map((e) => e.m), spawns: got(b, 'spawn').map((e) => e.m) });
 
   console.log('\nsaving');
-  ok('a guest saves with a username and keeps the pilot', (await api('/api/register', { username: 'hunter1', password: 'pass1' }, g.token)).pilot?.kills === 1);
+  ok('guests are not on the board', ((await api('/api/leaderboard')).rows || []).length === 0);
+  const saved = await api('/api/register', { username: 'hunter1', password: 'pass1' }, g.token);
+  ok('a guest saves with a username and keeps the pilot', saved.pilot?.kills === 1);
+  ok('a saved pilot gets a number for the name', saved.pilot?.tag === 1, saved.pilot);
   ok('the name is taken now', (await api('/api/register', { username: 'hunter1', password: 'xxxx' })).status === 409);
   ok('a wrong password is refused', (await api('/api/login', { username: 'hunter1', password: 'nope' })).status === 401);
   const back = await api('/api/login', { username: 'hunter1', password: 'pass1' });
   ok('a login from scratch finds the same pilot', back.pilot?.name === 'צייד' && back.pilot.kills === 1 && back.pilot.xp === pay.xp, back);
   const lb = await api('/api/leaderboard?kind=kills');
-  ok('the leaderboard has them', lb.rows?.[0]?.name === 'צייד', lb);
+  ok('the leaderboard has them, by name and number', lb.rows?.[0]?.name === 'צייד#1' && lb.rows.length === 1, lb);
+  // a second צייד: the next number, and both on the board
+  const g2 = await api('/api/guest', {});
+  await api('/api/pilot/name', { name: 'צייד' }, g2.token);
+  const twin = await api('/api/register', { username: 'hunter2', password: 'pass2' }, g2.token);
+  ok('the same name saved again is #2', twin.pilot?.tag === 2, twin.pilot);
+  const lb2 = await api('/api/leaderboard');
+  ok('two pilots of one name are told apart', ['צייד#1', 'צייד#2'].every((n) => lb2.rows.some((r) => r.name === n)), lb2.rows);
+  const renamed = await api('/api/pilot/name', { name: 'נשר' }, twin.token);
+  ok('a new name gets its own number', renamed.pilot?.name === 'נשר' && renamed.pilot.tag === 1, renamed.pilot);
 
   console.log('\nanother tab');
   const a2 = await pilot(back.token, 'arena_duel');
