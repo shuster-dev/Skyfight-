@@ -118,11 +118,12 @@ export class Hangar {
   }
 
   /** Bring this plane onto the table (the last one rolls away). */
-  show(kind) {
-    if (kind === this.kind) return;
+  show(kind, paint = 'stock') {
+    if (kind === this.kind && paint === this.paint) return;
+    this.paint = paint;
     if (this.plane) this.leaving = { m: this.plane, t: 0 };
     this.kind = kind;
-    this.plane = buildPlane(kind);
+    this.plane = buildPlane(kind, paint);
     // scaled to the table, whatever its size
     const len = this.plane.userData.len || 10;
     this.plane.scale.setScalar(Math.min(1.25, 15 / len));

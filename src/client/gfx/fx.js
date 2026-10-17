@@ -87,6 +87,11 @@ export class Fx {
     }
   }
 
+  /** Flame licking out of a hurt engine. */
+  fire(p) {
+    if (this.balls.length < 240) this.balls.push({ p: p.clone().add(V.set((Math.random() - 0.5) * 1.5, (Math.random() - 0.5) * 1.5, (Math.random() - 0.5) * 1.5)), s: 1.6 + Math.random(), t: 0, life: 0.35 });
+  }
+
   /** The flash at a muzzle. */
   muzzle(p) {
     if (this.balls.length < 240) this.balls.push({ p: p.clone(), s: 0.7, t: 0, life: 0.045, flare: true });

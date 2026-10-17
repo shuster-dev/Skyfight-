@@ -55,9 +55,14 @@ export class Net {
 
   logout() { this.token = ''; store.set(''); }
 
-  /** Into the arena. Resolves with the room; `hello` tells it we are listening. */
-  async join() {
-    const room = await this.client.joinOrCreate('arena', { token: this.token });
-    return room;
+  /**
+   * Into the arena: a friend's room by its id when invited (if it is still
+   * there and has room), else a room of the chosen kind.
+   */
+  async join(mode = 'ffa', roomId = '') {
+    if (roomId) {
+      try { return await this.client.joinById(roomId, { token: this.token }); } catch { /* gone or full: any room will do */ }
+    }
+    return this.client.joinOrCreate(mode === 'teams' ? 'arena_teams' : 'arena', { token: this.token });
   }
 }

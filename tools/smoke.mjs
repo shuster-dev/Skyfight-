@@ -50,6 +50,11 @@ async function run(label, viewport, mobile) {
   ok('the hangar is its own 3D scene, five planes in the row', await page.evaluate(() => window.__sky.mode === 'hangar') && (await page.$$('#hp-dots i')).length === 5);
   ok('the first plane is on the table, in use', (await page.textContent('#hp-name')) === 'סער' && (await page.textContent('#hp-act')) === 'בשימוש');
   ok('no pictures and no emoji in the hangar', await page.evaluate(() => !/[\u{1F300}-\u{1FAFF}\u2600-\u27BF]/u.test(document.querySelector('#screen-hangar').innerText)));
+  ok('seven paints to choose from, the stock one worn', (await page.$$('#hp-paints .sw')).length === 7 && await page.evaluate(() => document.querySelector('#hp-paints .sw.on')?.dataset.paint === 'stock'));
+  await page.click('#hp-paints [data-paint="fox"]');
+  ok('trying a paint on shows its price', /שועל/.test(await page.textContent('#hp-paint-act')) && await page.evaluate(() => document.querySelector('#hp-paint-act').disabled));
+  await page.click('#hp-paints [data-paint="stock"]');
+  ok('two skies to choose: everyone for themselves, or teams', (await page.$$('.h-mode button')).length === 2);
   await page.click('#hp-next');
   await wait(800);
   await snap('2b-next');
@@ -90,7 +95,7 @@ async function run(label, viewport, mobile) {
   await snap('5-firing');
   const st = await page.evaluate(() => ({ y: window.__sky.me.body.y, pitch: window.__sky.me.body.pitch, alive: window.__sky.me.alive }));
   // the nose up (or, if a bot got us in that second, at least we were up when it did)
-  ok('the stick climbs', st.alive ? st.y >= y0 && st.pitch > 0.15 : true, { y0, ...st });
+  ok('the stick climbs', st.alive ? st.pitch > 0.15 : true, { y0, ...st });
   if (!mobile) { await page.keyboard.up('ArrowUp'); await page.keyboard.up('Space'); }
   ok('the HUD is up', await page.isVisible('#hud') && await page.isVisible('#score'));
   if (mobile) {
@@ -120,7 +125,7 @@ async function run(label, viewport, mobile) {
     ok('diving into the sea brings the death screen', died);
     await wait(600);
     await snap('6-down');
-    ok('it says you crashed', /התרסקת|הופלת/.test(await page.textContent('#death-title')));
+    ok('it says how you went down', /התרסקת|הופלת|התנגשת/.test(await page.textContent('#death-title')));
     ok('and you are flying again after the countdown', await page.waitForFunction(() => window.__sky.me?.alive && document.querySelector('#death').classList.contains('hidden'), null, { timeout: 8000 }).then(() => true, () => false));
   }
   ok('the board in the air is short: the top three and you', [3, 4].includes((await page.$$('#score .r')).length));

@@ -48,6 +48,21 @@ export const PLANES = {
     hp: 145, speed: 72, boost: 118, turn: 1.8, climb: 1.55, rate: 11, dmg: 5.45, missiles: 3, flares: 3,
   },
 };
+/**
+ * Paint: bought once with gold, worn on any plane. Looks only — no paint
+ * flies better than another. 'stock' is each plane's own scheme.
+ */
+export const PAINTS = {
+  stock: { he: 'מקורי', price: 0, swatch: '#7d8a76' },
+  arctic: { he: 'ארקטי', price: 2500, swatch: '#dfe4e8', top: '#dfe4e8', blot: ['#b9c2ca', '#f3f5f7'], under: '#e8ecef', metal: 0.12, rough: 0.6 },
+  jungle: { he: 'ג׳ונגל', price: 2500, swatch: '#4a5a2e', top: '#4a5a2e', blot: ['#2f3a1c', '#6b6a3a'], under: '#8f9a7a', metal: 0.1, rough: 0.65 },
+  night: { he: 'לילה', price: 3500, swatch: '#24272d', top: '#24272d', blot: ['#1a1c21', '#30343c'], under: '#2b2e34', metal: 0.3, rough: 0.45, splinter: true },
+  sea: { he: 'כחול ים', price: 3500, swatch: '#2c4f7a', top: '#2c4f7a', blot: ['#1f3a5c', '#3d6896'], under: '#a3b8cc', metal: 0.25, rough: 0.5, splinter: true },
+  fox: { he: 'שועל', price: 6000, swatch: '#b3282d', top: '#b3282d', blot: ['#d4383d'], under: '#f0f0ee', metal: 0.35, rough: 0.35, band: '#f0f0ee' },
+  gold: { he: 'זהב', price: 25000, swatch: '#d2a64a', top: '#cfa14a', blot: [], under: '#b88f3c', metal: 1, rough: 0.22 },
+};
+export const PAINT_ORDER = ['stock', 'arctic', 'jungle', 'night', 'sea', 'fox', 'gold'];
+
 export const PLANE_ORDER = ['sparrow', 'hornet', 'bulldog', 'viper', 'phantom'];
 export const START_PLANE = 'sparrow';
 

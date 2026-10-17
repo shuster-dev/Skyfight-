@@ -33,7 +33,7 @@ async function pilot(token, room = 'arena') {
   const c = new Client(`ws://127.0.0.1:${PORT}`);
   const r = await c.joinOrCreate(room, { token });
   const s = { room: r, events: [], snap: null };
-  for (const type of ['welcome', 'spawn', 'fix', 'hit', 'hurt', 'down', 'reward', 'roster', 'fired', 'incoming', 'boom', 'pong', 'ram', 'flare', 'flared']) {
+  for (const type of ['welcome', 'spawn', 'fix', 'hit', 'hurt', 'down', 'reward', 'roster', 'fired', 'incoming', 'boom', 'pong', 'ram', 'flare', 'flared', 'score', 'bt', 'bossStart', 'bossDown', 'bossGone']) {
     r.onMessage(type, (m) => { s.events.push({ type, m }); type === 'spawn' && (s.pose = { ...m }); type === 'welcome' && (s.key = m.key); });
   }
   r.onMessage('s', (m) => (s.snap = m));
@@ -178,6 +178,50 @@ try {
   ok('two pilots of one name are told apart', ['צייד#1', 'צייד#2'].every((n) => lb2.rows.some((r) => r.name === n)), lb2.rows);
   const renamed = await api('/api/pilot/name', { name: 'נשר' }, twin.token);
   ok('a new name gets its own number', renamed.pilot?.name === 'נשר' && renamed.pilot.tag === 1, renamed.pilot);
+
+  console.log('\npaint');
+  ok('a paint costs gold', (await api('/api/pilot/buy-paint', { paint: 'gold' }, back.token)).error === 'gold');
+  ok('the stock paint is worn', (await api('/api/pilot/paint', { paint: 'stock' }, back.token)).pilot?.paint === 'stock');
+  ok('a paint you do not own cannot be worn', (await api('/api/pilot/paint', { paint: 'night' }, back.token)).error === 'not_owned');
+
+  console.log('\nteams, and a friend by link');
+  const t1 = await pilot(back.token, 'arena_teams_test');
+  ok('the teams room says so, with a side', await until(() => got(t1, 'welcome')[0]?.m.mode === 'teams' && ['b', 'r'].includes(got(t1, 'welcome')[0]?.m.team)));
+  const g3 = await api('/api/guest', {});
+  await api('/api/pilot/name', { name: 'חבר' }, g3.token);
+  // the friend comes in by the room's id, as the invite link carries it
+  const roomId = got(t1, 'welcome')[0].m.room;
+  const c = new Client(`ws://127.0.0.1:${PORT}`);
+  const fr = { room: await c.joinById(roomId, { token: g3.token }), events: [] };
+  for (const type of ['welcome', 'spawn', 'roster', 'score', 's', 'down', 'hit', 'hurt']) fr.room.onMessage(type, (m) => fr.events.push({ type, m }));
+  fr.room.send('hello');
+  ok('the invite link brings the friend into the same room', fr.room.roomId === roomId);
+  const w1 = got(t1, 'welcome')[0].m, w2 = await until(() => got(fr, 'welcome')[0]) && got(fr, 'welcome')[0].m;
+  ok('the two are put on opposite sides', w1.team && w2.team && w1.team !== w2.team, { a: w1.team, b: w2.team });
+  await t1.room.leave(); await fr.room.leave();
+
+  console.log('\nthe bomber');
+  const bz = await pilot(back.token, 'arena_boss_test');
+  ok('the bomber comes', await until(() => got(bz, 'bossStart').length > 0 && bz.snap?.b, 5000));
+  await until(() => bz.pose, 3000);
+  await wait(3200); // the spawn shield
+  // fly up behind it and stay there, guns on
+  let downed = false;
+  for (let i = 0; i < 700 && !downed; i++) {
+    const [x, y, z, yaw] = bz.snap.b; const by = yaw / 1000, f = forward(by, 0);
+    const gx = x / 10 - f.x * 70, gy = y / 10, gz = z / 10 - f.z * 70;
+    const dx = gx - bz.pose.x, dy = gy - bz.pose.y, dz = gz - bz.pose.z, d = Math.hypot(dx, dy, dz);
+    const k = Math.min(1, 14 / Math.max(d, 1e-6));
+    bz.pose.x += dx * k; bz.pose.y += dy * k; bz.pose.z += dz * k; bz.pose.yaw = by; bz.pose.pitch = 0;
+    send(bz, d < 30 ? 1 : 0);
+    await wait(50);
+    downed = got(bz, 'bossDown').length > 0;
+  }
+  ok('it can be shot down', downed);
+  const prize = got(bz, 'reward').find((e) => e.m.boss)?.m;
+  ok('and the one who did it all is paid, with the top prize', prize && prize.top && prize.gold >= 1000 && prize.share === 100, prize);
+  ok('its gunners fire back', got(bz, 'bt').length > 0);
+  await bz.room.leave();
 
   console.log('\nanother tab');
   const a2 = await pilot(back.token, 'arena_duel');
