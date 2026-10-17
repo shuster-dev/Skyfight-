@@ -14,7 +14,7 @@ import { normalize, payKill, view } from '../pilot.js';
 import { PLANES, PLANE_ORDER, displayName, levelOf, statsOf, killReward } from '../../shared/planes.js';
 import { ARENA, hitsSolid, spawnPoint, surfaceAt } from '../../shared/arena.js';
 import { fly, forward, newBody, plausibleMove } from '../../shared/flight.js';
-import { ASSIST_SHARE, CREDIT_MS, FLARE, GUN, MISSILE, REPAIR, RESPAWN, aimDir, offNose, pickTarget, segmentHit, steerMissile } from '../../shared/combat.js';
+import { ASSIST_SHARE, CREDIT_MS, FLARE, GUN, MISSILE, RAM, REPAIR, RESPAWN, ramDamage, aimDir, offNose, pickTarget, segmentHit, steerMissile } from '../../shared/combat.js';
 
 const TICK_MS = 1000 / 30;
 const SNAP_EVERY = 2;          // 15 snapshots a second
@@ -217,6 +217,7 @@ export class ArenaRoom extends Room {
       this.reload(p, dt);
       if (p.hp < p.stats.hp && this.now - p.lastHurt > REPAIR.after * 1000) p.hp = Math.min(p.stats.hp, p.hp + REPAIR.perSec * dt);
     }
+    this.collisions();
     this.moveBullets(dt);
     this.moveMissiles(dt);
     if (this.tickN % 60 === 0) this.fillBots();
@@ -321,6 +322,45 @@ export class ArenaRoom extends Room {
       keep.push(m);
     }
     this.missiles = keep;
+  }
+
+  // ---- planes meeting in the air ------------------------------------------
+
+  /**
+   * Any two planes that have flown into each other. Both are hurt by the
+   * speed they met at; one that survives is credited with the other (a ram
+   * is a kill), and when both go down nobody is paid.
+   */
+  collisions() {
+    const list = [...this.planes.values()].filter((p) => p.alive && this.now >= p.shieldUntil);
+    this.rammed ||= new Map();
+    for (let i = 0; i < list.length; i++) {
+      const a = list[i];
+      for (let j = i + 1; j < list.length; j++) {
+        const b = list[j];
+        if (!a.alive || !b.alive) continue;
+        const dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
+        if (dx * dx + dy * dy + dz * dz > RAM.r * RAM.r) continue;
+        const pair = a.key < b.key ? `${a.key}|${b.key}` : `${b.key}|${a.key}`;
+        if (this.now - (this.rammed.get(pair) || 0) < RAM.cooldown) continue;
+        this.rammed.set(pair, this.now);
+        const closing = Math.hypot(a.vel.x - b.vel.x, a.vel.y - b.vel.y, a.vel.z - b.vel.z);
+        const dmg = ramDamage(closing);
+        const mid = [q((a.x + b.x) / 2), q((a.y + b.y) / 2), q((a.z + b.z) / 2)];
+        this.broadcast('ram', { a: a.key, b: b.key, d: Math.round(dmg), at: mid });
+        if (dmg >= a.hp && dmg >= b.hp) {
+          // both gone: a collision, nobody's kill
+          a.damagers.delete(b.key); b.damagers.delete(a.key);
+          a.hp = b.hp = 0;
+          this.down(a, '', 'collision');
+          this.down(b, '', 'collision');
+          continue;
+        }
+        this.hurt(a, b.key, dmg, 'collision');
+        this.hurt(b, a.key, dmg, 'collision');
+      }
+    }
+    if (this.rammed.size > 400) for (const [k, t] of this.rammed) if (this.now - t > RAM.cooldown) this.rammed.delete(k);
   }
 
   // ---- hurting and going down --------------------------------------------

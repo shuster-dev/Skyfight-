@@ -389,8 +389,9 @@ function hook(room) {
   room.onMessage('hurt', (m) => {
     if (!S.me) return;
     S.me.hp = m.hp;
-    S.shake = Math.min(1, S.shake + (m.how === 'missile' ? 0.9 : 0.25));
-    $('#vig').style.opacity = m.how === 'missile' ? 1 : 0.6;
+    const big = m.how === 'missile' || m.how === 'collision';
+    S.shake = Math.min(1, S.shake + (big ? 0.9 : 0.25));
+    $('#vig').style.opacity = big ? 1 : 0.6;
     setTimeout(() => ($('#vig').style.opacity = 0), 160);
     sound.hurt();
   });
@@ -404,6 +405,14 @@ function hook(room) {
     if (p) fx.flares(p.position, p.rotation), sound.flare();
   });
   room.onMessage('incoming', () => { S.warnUntil = performance.now() + 3500; sound.warn(); });
+  // two planes met: sparks, a burst, and a jolt if one of them was us
+  room.onMessage('ram', (m) => {
+    const p = new Vector3(m.at[0] / 10, m.at[1] / 10, m.at[2] / 10);
+    fx.pop(p, 1.2);
+    for (let i = 0; i < 6; i++) fx.spark(p.clone().add(new Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(6)));
+    sound.boom(near(p) * 0.7);
+    if (m.a === S.myKey || m.b === S.myKey) toast('התנגשות');
+  });
   room.onMessage('boom', (b) => {
     const p = new Vector3(b[0] / 10, b[1] / 10, b[2] / 10);
     fx.pop(p, 1.4);
@@ -455,8 +464,8 @@ function onDown(m) {
   fx.explode(p, 1);
   sound.boom(near(p) + 0.3);
   const mine = m.k === S.myKey, me = m.v === S.myKey;
-  const how = m.how === 'missile' ? 'טיל' : m.how === 'crash' ? 'התרסקות' : 'תותח';
-  feed(m.k ? `${esc(nameOf(m.k))} <span class="w">${how}</span> ${esc(nameOf(m.v))}` : `${esc(nameOf(m.v))} <span class="w">התרסק</span>`, mine || me);
+  const how = m.how === 'missile' ? 'טיל' : m.how === 'crash' ? 'התרסקות' : m.how === 'collision' ? 'התנגשות' : 'תותח';
+  feed(m.k ? `${esc(nameOf(m.k))} <span class="w">${how}</span> ${esc(nameOf(m.v))}` : `${esc(nameOf(m.v))} <span class="w">${m.how === 'collision' ? 'התנגש' : 'התרסק'}</span>`, mine || me);
   if (me && S.me) {
     S.me.alive = false;
     S.me.mesh.visible = false;
@@ -465,7 +474,7 @@ function onDown(m) {
     S.killer = m.k ? { name: nameOf(m.k), how: m.how } : null;
     sound.engine(false);
     show('#death');
-    $('#death-title').textContent = m.how === 'crash' && !m.k ? 'התרסקת' : 'הופלת';
+    $('#death-title').textContent = m.how === 'collision' ? 'התנגשת' : m.how === 'crash' && !m.k ? 'התרסקת' : 'הופלת';
     $('#death-by').innerHTML = S.killer ? `על ידי <b>${esc(S.killer.name)}</b> · ${how}` : m.into === 'building' ? 'לתוך בניין' : m.into === 'bridge' ? 'לתוך הגשר' : 'שימו לב לגובה';
   }
   const o = S.others.get(m.v);

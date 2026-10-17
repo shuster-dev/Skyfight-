@@ -33,7 +33,7 @@ async function pilot(token, room = 'arena') {
   const c = new Client(`ws://127.0.0.1:${PORT}`);
   const r = await c.joinOrCreate(room, { token });
   const s = { room: r, events: [], snap: null };
-  for (const type of ['welcome', 'spawn', 'fix', 'hit', 'hurt', 'down', 'reward', 'roster', 'fired', 'incoming', 'boom', 'pong']) {
+  for (const type of ['welcome', 'spawn', 'fix', 'hit', 'hurt', 'down', 'reward', 'roster', 'fired', 'incoming', 'boom', 'pong', 'ram', 'flare', 'flared']) {
     r.onMessage(type, (m) => { s.events.push({ type, m }); type === 'spawn' && (s.pose = { ...m }); type === 'welcome' && (s.key = m.key); });
   }
   r.onMessage('s', (m) => (s.snap = m));
@@ -87,17 +87,23 @@ try {
   const hold = setInterval(() => send(b), 50);
   const target = () => b.pose;
   await wait(200);
-  for (let i = 0; i < 400; i++) {
-    const t = target(), f = forward(t.yaw, 0);
-    // a point 60m behind b, on its line
-    const gx = t.x - f.x * 60, gy = t.y, gz = t.z - f.z * 60;
-    const dx = gx - a.pose.x, dy = gy - a.pose.y, dz = gz - a.pose.z, d = Math.hypot(dx, dy, dz);
-    if (d < 1) break;
-    const k = Math.min(1, 14 / d);
-    a.pose.x += dx * k; a.pose.y += dy * k; a.pose.z += dz * k;
-    send(a);
-    await wait(50);
-  }
+  // (by way of a point high above, so the path never runs through b:
+  // planes collide now)
+  const walk = async (goal) => {
+    for (let i = 0; i < 400; i++) {
+      const [gx, gy, gz] = goal();
+      const dx = gx - a.pose.x, dy = gy - a.pose.y, dz = gz - a.pose.z, d = Math.hypot(dx, dy, dz);
+      if (d < 1) return;
+      const k = Math.min(1, 14 / d);
+      a.pose.x += dx * k; a.pose.y += dy * k; a.pose.z += dz * k;
+      send(a);
+      await wait(50);
+    }
+  };
+  const behind = (up) => () => { const t = target(), f = forward(t.yaw, 0); return [t.x - f.x * 60, t.y + up, t.z - f.z * 60]; };
+  await walk(() => [a.pose.x, target().y + 80, a.pose.z]);
+  await walk(behind(80));
+  await walk(behind(0));
   // nose on b
   a.pose.yaw = b.pose.yaw; a.pose.pitch = 0;
   send(a);
@@ -118,6 +124,24 @@ try {
   ok('b\'s record counts the death', (await api('/api/me', null, h.token)).pilot.deaths === 1);
 
   ok('no more hits once a stops firing', got(a, 'hit').length - hitsAtStop <= 2, got(a, 'hit').slice(hitsAtStop).map((e) => e.m));
+  console.log('\na collision');
+  // a and b fly into each other head-on: a flies its last few metres onto b
+  await wait(3200); // b's shield from the respawn
+  const r0 = got(a, 'down').length;
+  {
+    const t = b.pose;
+    for (let i = 0; i < 250 && got(a, 'down').length === r0; i++) {
+      const dx = t.x - a.pose.x, dy = t.y - a.pose.y, dz = t.z - a.pose.z, d = Math.hypot(dx, dy, dz);
+      const k = Math.min(1, 15 / Math.max(d, 1e-6));
+      a.pose.x += dx * k; a.pose.y += dy * k; a.pose.z += dz * k;
+      send(a);
+      await wait(50);
+    }
+  }
+  const ram = got(a, 'down').slice(r0).find((e) => e.m.how === 'collision') || got(a, 'hurt').find((e) => e.m.how === 'collision');
+  ok('flying into another plane is a collision', !!ram && (got(a, 'ram').length > 0), { ram: ram?.m, rams: got(a, 'ram').length });
+  await wait(3300); // whoever went down comes back
+
   console.log('\nmissiles');
   a.room.send('missile');
   ok('a missile is fired', await until(() => got(a, 'fired').length > 0));
