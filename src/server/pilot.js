@@ -27,7 +27,7 @@ export function normalize(p) {
 
 /** What the client is told about its own pilot. */
 export const view = (p) => ({
-  name: p.name, xp: p.xp, level: p.level, gold: p.gold,
+  name: p.name, tag: p.tag || 0, xp: p.xp, level: p.level, gold: p.gold,
   kills: p.kills, deaths: p.deaths, best: p.best,
   plane: p.plane, planes: p.planes, upgrades: p.upgrades,
 });

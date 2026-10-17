@@ -12,6 +12,8 @@ export class Controls {
     this.invert = (() => { try { return localStorage.getItem('sky.invert') === '1'; } catch { return false; } })();
     this.touch = matchMedia('(pointer: coarse)').matches;
     this.enabled = false;
+    this.look = { yaw: 0, pitch: 0, held: false, at: 0, lx: 0, ly: 0 };
+    this.lookId = null;
 
     addEventListener('keydown', (e) => {
       if (!this.enabled || e.target?.tagName === 'INPUT') return;
@@ -25,9 +27,14 @@ export class Controls {
     canvas.addEventListener('mousedown', (e) => {
       if (!this.enabled || this.touch) return;
       if (e.button === 0) this.fireHeld = true;
-      if (e.button === 2) this.missileQueued = true;
+      // the right button held: look around (dragged, see below)
+      if (e.button === 2) this.lookStart(e);
     });
-    addEventListener('mouseup', (e) => { if (e.button === 0 && !this.touch) this.fireHeld = false; });
+    addEventListener('mouseup', (e) => {
+      if (e.button === 0 && !this.touch) this.fireHeld = false;
+      if (e.button === 2) this.lookEnd();
+    });
+    addEventListener('mousemove', (e) => this.lookMove(e));
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
     // the stick: wherever the left thumb lands on the left half
@@ -43,6 +50,20 @@ export class Controls {
     pad.addEventListener('pointerup', end);
     pad.addEventListener('pointercancel', end);
 
+    // free look: the right thumb drags the camera round the plane, the way
+    // the camera turns in Hobile; let go and it slides back behind
+    const look = $('#look-pad');
+    look.addEventListener('pointerdown', (e) => {
+      if (this.lookId !== null) return;
+      this.lookId = e.pointerId;
+      try { look.setPointerCapture(e.pointerId); } catch {}
+      this.lookStart(e);
+    });
+    look.addEventListener('pointermove', (e) => e.pointerId === this.lookId && this.lookMove(e));
+    const lookUp = (e) => { if (e.pointerId === this.lookId) this.lookId = null, this.lookEnd(); };
+    look.addEventListener('pointerup', lookUp);
+    look.addEventListener('pointercancel', lookUp);
+
     const hold = (sel, key) => {
       const b = $(sel);
       b.addEventListener('pointerdown', (e) => { e.preventDefault(); try { b.setPointerCapture(e.pointerId); } catch {} this[key] = true; b.classList.add('on'); });
@@ -53,6 +74,32 @@ export class Controls {
     hold('#btn-fire', 'fireHeld');
     hold('#btn-boost', 'boostHeld');
     $('#btn-missile').addEventListener('pointerdown', (e) => { e.preventDefault(); this.missileQueued = true; });
+  }
+
+  lookStart(e) {
+    if (!this.enabled) return;
+    this.look.held = true;
+    this.look.lx = e.clientX; this.look.ly = e.clientY;
+  }
+  lookMove(e) {
+    if (!this.look.held) return;
+    const k = 5.5 / Math.max(innerWidth, innerHeight);
+    this.look.yaw -= (e.clientX - this.look.lx) * k;
+    this.look.pitch += (e.clientY - this.look.ly) * k * 0.8;
+    this.look.yaw = Math.max(-Math.PI, Math.min(Math.PI, this.look.yaw));
+    this.look.pitch = Math.max(-0.7, Math.min(1.0, this.look.pitch));
+    this.look.lx = e.clientX; this.look.ly = e.clientY;
+  }
+  lookEnd() { this.look.held = false; this.look.at = performance.now(); }
+  /** Per frame: a look let go of drifts back behind the plane. */
+  settleLook(dt) {
+    const l = this.look;
+    if (l.held || performance.now() - l.at < 600) return l;
+    const k = Math.min(1, dt * 4);
+    l.yaw -= l.yaw * k; l.pitch -= l.pitch * k;
+    if (Math.abs(l.yaw) < 0.01) l.yaw = 0;
+    if (Math.abs(l.pitch) < 0.01) l.pitch = 0;
+    return l;
   }
 
   moveStick(e) {

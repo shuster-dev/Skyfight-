@@ -6,7 +6,7 @@ import { sound } from './audio.js';
 import { makeRenderer, makeWorld, inCloud } from './gfx/scene.js';
 import { buildPlane, animatePlane } from './gfx/planes.js';
 import { Fx } from './gfx/fx.js';
-import { PLANES, PLANE_ORDER, UPGRADES, UPGRADE_ORDER, TIER_MAX, nextTier, statsOf, levelProgress, planeOpen, planeOwned, cleanCallsign } from '../shared/planes.js';
+import { PLANES, PLANE_ORDER, UPGRADES, UPGRADE_ORDER, TIER_MAX, nextTier, statsOf, levelProgress, planeOpen, planeOwned, cleanCallsign, displayName } from '../shared/planes.js';
 import { ARENA, groundAt } from '../shared/arena.js';
 import { fly, forward, newBody } from '../shared/flight.js';
 import { GUN, MISSILE, RESPAWN, aimDir, pickTarget } from '../shared/combat.js';
@@ -41,6 +41,7 @@ const S = {
   preview: [], previewKind: '',
 };
 window.__sky = S; // the browser tests look in here
+S.look = controls.look;
 
 // ---- the camera's rig, and the showcase behind the menus ------------------
 
@@ -214,7 +215,7 @@ $$('.tabs button').forEach((b) => b.addEventListener('click', () => {
 
 function renderHangar() {
   const p = S.pilot;
-  $('#h-name').textContent = p.name;
+  $('#h-name').textContent = displayName(p);
   $('#h-level').textContent = p.level;
   $('#h-gold').textContent = fmt(p.gold);
   $('#h-xp').style.width = `${levelProgress(p.xp) * 100}%`;
@@ -295,7 +296,10 @@ async function renderBoard() {
   el.innerHTML = '<div class="note">טוען…</div>';
   try {
     const { rows } = await net.api('/api/leaderboard');
-    el.innerHTML = `<table>${rows.map((r) => `<tr class="${r.name === S.pilot.name ? 'me' : ''}"><td class="num">${r.rank}</td><td>${esc(r.name)}</td><td>רמה <span class="num">${r.level}</span></td><td>💥 <span class="num">${r.kills}</span></td></tr>`).join('') || '<tr><td>עוד אין אף אחד — תהיו הראשונים</td></tr>'}</table>`;
+    const mine = displayName(S.pilot);
+    // only saved pilots are on the board: a guest is told how to get there
+    const hint = S.account.guest ? '<div class="note">רק טייסים שמורים מופיעים בטבלה. 💾 שמרו את ההתקדמות כדי להיכנס אליה — עם מספר משלכם, כמו מאיר#1.</div>' : '';
+    el.innerHTML = hint + `<table>${rows.map((r) => `<tr class="${r.name === mine ? 'me' : ''}"><td class="num">${r.rank}</td><td>${esc(r.name)}</td><td>רמה <span class="num">${r.level}</span></td><td>💥 <span class="num">${r.kills}</span></td></tr>`).join('') || '<tr><td>עוד אין אף אחד — תהיו הראשונים</td></tr>'}</table>`;
   } catch (x) { el.innerHTML = `<div class="note">${err(x)}</div>`; }
 }
 
@@ -336,7 +340,7 @@ function hook(room) {
     const mesh = buildPlane(S.pilot.plane);
     scene.add(mesh);
     S.me = { stats: m.stats, alive: false, hp: m.stats.hp, ammo: m.stats.missiles, shieldUntil: 0, gunT: 0, gun: 0, mesh, body: null, reloadT: 0 };
-    $('#hud-name').textContent = S.pilot.name;
+    $('#hud-name').textContent = displayName(S.pilot);
     paintScore();
   });
   room.onMessage('spawn', (m) => {
@@ -564,7 +568,12 @@ const r2 = (v) => Math.round(v * 100) / 100, r3 = (v) => Math.round(v * 1000) / 
 
 /** The chase camera: behind and above, leaning into turns, wider on the burner. */
 function chase(b, dt, input) {
-  const f = forward(b.yaw, b.pitch * 0.6);
+  // free look (controls.js): the camera swung round the plane by the
+  // right thumb, looking at the plane instead of ahead of it
+  const look = controls.settleLook(dt);
+  const lk = Math.min(1, Math.abs(look.yaw) * 1.5 + Math.abs(look.pitch) * 1.5);
+  const f = forward(b.yaw + look.yaw, b.pitch * 0.6 * (1 - lk) - look.pitch);
+  const ahead = forward(b.yaw, b.pitch * 0.6);
   // a phone held upright sees a narrow slice: stand further back
   const narrow = camera.aspect < 1 ? 1.75 : 1;
   const dist = (19 + (b.boosting ? 4 : 0)) * narrow, up = 5.6 * narrow;
@@ -572,13 +581,13 @@ function chase(b, dt, input) {
   const g = groundAt(camPos.x, camPos.z) + 3;
   if (camPos.y < g) camPos.y = g;
   camera.position.lerp(camPos, Math.min(1, dt * 7));
-  camLook.set(b.x + f.x * 40, b.y + f.y * 40 + 2.5, b.z + f.z * 40);
+  camLook.set(b.x + ahead.x * 40 * (1 - lk), b.y + ahead.y * 40 * (1 - lk) + 2.5 - lk, b.z + ahead.z * 40 * (1 - lk));
   if (S.shake > 0) {
     camLook.x += (Math.random() - 0.5) * S.shake * 3; camLook.y += (Math.random() - 0.5) * S.shake * 3;
     S.shake = Math.max(0, S.shake - dt * 2.5);
   }
   // the up vector leans with the bank, in the plane's own frame
-  tmpE.set(0, b.yaw, b.roll * 0.3);
+  tmpE.set(0, b.yaw, b.roll * 0.3 * (1 - lk));
   camera.up.set(0, 1, 0).applyEuler(tmpE);
   camera.lookAt(camLook);
   const fov = b.boosting ? 72 : 62;

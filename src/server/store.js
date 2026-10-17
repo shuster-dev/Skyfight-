@@ -9,8 +9,11 @@
 // and a purchase in the same second cannot overwrite each other.
 import fs from 'node:fs';
 import path from 'node:path';
+import { displayName } from '../shared/planes.js';
 
-const board = (p, i) => ({ rank: i + 1, name: p.name, level: p.level, kills: p.kills || 0, plane: p.plane });
+// the board is for saved pilots only, each under their own number
+const board = (p, i) => ({ rank: i + 1, name: displayName(p), level: p.level, kills: p.kills || 0, plane: p.plane });
+const tagKey = (name) => String(name).trim().toLowerCase();
 const BOARD_SORT = { level: (a, b) => (b.xp || 0) - (a.xp || 0), kills: (a, b) => (b.kills || 0) - (a.kills || 0) };
 
 class MemoryStore {
@@ -19,11 +22,13 @@ class MemoryStore {
     this.users = new Map();   // id -> user
     this.names = new Map();   // username -> id
     this.pilots = new Map();  // id -> pilot
+    this.tags = new Map();    // name -> the last number given for it
     if (this.file && fs.existsSync(this.file)) {
       try {
         const raw = JSON.parse(fs.readFileSync(this.file, 'utf8'));
         for (const u of raw.users || []) this.users.set(u.id, u), u.username && this.names.set(u.username, u.id);
         for (const p of raw.pilots || []) this.pilots.set(p.id, p);
+        for (const [k, n] of raw.tags || []) this.tags.set(k, n);
       } catch (e) { console.warn('[store] could not read', this.file, e.message); }
     }
   }
@@ -36,7 +41,7 @@ class MemoryStore {
     clearTimeout(this._t), this._t = null;
     try {
       fs.mkdirSync(path.dirname(this.file), { recursive: true });
-      fs.writeFileSync(this.file, JSON.stringify({ users: [...this.users.values()], pilots: [...this.pilots.values()] }));
+      fs.writeFileSync(this.file, JSON.stringify({ users: [...this.users.values()], pilots: [...this.pilots.values()], tags: [...this.tags] }));
     } catch (e) { console.warn('[store] could not write', e.message); }
   }
   async connect() { return this; }
@@ -51,7 +56,13 @@ class MemoryStore {
   async getPilot(id) { return this.pilots.get(id) || null; }
   async savePilot(p) { this.pilots.set(p.id, p); this._flush(); return p; }
   async leaderboard(kind = 'level', limit = 20) {
-    return [...this.pilots.values()].filter((p) => p.name).sort(BOARD_SORT[kind] || BOARD_SORT.level).slice(0, limit).map(board);
+    return [...this.pilots.values()].filter((p) => p.name && p.registered).sort(BOARD_SORT[kind] || BOARD_SORT.level).slice(0, limit).map(board);
+  }
+  async nextTag(name) {
+    const n = (this.tags.get(tagKey(name)) || 0) + 1;
+    this.tags.set(tagKey(name), n);
+    this._flush();
+    return n;
   }
 }
 
@@ -70,6 +81,7 @@ class MongoStore {
     const db = this.client.db(this.dbName);
     this.usersC = db.collection('users');
     this.pilotsC = db.collection('pilots');
+    this.countersC = db.collection('counters');
     await this.usersC.createIndex({ id: 1 }, { unique: true });
     await this.usersC.createIndex({ username: 1 }, { unique: true, sparse: true });
     await this.pilotsC.createIndex({ id: 1 }, { unique: true });
@@ -118,8 +130,14 @@ class MongoStore {
   }
   async leaderboard(kind = 'level', limit = 20) {
     const sort = kind === 'kills' ? { kills: -1 } : { xp: -1 };
-    const rows = await this.pilotsC.find({ name: { $exists: true, $ne: '' } }, { projection: { _id: 0 } }).sort(sort).limit(limit).toArray();
+    const rows = await this.pilotsC.find({ registered: true, name: { $exists: true, $ne: '' } }, { projection: { _id: 0 } }).sort(sort).limit(limit).toArray();
     return rows.map(board);
+  }
+  async nextTag(name) {
+    // one counter per name, raised atomically: two pilots saving the same
+    // name in the same second still get different numbers
+    const r = await this.countersC.findOneAndUpdate({ _id: `tag:${tagKey(name)}` }, { $inc: { n: 1 } }, { upsert: true, returnDocument: 'after' });
+    return (r?.value ?? r)?.n || 1;
   }
 }
 

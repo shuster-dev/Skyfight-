@@ -11,7 +11,7 @@
 import { Room } from '@colyseus/core';
 import { verifyToken } from '../auth.js';
 import { normalize, payKill, view } from '../pilot.js';
-import { PLANES, PLANE_ORDER, levelOf, statsOf, killReward } from '../../shared/planes.js';
+import { PLANES, PLANE_ORDER, displayName, levelOf, statsOf, killReward } from '../../shared/planes.js';
 import { ARENA, groundAt, spawnPoint } from '../../shared/arena.js';
 import { fly, forward, newBody, plausibleMove } from '../../shared/flight.js';
 import { ASSIST_SHARE, CREDIT_MS, GUN, MISSILE, REPAIR, RESPAWN, aimDir, offNose, pickTarget, segmentHit, steerMissile } from '../../shared/combat.js';
@@ -69,7 +69,7 @@ export class ArenaRoom extends Room {
       this.drop(p.key);
     }
     const pilot = auth.pilot;
-    const p = this.addPlane({ uid: auth.id, sid: client.sessionId, name: pilot.name, plane: pilot.plane, level: pilot.level, upgrades: pilot.upgrades, pilot });
+    const p = this.addPlane({ uid: auth.id, sid: client.sessionId, name: displayName(pilot), plane: pilot.plane, level: pilot.level, upgrades: pilot.upgrades, pilot });
     this.bySession.set(client.sessionId, p.key);
     this.fillBots();
   }

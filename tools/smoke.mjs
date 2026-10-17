@@ -84,6 +84,23 @@ async function run(label, viewport, mobile) {
   ok('the stick climbs', st.y > y0 + 5, { y0, y: st.y });
   if (!mobile) { await page.keyboard.up('ArrowUp'); await page.keyboard.up('Space'); }
   ok('the HUD is up', await page.isVisible('#hud') && await page.isVisible('#score'));
+  if (mobile) {
+    // the right thumb drags the camera round; let go and it comes back
+    const lp = await (await page.$('#look-pad')).boundingBox();
+    const lx = lp.x + lp.width * 0.3, ly = lp.y + 40;
+    await page.evaluate(([x, y]) => {
+      const el = document.querySelector('#look-pad');
+      const ev = (t, X, Y) => el.dispatchEvent(new PointerEvent(t, { pointerId: 9, clientX: X, clientY: Y, bubbles: true, pointerType: 'touch' }));
+      ev('pointerdown', x, y); ev('pointermove', x - 160, y + 30);
+    }, [lx, ly]);
+    await wait(700);
+    const turned = await page.evaluate(() => window.__sky.look.yaw);
+    await snap('5b-look');
+    ok('dragging on the right turns the camera', Math.abs(turned) > 0.5, turned);
+    await page.evaluate(() => document.querySelector('#look-pad').dispatchEvent(new PointerEvent('pointerup', { pointerId: 9, bubbles: true, pointerType: 'touch' })));
+    // (slowly here: software rendering draws a few frames a second)
+    ok('let go, and it settles back behind', await page.waitForFunction(() => window.__sky.look.yaw === 0, null, { timeout: 15000 }).then(() => true, () => false), await page.evaluate(() => window.__sky.look));
+  }
   if (!mobile) {
     // nose down into the sea: the death screen, then back in the air
     await page.keyboard.down('ArrowDown');
