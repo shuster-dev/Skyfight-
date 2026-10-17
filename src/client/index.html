@@ -134,7 +134,14 @@
   .hp > i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #47e08a, #b6f56b); transition: width 0.15s; }
   .hp.low > i { background: linear-gradient(90deg, #ff4d5e, #ff9a3c); }
   /* the board in the air: small, the top three and you, out of the way */
-  #hud .tr { position: absolute; top: max(10px, env(safe-area-inset-top)); left: 12px; width: min(150px, 34vw); background: rgba(8, 12, 18, 0.45); border-radius: 8px; padding: 4px 8px; font-size: 11px; line-height: 1.35; }
+  /* the radar, top left; the short board under it */
+  #radar-box { position: absolute; top: max(10px, env(safe-area-inset-top)); left: 12px; width: 112px; text-align: center; }
+  #radar { width: 112px; height: 112px; display: block; border-radius: 50%; border: 1px solid rgba(120, 220, 200, 0.35); }
+  #radar-near { font-size: 11px; font-weight: 700; color: #ff9a9a; margin-top: 2px; text-shadow: 0 1px 2px #000; min-height: 14px; }
+  .tagdot { position: absolute; width: 5px; height: 5px; margin: -2.5px; border-radius: 50%; background: rgba(255, 120, 130, 0.9); box-shadow: 0 0 3px #000; }
+  .tagdot.mate { background: #8fc0ff; }
+  @media (orientation: landscape) and (max-height: 500px) { #radar-box { width: 92px; } #radar { width: 92px; height: 92px; } #hud .tr { top: 120px !important; } }
+  #hud .tr { position: absolute; top: calc(max(10px, env(safe-area-inset-top)) + 134px); left: 12px; width: min(150px, 34vw); background: rgba(8, 12, 18, 0.45); border-radius: 8px; padding: 4px 8px; font-size: 11px; line-height: 1.35; }
   #hud .tr .r { display: flex; gap: 6px; padding: 2px 0; }
   #hud .tr .r .n { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #hud .tr .r.me { color: var(--accent); font-weight: 800; }
@@ -146,15 +153,22 @@
   #btn-sound.muted svg path:last-child { opacity: 0; }
   #btn-sound.muted { opacity: 0.5; }
   @keyframes fade { 0%, 80% { opacity: 1; } 100% { opacity: 0; } }
-  #cross { position: absolute; left: 50%; top: 46%; width: 34px; height: 34px; margin: -17px; border: 2px solid rgba(255, 255, 255, 0.75); border-radius: 50%; }
+  #cross { position: absolute; left: 50%; top: 46%; width: 28px; height: 28px; margin: -14px; border: 1.5px solid rgba(255, 255, 255, 0.7); border-radius: 50%; }
   #cross::before, #cross::after { content: ''; position: absolute; background: rgba(255, 255, 255, 0.85); }
   #cross::before { left: 50%; top: -9px; bottom: -9px; width: 2px; margin-left: -1px; clip-path: polygon(0 0, 100% 0, 100% 9px, 0 9px, 0 calc(100% - 9px), 100% calc(100% - 9px), 100% 100%, 0 100%); }
   #cross::after { top: 50%; left: -9px; right: -9px; height: 2px; margin-top: -1px; clip-path: polygon(0 0, 9px 0, 9px 100%, 0 100%, 0 0, calc(100% - 9px) 0, 100% 0, 100% 100%, calc(100% - 9px) 100%); }
   #cross.hit { border-color: #ffe14d; transform: scale(1.25); transition: transform 0.05s; }
-  #lock { position: absolute; width: 56px; height: 56px; margin: -28px; border: 2px solid var(--red); border-radius: 8px; transform: rotate(45deg); transition: opacity 0.1s; }
-  #lock.ready { border-width: 3px; box-shadow: 0 0 12px var(--red); }
+  /* the missile lock: four thin corners round the target, nothing more */
+  #lock { position: absolute; width: 30px; height: 30px; margin: -15px; --c: rgba(255, 92, 92, 0.95); opacity: 0.9;
+    background:
+      linear-gradient(var(--c), var(--c)) 0 0 / 8px 1.5px, linear-gradient(var(--c), var(--c)) 0 0 / 1.5px 8px,
+      linear-gradient(var(--c), var(--c)) 100% 0 / 8px 1.5px, linear-gradient(var(--c), var(--c)) 100% 0 / 1.5px 8px,
+      linear-gradient(var(--c), var(--c)) 0 100% / 8px 1.5px, linear-gradient(var(--c), var(--c)) 0 100% / 1.5px 8px,
+      linear-gradient(var(--c), var(--c)) 100% 100% / 8px 1.5px, linear-gradient(var(--c), var(--c)) 100% 100% / 1.5px 8px;
+    background-repeat: no-repeat; filter: drop-shadow(0 0 1px #000); transition: width 0.15s, height 0.15s, margin 0.15s; }
+  #lock.ready { width: 22px; height: 22px; margin: -11px; --c: #ff4040; opacity: 1; }
   .tags { position: absolute; inset: 0; }
-  .tagp { position: absolute; transform: translate(-50%, -100%); text-align: center; font-size: 12px; font-weight: 700; text-shadow: 0 1px 3px #000, 0 0 6px #000; white-space: nowrap; }
+  .tagp { position: absolute; transform: translate(-50%, -100%); text-align: center; font-size: 10.5px; font-weight: 700; opacity: 0.9; text-shadow: 0 1px 2px #000, 0 0 4px #000; white-space: nowrap; }
   .tagp .mini { width: 44px; height: 4px; margin: 3px auto 0; background: rgba(0, 0, 0, 0.5); border-radius: 2px; overflow: hidden; }
   .tagp .mini i { display: block; height: 100%; background: var(--red); }
   .tagp.off { color: #ff8a95; }
@@ -188,7 +202,7 @@
   .arrow.boss { border-bottom-color: #ffd27a; }
   .tagp.mate { color: #8fc0ff; } .tagp.foe { color: #ff9a9a; }
   /* the aim pip: where to put the crosshair to hit the plane in the box */
-  #lead { position: absolute; width: 16px; height: 16px; margin: -8px; border: 2px solid #ffd25e; border-radius: 50%; box-shadow: 0 0 6px rgba(255,210,94,0.8); }
+  #lead { position: absolute; width: 8px; height: 8px; margin: -4px; border: 1.5px solid #ffd25e; border-radius: 50%; box-shadow: 0 0 2px #000; }
   #lead::after { content: ''; position: absolute; left: 5px; top: 5px; width: 2px; height: 2px; background: #ffd25e; }
   /* hit from: arcs round the middle, turned to the shooter */
   #hitdir { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
@@ -326,6 +340,7 @@
       <div class="xpbar"><i id="hud-xp"></i></div>
     </div>
   </div>
+  <div id="radar-box"><canvas id="radar"></canvas><div id="radar-near" class="num"></div></div>
   <div class="tr" id="score"></div>
   <div id="bossbar" class="hidden"><div class="bb-t"><span>מפציץ</span><span class="num" id="bb-left"></span></div><div class="bb-hp"><i id="bb-hp"></i></div></div>
   <div id="teamscore" class="hidden"><span class="b"><span class="num" id="ts-b">0</span> כחול</span><span class="sep">:</span><span class="r">אדום <span class="num" id="ts-r">0</span></span></div>

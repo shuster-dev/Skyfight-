@@ -12,9 +12,10 @@ const O = new Object3D(), V = new Vector3(), Q = new Quaternion(), Z = new Vecto
 export class Fx {
   constructor(scene) {
     this.scene = scene;
-    // tracers: long thin bright boxes
+    // tracers: long thin bright streaks — thin, so a sky of guns is not a
+    // sky of orange blocks
     // solid orange, not additive: an additive streak vanishes against a bright sky
-    this.tr = new InstancedMesh(new BoxGeometry(0.32, 0.32, 9), new MeshBasicMaterial({ color: 0xffa21a, fog: false }), 600);
+    this.tr = new InstancedMesh(new BoxGeometry(0.17, 0.17, 7), new MeshBasicMaterial({ color: 0xffa21a, fog: false }), 600);
     this.tr.instanceMatrix.setUsage(DynamicDrawUsage);
     this.tr.frustumCulled = false;
     this.tracers = [];
@@ -99,7 +100,7 @@ export class Fx {
 
   /** Sparks where a round hits a plane. */
   spark(p) {
-    this.balls.push({ p: p.clone(), s: 1.2, t: 0, life: 0.18 });
+    this.balls.push({ p: p.clone(), s: 0.8, t: 0, life: 0.12 });
   }
 
   /** Bring the missiles on screen in line with the room's list. */

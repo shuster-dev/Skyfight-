@@ -1,5 +1,5 @@
 // Skyfight in the browser: the front door, the hangar, and the sky.
-import { Euler, Vector3, MathUtils } from 'three';
+import { Euler, Vector3, MathUtils, Quaternion } from 'three';
 import { Net } from './net.js';
 import { Controls } from './controls.js';
 import { sound } from './audio.js';
@@ -9,7 +9,7 @@ import { Fx } from './gfx/fx.js';
 import { Hangar } from './gfx/hangar.js';
 import { PAINTS, PAINT_ORDER, PLANES, PLANE_ORDER, UPGRADES, UPGRADE_ORDER, TIER_MAX, nextTier, statsOf, levelProgress, planeOpen, planeOwned, cleanCallsign, displayName } from '../shared/planes.js';
 import { ARENA, BRIDGE, groundAt, underBridge } from '../shared/arena.js';
-import { fly, forward, newBody } from '../shared/flight.js';
+import { flyQ, forward, newBodyQ, drawnQ, Q as QQ } from '../shared/flight.js';
 import { FLARE, GUN, MISSILE, RESPAWN, aimDir, offNose, pickTarget } from '../shared/combat.js';
 
 const $ = (s) => document.querySelector(s);
@@ -409,7 +409,8 @@ function hook(room) {
   room.onMessage('spawn', (m) => {
     const me = S.me;
     if (!me) return;
-    me.body = newBody(m, me.stats);
+    me.body = newBodyQ(m, me.stats);
+    S.camUp = new Vector3(0, 1, 0);
     me.alive = true; me.hp = m.hp; me.ammo = m.ammo; me.reloadT = 0; me.crashed = false; me.flares = m.flares ?? me.stats.flares; me.flareT = 0;
     me.shieldUntil = performance.now() + m.shield * 1000;
     me.mesh.visible = true;
@@ -419,7 +420,7 @@ function hook(room) {
     show('#death', false);
     show('#hud');
   });
-  room.onMessage('fix', (m) => { if (S.me?.body) Object.assign(S.me.body, m); });
+  room.onMessage('fix', (m) => { if (S.me?.body) Object.assign(S.me.body, m), (S.me.body.q = QQ.euler(m.yaw, m.pitch, 0)); });
   room.onMessage('s', onSnapshot);
   room.onMessage('score', (sc) => paintTeams(sc));
   room.onMessage('roster', (list) => {
@@ -494,7 +495,7 @@ const near = (p) => Math.max(0.15, 1 - camera.position.distanceTo(p) / 900);
 function onSnapshot(s) {
   const now = performance.now(), seen = new Set();
   for (const a of s.p) {
-    const [key, x, y, z, yaw, pitch, roll, hp, flags, spd] = a;
+    const [key, x, y, z, yaw, pitch, roll, hp, flags, spd, qx, qy, qz, qw] = a;
     seen.add(key);
     if (key === S.myKey) {
       if (S.me) S.me.serverHp = hp;
@@ -511,7 +512,9 @@ function onSnapshot(s) {
       // a different plane under the same key (it changed in the hangar)
       scene.remove(o.mesh); o.mesh = buildPlane(r.plane, r.paint); o.kind = r.plane; o.paint = r.paint || 'stock'; scene.add(o.mesh);
     }
-    o.buf.push({ t: now, x: x / 10, y: y / 10, z: z / 10, yaw: yaw / 1000, pitch: pitch / 1000, roll: roll / 1000, speed: spd / 10 });
+    // the attitude as a quaternion when the room sends one (any way up), else from the angles
+    const qa = qw !== undefined ? new Quaternion(qx / 1000, qy / 1000, qz / 1000, qw / 1000).normalize() : new Quaternion().setFromEuler(new Euler(pitch / 1000, yaw / 1000, roll / 1000, 'YXZ'));
+    o.buf.push({ t: now, x: x / 10, y: y / 10, z: z / 10, q: qa, speed: spd / 10 });
     if (o.buf.length > 8) o.buf.shift();
     o.hp = hp; o.alive = !!(flags & 1); o.firing = !!(flags & 2); o.boost = !!(flags & 4); o.shield = !!(flags & 8);
   }
@@ -657,12 +660,12 @@ function air(dt, time) {
     while (i > 0 && b[i - 1].t > rt) i--;
     const a = b[Math.max(0, i - 1)], c = b[i];
     const k = c.t === a.t ? 1 : MathUtils.clamp((rt - a.t) / (c.t - a.t), 0, 1.2);
-    const lerpA = (x, y) => x + Math.atan2(Math.sin(y - x), Math.cos(y - x)) * k;
     o.mesh.position.set(a.x + (c.x - a.x) * k, a.y + (c.y - a.y) * k, a.z + (c.z - a.z) * k);
-    o.mesh.rotation.set(lerpA(a.pitch, c.pitch), lerpA(a.yaw, c.yaw), lerpA(a.roll, c.roll), 'YXZ');
+    o.mesh.quaternion.slerpQuaternions(a.q, c.q, Math.min(1, k));
     o.mesh.visible = o.alive;
     o.x = o.mesh.position.x; o.y = o.mesh.position.y; o.z = o.mesh.position.z;
-    o.yaw = o.mesh.rotation.y; o.pitch = o.mesh.rotation.x; o.speed = c.speed;
+    const fv = tmpV.set(0, 0, -1).applyQuaternion(o.mesh.quaternion);
+    o.yaw = Math.atan2(-fv.x, -fv.z); o.pitch = Math.asin(MathUtils.clamp(fv.y, -1, 1)); o.speed = c.speed;
     const f = forward(o.yaw, o.pitch);
     o.vel = { x: f.x * c.speed, y: f.y * c.speed, z: f.z * c.speed };
     animatePlane(o.mesh, dt, { boost: o.boost, speed: c.speed, time });
@@ -674,10 +677,11 @@ function air(dt, time) {
 
   if (me?.body && me.alive) {
     const input = controls.read();
-    const res = me.crashed ? '' : fly(me.body, input, me.stats, dt);
+    const res = me.crashed ? '' : flyQ(me.body, input, me.stats, dt);
     const b = me.body;
     me.mesh.position.set(b.x, b.y, b.z);
-    me.mesh.rotation.set(b.pitch, b.yaw, b.roll, 'YXZ');
+    const dq = drawnQ(b);
+    me.mesh.quaternion.set(dq.x, dq.y, dq.z, dq.w);
     me.mesh.visible = now > me.shieldUntil || Math.floor(time * 8) % 2 === 0;
     animatePlane(me.mesh, dt, { boost: b.boosting, speed: b.speed, time, ammo: me.ammo, ammoMax: me.stats.missiles });
     if (input.missile && me.ammo > 0) S.room?.send('missile');
@@ -703,7 +707,7 @@ function air(dt, time) {
     S.sendT += dt;
     if (S.sendT >= 0.05) {
       S.sendT = 0;
-      S.room?.send('pose', [r2(b.x), r2(b.y), r2(b.z), r3(b.yaw), r3(b.pitch), r3(b.roll), r2(b.speed), (input.fire ? 1 : 0) | (b.boosting ? 2 : 0)]);
+      S.room?.send('pose', [r2(b.x), r2(b.y), r2(b.z), r3(b.yaw), r3(b.pitch), r3(b.roll), r2(b.speed), (input.fire ? 1 : 0) | (b.boosting ? 2 : 0), r3(dq.x), r3(dq.y), r3(dq.z), r3(dq.w)]);
     }
     sound.engine(true, b.speed, b.boosting);
     chase(b, dt, input);
@@ -731,28 +735,39 @@ function air(dt, time) {
 const r2 = (v) => Math.round(v * 100) / 100, r3 = (v) => Math.round(v * 1000) / 1000;
 
 /** The chase camera: behind and above, leaning into turns, wider on the burner. */
+const QF = new Quaternion(), QL = new Quaternion(), V1 = new Vector3(), V2 = new Vector3(), V3 = new Vector3();
+/**
+ * The chase camera: behind and above the plane in the plane's own frame, so
+ * it follows through a loop; its up eases toward the plane's up rather than
+ * snapping, and leans a little with the bank. Wider on the burner.
+ */
 function chase(b, dt, input) {
-  // free look (controls.js): the camera swung round the plane by the
-  // right thumb, looking at the plane instead of ahead of it
   const look = controls.settleLook(dt);
   const lk = Math.min(1, Math.abs(look.yaw) * 1.5 + Math.abs(look.pitch) * 1.5);
-  const f = forward(b.yaw + look.yaw, b.pitch * 0.6 * (1 - lk) - look.pitch);
-  const ahead = forward(b.yaw, b.pitch * 0.6);
-  // a phone held upright sees a narrow slice: stand further back
+  QF.set(b.q.x, b.q.y, b.q.z, b.q.w);
+  const fwd = V1.set(0, 0, -1).applyQuaternion(QF), up = V2.set(0, 1, 0).applyQuaternion(QF);
+  S.camUp.lerp(up, Math.min(1, dt * 3)).normalize();
+  // free look (controls.js): swing the camera round the plane's up and wings
+  const back = V3.copy(fwd).negate();
+  if (lk) {
+    QL.setFromAxisAngle(S.camUp, look.yaw); back.applyQuaternion(QL);
+    const side = tmpV.crossVectors(S.camUp, back).normalize();
+    QL.setFromAxisAngle(side, look.pitch); back.applyQuaternion(QL);
+  }
   const narrow = camera.aspect < 1 ? 1.75 : 1;
-  const dist = (19 + (b.boosting ? 4 : 0)) * narrow, up = 5.6 * narrow;
-  camPos.set(b.x - f.x * dist, b.y - f.y * dist + up, b.z - f.z * dist);
+  const dist = (19 + (b.boosting ? 4 : 0)) * narrow, h = 5.6 * narrow;
+  camPos.copy(back).multiplyScalar(dist).addScaledVector(S.camUp, h).add(tmpV.set(b.x, b.y, b.z));
   const g = groundAt(camPos.x, camPos.z) + 3;
   if (camPos.y < g) camPos.y = g;
   camera.position.lerp(camPos, Math.min(1, dt * 7));
-  camLook.set(b.x + ahead.x * 40 * (1 - lk), b.y + ahead.y * 40 * (1 - lk) + 2.5 - lk, b.z + ahead.z * 40 * (1 - lk));
+  camLook.set(b.x, b.y, b.z).addScaledVector(fwd, 40 * (1 - lk)).addScaledVector(S.camUp, 2.5 - lk);
   if (S.shake > 0) {
     camLook.x += (Math.random() - 0.5) * S.shake * 3; camLook.y += (Math.random() - 0.5) * S.shake * 3;
     S.shake = Math.max(0, S.shake - dt * 2.5);
   }
-  // the up vector leans with the bank, in the plane's own frame
-  tmpE.set(0, b.yaw, b.roll * 0.3 * (1 - lk));
-  camera.up.set(0, 1, 0).applyEuler(tmpE);
+  // lean a little with the bank
+  QL.setFromAxisAngle(fwd, -b.roll * 0.3 * (1 - lk));
+  camera.up.copy(S.camUp).applyQuaternion(QL);
   camera.lookAt(camLook);
   const fov = b.boosting ? 72 : 62;
   if (Math.abs(camera.fov - fov) > 0.1) { camera.fov += (fov - camera.fov) * Math.min(1, dt * 4); camera.updateProjectionMatrix(); }
@@ -769,15 +784,16 @@ function guns(o, mesh, rate, dt, mine) {
   while (holder.gunT >= every) {
     holder.gunT -= every;
     const m = muzzles[(holder.gun = (holder.gun || 0) + 1) % muzzles.length];
-    MZ.copy(m).applyEuler(mesh.rotation).add(mesh.position);
+    MZ.copy(m).applyQuaternion(mesh.quaternion).add(mesh.position);
     // the room leads the guns at a target near the nose: so does the tracer
     const target = mine ? pickTarget(o, aimables(), GUN.assistCone, GUN.assistRange) : null;
     const d = aimDir(o, target);
     const f = forward(o.yaw, o.pitch);
     DIR.set(d.x * GUN.speed + f.x * (o.speed || 60), d.y * GUN.speed + f.y * (o.speed || 60), d.z * GUN.speed + f.z * (o.speed || 60));
     const sp = DIR.length();
-    fx.tracer(MZ, DIR.normalize(), sp);
-    fx.muzzle(MZ);
+    // one round in two of someone else's is a tracer, as on a real belt:
+    // enough to see where they shoot, not a screen full of streaks
+    if (mine || (holder.gun >> 1) % 2) fx.tracer(MZ, DIR.normalize(), sp), fx.muzzle(MZ);
     if (mine) sound.shot(HEAVY.has(S.pilot.plane));
   }
 }
@@ -827,18 +843,25 @@ function hud(dt, now) {
     $('#white').style.opacity = me.alive ? Math.min(0.85, c * 1.6) : 0;
     // the lock: what a missile would go after now
     const t = me.alive ? pickTarget({ ...b, alive: true }, aimables().filter((o) => o.alive && !o.shield), MISSILE.lockCone, MISSILE.lockRange) : null;
+    // shown only with a missile on the rail, gliding rather than jumping
+    // from one plane to the next
     const lock = $('#lock');
-    if (t && project(P.set(t.x, t.y, t.z))) {
+    if (t && me.ammo > 0 && project(P.set(t.x, t.y, t.z))) {
+      const same = S.lockOn === t.key, k = same ? Math.min(1, dt * 18) : 1;
+      S.lockOn = t.key;
+      S.lockX = (S.lockX ?? P.x) + (P.x - S.lockX) * k; S.lockY = (S.lockY ?? P.y) + (P.y - S.lockY) * k;
       show(lock);
-      lock.style.left = `${P.x}px`; lock.style.top = `${P.y}px`;
-      lock.classList.toggle('ready', me.ammo > 0);
-    } else show(lock, false);
+      lock.style.left = `${S.lockX}px`; lock.style.top = `${S.lockY}px`;
+      // tight on it once it has been held a moment
+      S.lockT = same ? (S.lockT || 0) + dt : 0;
+      lock.classList.toggle('ready', S.lockT > 0.4);
+    } else show(lock, false), S.lockOn = '', S.lockT = 0;
     // the crosshair where the guns point: 300 m down the nose
     const f = forward(b.yaw, b.pitch), cross = $('#cross');
     if (project(P.set(b.x + f.x * 300, b.y + f.y * 300, b.z + f.z * 300))) cross.style.left = `${P.x}px`, cross.style.top = `${P.y}px`;
     // the aim pip: where the nearest plane ahead will be when the rounds get
     // there. Crosshair on it and the guns are helped onto it (shared/combat.js)
-    const g = me.alive ? pickTarget({ ...b, alive: true }, aimables().filter((o) => o.alive), 0.5, GUN.assistRange + 150) : null;
+    const g = me.alive ? pickTarget({ ...b, alive: true }, aimables().filter((o) => o.alive), 0.35, GUN.assistRange + 100) : null;
     const lead = $('#lead');
     if (g) {
       const d = Math.hypot(g.x - b.x, g.y - b.y, g.z - b.z), tt = d / (GUN.speed + b.speed), v = g.vel || { x: 0, y: 0, z: 0 };
@@ -873,45 +896,87 @@ function project(v) {
 }
 
 /** Names over the planes in view, and arrows at the edge for the nearest ones out of it. */
+/**
+ * Over the planes in view: a small mark each, and words (name, distance,
+ * health) only on the two nearest — the radar has the rest. No arrows at the
+ * edges any more: the radar says where everyone is.
+ */
 function tags() {
   const box = $('#tags');
   const me = S.me?.body;
   if (!me) return;
   const list = [...S.others.values()].filter((o) => o.alive).map((o) => ({ o, d: Math.hypot(o.x - me.x, o.y - me.y, o.z - me.z) })).sort((a, b) => a.d - b.d);
-  let html = '';
-  let arrows = 0;
+  let html = '', named = 0;
   for (const { o, d } of list) {
-    if (d > 1400) break;
+    if (d > 1600) break;
     const r = S.roster.get(o.key);
-    P.set(o.x, o.y + 4, o.z);
-    const behind = P.clone().project(camera).z > 1;
-    if (!behind && project(P)) {
+    P.set(o.x, o.y + 3.5, o.z);
+    if (P.clone().project(camera).z > 1 || !project(P)) continue;
+    const side = S.teams ? (r?.team === S.myTeam ? ' mate' : ' foe') : '';
+    if (named < 2 && d < 900) {
+      named++;
       const bar = o.hp < 100 ? `<div class="mini"><i style="width:${o.hp}%"></i></div>` : '';
-      const side = S.teams ? (r?.team === S.myTeam ? ' mate' : ' foe') : '';
-      html += `<div class="tagp${side}" style="left:${P.x}px;top:${P.y}px">${esc(r?.name || '')} <span style="opacity:.7">${r?.level || ''}</span>${d < 900 ? ` · <span class="num">${Math.round(d)}m</span>` : ''}${bar}</div>`;
-    } else if (arrows < 3 && !(S.teams && r?.team === S.myTeam)) {
-      arrows++;
-      // where it is, folded onto the edge of the screen
-      const v = new Vector3(o.x, o.y, o.z).applyMatrix4(camera.matrixWorldInverse);
-      const ang = Math.atan2(v.x, v.y);
-      const cx = innerWidth / 2, cy = innerHeight / 2, R = Math.min(cx, cy) - 40;
-      html += `<div class="arrow" style="left:${cx + Math.sin(ang) * R - 9}px;top:${cy - Math.cos(ang) * R - 8}px;transform:rotate(${ang}rad)"></div>`;
-    }
+      html += `<div class="tagp${side}" style="left:${P.x}px;top:${P.y}px">${esc(r?.name || '')} · <span class="num">${Math.round(d)}</span>${bar}</div>`;
+    } else html += `<div class="tagdot${side}" style="left:${P.x}px;top:${P.y}px"></div>`;
   }
-  // the bomber: a tag when in view, a gold arrow at the edge when not
   const B = S.boss;
   if (B) {
     P.set(B.x, B.y + 9, B.z);
-    const behind = P.clone().project(camera).z > 1;
-    const d = Math.hypot(B.x - me.x, B.y - me.y, B.z - me.z);
-    if (!behind && project(P)) html += `<div class="tagp boss" style="left:${P.x}px;top:${P.y}px">מפציץ · <span class="num">${Math.round(d)}m</span></div>`;
-    else {
-      const v = new Vector3(B.x, B.y, B.z).applyMatrix4(camera.matrixWorldInverse), ang = Math.atan2(v.x, v.y);
-      const cx = innerWidth / 2, cy = innerHeight / 2, R = Math.min(cx, cy) - 40;
-      html += `<div class="arrow boss" style="left:${cx + Math.sin(ang) * R - 9}px;top:${cy - Math.cos(ang) * R - 8}px;transform:rotate(${ang}rad)"></div>`;
-    }
+    if (P.clone().project(camera).z <= 1 && project(P)) html += `<div class="tagp boss" style="left:${P.x}px;top:${P.y}px">מפציץ · <span class="num">${Math.round(Math.hypot(B.x - me.x, B.y - me.y, B.z - me.z))}</span></div>`;
   }
   box.innerHTML = html;
+  radar();
+}
+
+/**
+ * The radar: who is where, turned so the nose is up. Rings every 500 m out
+ * to 1600; red the enemies, blue the side, gold the bomber, white a missile
+ * coming for me. A triangle up or down for a plane well above or below.
+ * Under it, the nearest enemy's distance.
+ */
+const RADAR = { range: 1600 };
+function radar() {
+  const cv = $('#radar'), me = S.me?.body;
+  if (!cv || !me) return;
+  const dpr = Math.min(2, devicePixelRatio || 1), W = cv.clientWidth;
+  if (cv.width !== Math.round(W * dpr)) cv.width = cv.height = Math.round(W * dpr);
+  const g = cv.getContext('2d'), R = cv.width / 2;
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.clearRect(0, 0, cv.width, cv.height);
+  g.translate(R, R);
+  g.fillStyle = 'rgba(6, 14, 22, 0.55)'; g.beginPath(); g.arc(0, 0, R - 1, 0, Math.PI * 2); g.fill();
+  g.strokeStyle = 'rgba(120, 220, 200, 0.22)'; g.lineWidth = 1 * dpr;
+  for (const k of [500, 1000, 1500]) { g.beginPath(); g.arc(0, 0, (k / RADAR.range) * (R - 4), 0, Math.PI * 2); g.stroke(); }
+  g.beginPath(); g.moveTo(0, -R + 3); g.lineTo(0, R - 3); g.moveTo(-R + 3, 0); g.lineTo(R - 3, 0); g.stroke();
+  // me: a small chevron, nose up
+  g.fillStyle = '#eaf6ff'; g.beginPath(); g.moveTo(0, -5 * dpr); g.lineTo(4 * dpr, 4 * dpr); g.lineTo(0, 2 * dpr); g.lineTo(-4 * dpr, 4 * dpr); g.closePath(); g.fill();
+  const cos = Math.cos(me.yaw), sin = Math.sin(me.yaw);
+  const put = (x, y, z, color, size, mark) => {
+    const dx = x - me.x, dz = z - me.z;
+    // into my frame: forward is up on the radar, right is right
+    const fx = -sin * dx - cos * dz, rx = cos * dx - sin * dz;
+    let px = rx, py = -fx, d = Math.hypot(px, py);
+    const max = RADAR.range;
+    if (d > max) px *= max / d, py *= max / d, size *= 0.7;
+    px *= (R - 6) / max; py *= (R - 6) / max;
+    g.fillStyle = color;
+    const dy = y - me.y, s = size * dpr;
+    g.beginPath();
+    if (mark && dy > 60) { g.moveTo(px, py - s); g.lineTo(px + s, py + s * 0.8); g.lineTo(px - s, py + s * 0.8); }
+    else if (mark && dy < -60) { g.moveTo(px, py + s); g.lineTo(px + s, py - s * 0.8); g.lineTo(px - s, py - s * 0.8); }
+    else g.arc(px, py, s * 0.8, 0, Math.PI * 2);
+    g.fill();
+  };
+  let near = null;
+  for (const o of S.others.values()) {
+    if (!o.alive || o.x === undefined) continue;
+    const mate = S.teams && S.roster.get(o.key)?.team === S.myTeam;
+    put(o.x, o.y, o.z, mate ? '#6aa8ff' : '#ff5a64', 3, true);
+    if (!mate) { const d = Math.hypot(o.x - me.x, o.y - me.y, o.z - me.z); if (!near || d < near.d) near = { d, dy: o.y - me.y }; }
+  }
+  if (S.boss) put(S.boss.x, S.boss.y, S.boss.z, '#ffd27a', 5, true);
+  for (const m of S.missiles) if (m.target === S.myKey && Math.floor(performance.now() / 150) % 2) put(m.x, m.y, m.z, '#ffffff', 2.5, false);
+  $('#radar-near').textContent = near ? `${Math.round(near.d)}m${near.dy > 60 ? ' ▲' : near.dy < -60 ? ' ▼' : ''}` : '';
 }
 
 /** Who I may shoot at: everyone, or in teams the other side. */
@@ -1009,13 +1074,25 @@ function watchFrames(now) {
 }
 $('#set-quality').addEventListener('change', (e) => pickQuality(e.target.value));
 
+/**
+ * Fit the picture to the screen as it is now. A phone turned on its side
+ * reports its new size late, and not always with a 'resize': so the canvas's
+ * own box is watched, and the turn is followed up a few times as it settles.
+ * Drawn at the old proportions on the new screen is what "stretched" was.
+ */
 function resize() {
-  renderer.setSize(innerWidth, innerHeight, false);
-  camera.aspect = innerWidth / innerHeight;
+  const cv = renderer.domElement;
+  const w = cv.clientWidth || innerWidth, h = cv.clientHeight || innerHeight;
+  if (!w || !h) return;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
   camera.updateProjectionMatrix();
-  hangar.resize(innerWidth / innerHeight);
+  hangar.resize(w / h);
 }
 addEventListener('resize', resize);
+addEventListener('orientationchange', () => [50, 200, 450, 900].forEach((ms) => setTimeout(resize, ms)));
+visualViewport?.addEventListener('resize', resize);
+if (typeof ResizeObserver !== 'undefined') new ResizeObserver(resize).observe(renderer.domElement);
 document.addEventListener('visibilitychange', () => { if (document.hidden) sound.engine(false); });
 
 boot();
