@@ -34,7 +34,9 @@ const t0 = Date.now();
 room.onMessage('welcome', (m) => { key = m.key; stats = m.stats; });
 room.onMessage('spawn', (m) => { me = newBody(m, stats); alive = true; ammo = m.ammo; });
 room.onMessage('fix', (m) => me && Object.assign(me, m));
+let boss = null;
 room.onMessage('s', (s) => {
+  boss = s.b ? { key: 'boss', x: s.b[0] / 10, y: s.b[1] / 10, z: s.b[2] / 10, alive: true, vel: { x: 0, y: 0, z: 0 } } : null;
   for (const [k, x, y, z, yaw, pitch, , hp, flags, spd] of s.p) {
     if (k === key) continue;
     const f = forward(yaw / 1000, pitch / 1000);
@@ -42,13 +44,19 @@ room.onMessage('s', (s) => {
   }
 });
 room.onMessage('hit', () => st.hits++);
-let rams = 0, rammed = 0;
+let rams = 0, rammed = 0, bossSeen = 0, bossDown = 0, bossPay = 0;
+room.onMessage('bossStart', () => bossSeen++);
+room.onMessage('bossDown', () => bossDown++);
+room.onMessage('bossGone', () => {});
+room.onMessage('bt', () => {});
+room.onMessage('score', () => {});
 room.onMessage('ram', (m) => { rams++; if (m.a === key || m.b === key) rammed++; });
 room.onMessage('fired', (m) => { st.missiles++; ammo = m.ammo; });
 room.onMessage('down', (m) => {
   if (m.v === key) { alive = false; st.deaths++; if (m.how === 'crash' && !m.k) st.crashes++; }
 });
 room.onMessage('reward', (m) => {
+  if (m.boss) { bossPay += m.gold; st.xp = m.pilot.xp; st.gold = m.pilot.gold; return; }
   if (m.assist) st.assists++; else { st.kills++; st.firstKillAt ||= (Date.now() - t0) / 1000; }
   st.xp = m.pilot.xp; st.gold = m.pilot.gold;
   if (m.pilot.level > st.level) st.levels.push(`${m.pilot.level}@${Math.round((Date.now() - t0) / 1000)}s`);
@@ -65,7 +73,7 @@ while (Date.now() < end) {
   await wait(1000 / 30);
   if (!alive || !me) continue;
   think -= dt;
-  if (think <= 0 || !target || !others.get(target)?.alive) {
+  if (think <= 0 || !target || (target === 'boss' ? !boss : !others.get(target)?.alive)) {
     think = 2;
     let best = null, bd = Infinity;
     for (const o of others.values()) {
@@ -74,8 +82,10 @@ while (Date.now() < end) {
       if (d < bd) bd = d, best = o.key;
     }
     target = best;
+    // a pilot who sees the bomber goes for it, more often than not
+    if (boss && Math.random() < 0.6) target = 'boss';
   }
-  const t = others.get(target);
+  const t = target === 'boss' ? boss : others.get(target);
   const input = { turn: 0, climb: 0, boost: false };
   let fire = false;
   if (t) {
@@ -107,7 +117,7 @@ const report = {
   minutes: +mins.toFixed(1), kills: st.kills, assists: st.assists, deaths: st.deaths, crashes: st.crashes,
   killsPerMin: +(st.kills / mins).toFixed(2), deathsPerMin: +(st.deaths / mins).toFixed(2),
   firstKillSec: st.firstKillAt ? Math.round(st.firstKillAt) : null,
-  hits: st.hits, missiles: st.missiles, rams, rammed, level: st.level, levels: st.levels, xp: st.xp, gold: st.gold, xpToLevel2: xpStep(1),
+  hits: st.hits, missiles: st.missiles, rams, rammed, bossSeen, bossDown, bossPay, level: st.level, levels: st.levels, xp: st.xp, gold: st.gold, xpToLevel2: xpStep(1),
 };
 console.log(JSON.stringify(report, null, 1));
 srv?.kill();

@@ -9,7 +9,7 @@ import { WebSocketTransport } from '@colyseus/ws-transport';
 import crypto from 'node:crypto';
 import { openStore } from './store.js';
 import { hashPassword, verifyPassword, signToken, verifyToken, validateUsername } from './auth.js';
-import { buyPlane, buyUpgrade, choosePlane, newPilot, normalize, view } from './pilot.js';
+import { buyPaint, buyPlane, buyUpgrade, choosePaint, choosePlane, newPilot, normalize, view } from './pilot.js';
 import { ArenaRoom } from './rooms/ArenaRoom.js';
 import { cleanCallsign } from '../shared/planes.js';
 
@@ -132,6 +132,8 @@ app.post('/api/pilot/name', requireAuth, async (req, res) => {
 app.post('/api/pilot/plane', requireAuth, hangar((p, b) => choosePlane(p, String(b.plane || ''))));
 app.post('/api/pilot/buy-plane', requireAuth, hangar((p, b) => buyPlane(p, String(b.plane || ''))));
 app.post('/api/pilot/upgrade', requireAuth, hangar((p, b) => buyUpgrade(p, String(b.upgrade || ''))));
+app.post('/api/pilot/buy-paint', requireAuth, hangar((p, b) => buyPaint(p, String(b.paint || ''))));
+app.post('/api/pilot/paint', requireAuth, hangar((p, b) => choosePaint(p, String(b.paint || ''))));
 
 app.get('/api/leaderboard', async (req, res) => res.json({ rows: await store.leaderboard(req.query.kind === 'kills' ? 'kills' : 'level', 20) }));
 
@@ -152,8 +154,13 @@ if (fs.existsSync(webRoot)) {
 const httpServer = http.createServer(app);
 export const gameServer = new Server({ transport: new WebSocketTransport({ server: httpServer }) });
 gameServer.define('arena', ArenaRoom, { store, noBots: process.env.NO_BOTS === '1' });
+gameServer.define('arena_teams', ArenaRoom, { store, mode: 'teams', noBots: process.env.NO_BOTS === '1' });
 // the tests' own sky, with nobody else in it
-if (TESTING) gameServer.define('arena_duel', ArenaRoom, { store, noBots: true });
+if (TESTING) {
+  gameServer.define('arena_duel', ArenaRoom, { store, noBots: true, boss: false });
+  gameServer.define('arena_teams_test', ArenaRoom, { store, mode: 'teams', noBots: true, boss: false });
+  gameServer.define('arena_boss_test', ArenaRoom, { store, noBots: true, bossFirst: 300, bossHp: 60 });
+}
 await gameServer.listen(PORT);
 console.log(`[skyfight] listening on :${PORT} (db=${process.env.DB_DRIVER || 'memory'})`);
 

@@ -12,7 +12,7 @@ import {
   AdditiveBlending, BufferAttribute, BufferGeometry, CanvasTexture, ConeGeometry, CylinderGeometry, Group, Mesh,
   MeshBasicMaterial, MeshStandardMaterial, SphereGeometry, SRGBColorSpace, Vector3, BoxGeometry, TorusGeometry,
 } from 'three';
-import { PLANES } from '../../shared/planes.js';
+import { PAINTS, PLANES } from '../../shared/planes.js';
 
 // ---- shapes -------------------------------------------------------------------
 
@@ -178,8 +178,8 @@ const SCHEMES = {
   phantom: { top: '#62686f', blot: [], under: '#5c6268', metal: 0.25, rough: 0.5, low: true, num: '901', stealth: true },
 };
 
-function paintBody(id) {
-  const S = SCHEMES[id], [c, g] = canvas(512, 512), W = 512, H = 512;
+function paintBody(S) {
+  const [c, g] = canvas(512, 512), W = 512, H = 512;
   g.fillStyle = S.under; g.fillRect(0, 0, W, H);
   // the upper half of the section: u from 0.25 to 0.75
   const t0 = W * 0.22, t1 = W * 0.78;
@@ -200,8 +200,8 @@ function paintBody(id) {
   return tex(c);
 }
 
-function paintWing(id) {
-  const S = SCHEMES[id], [c, g] = canvas(512, 512), W = 512, H = 512;
+function paintWing(S) {
+  const [c, g] = canvas(512, 512), W = 512, H = 512;
   g.fillStyle = S.top; g.fillRect(0, 0, W, H / 2);
   g.fillStyle = S.under; g.fillRect(0, H / 2, W, H / 2);
   if (S.blot.length) {
@@ -218,8 +218,8 @@ function paintWing(id) {
   return tex(c);
 }
 
-function paintFin(id) {
-  const S = SCHEMES[id], [c, g] = canvas(256, 256), W = 256, H = 256;
+function paintFin(S) {
+  const [c, g] = canvas(256, 256), W = 256, H = 256;
   g.fillStyle = S.top; g.fillRect(0, 0, W, H);
   if (S.blot.length) S.splinter ? splinters(g, 0, W, H, S.blot, 5) : camo(g, W, H, S.blot, 5, 2);
   if (S.band) { g.fillStyle = S.band; g.fillRect(W * 0.7, 0, W * 0.12, H); }
@@ -364,14 +364,23 @@ function store(x, y, z, kind) {
 
 // ---- the five -------------------------------------------------------------------
 
+// one set of painted materials per plane and paint, shared by every copy
+const MATS = new Map();
+let PAINT = 'stock';
 function mats(id) {
-  const S = SCHEMES[id];
+  const key = `${id}:${PAINT}`;
+  if (MATS.has(key)) return MATS.get(key);
+  const p = PAINTS[PAINT];
+  // a paint replaces the colours and the finish; markings stay the plane's
+  const S = p && p.top ? { ...SCHEMES[id], top: p.top, blot: p.blot, under: p.under, metal: p.metal, rough: p.rough, splinter: !!p.splinter, stealth: false, nose: p.nose ?? SCHEMES[id].nose, band: p.band ?? SCHEMES[id].band } : SCHEMES[id];
   const base = { roughness: S.rough, metalness: S.metal };
-  return {
-    body: new MeshStandardMaterial({ map: paintBody(id), ...base }),
-    wing: new MeshStandardMaterial({ map: paintWing(id), ...base }),
-    fin: new MeshStandardMaterial({ map: paintFin(id), ...base }),
+  const m = {
+    body: new MeshStandardMaterial({ map: paintBody(S), ...base }),
+    wing: new MeshStandardMaterial({ map: paintWing(S), ...base }),
+    fin: new MeshStandardMaterial({ map: paintFin(S), ...base }),
   };
+  MATS.set(key, m);
+  return m;
 }
 
 const BUILD = {
@@ -516,9 +525,52 @@ const BUILD = {
   },
 };
 
+/**
+ * The bomber: four engines on a long straight wing, a glazed nose, gun
+ * turrets top and bottom, bare metal with a black tail band. About 30 m
+ * long and 44 m across: big enough to read from a long way off.
+ */
+export function buildBomber() {
+  const S = { top: '#b8bcc0', blot: [], under: '#aeb2b6', metal: 0.75, rough: 0.32, low: false, num: '42', band: '#1c1d20' };
+  const M = { body: new MeshStandardMaterial({ map: paintBody(S), roughness: S.rough, metalness: S.metal }), wing: new MeshStandardMaterial({ map: paintWing(S), roughness: S.rough, metalness: S.metal }), fin: new MeshStandardMaterial({ map: paintFin(S), roughness: S.rough, metalness: S.metal }) };
+  const g = new Group();
+  g.add(new Mesh(loft([
+    { z: -15, w: 0.4, h: 0.4 }, { z: -14.2, w: 2.6, h: 2.6 }, { z: -12.5, w: 3.2, h: 3.2 }, { z: 6, w: 3.2, h: 3.2 },
+    { z: 11, w: 2.4, h: 2.6, y: 0.3 }, { z: 15, w: 0.9, h: 1.4, y: 0.6 },
+  ], 24), M.body));
+  const nose = new Mesh(new SphereGeometry(1.45, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2).rotateX(-Math.PI / 2), GLASS());
+  nose.position.z = -14.3;
+  g.add(nose);
+  for (const w of wings({ x0: 1.4, span: 20.5, chord: (t) => 5.2 - 3.0 * t, le: (t) => -3.4 + 1.2 * t, y0: 0.4, dihedral: 0.06, thick: 0.15, n: 6 })) g.add(new Mesh(w, M.wing));
+  for (const w of wings({ x0: 0.6, span: 6.5, chord: (t) => 3.4 - 1.6 * t, le: (t) => 11.6 + 0.6 * t, y0: 0.6, thick: 0.1 })) g.add(new Mesh(w, M.wing));
+  g.add(new Mesh(fin({ y0: 1.4, height: 6.6, chord: (t) => 5 - 2.6 * t, le: (t) => 9.6 + 2.2 * t, thick: 0.1 }), M.fin));
+  const props = [];
+  for (const x of [-12.5, -6.5, 6.5, 12.5]) {
+    const n = new Mesh(loft([{ z: -2.6, w: 1.5, h: 1.5 }, { z: -1.6, w: 1.7, h: 1.7 }, { z: 2.4, w: 1.4, h: 1.4 }, { z: 4.2, w: 0.5, h: 0.6 }], 14), M.body);
+    n.position.set(x, 0.25, -2.0);
+    g.add(n);
+    const pr = propeller(-4.9, 0.25, 4, 2.4, 0x2a2b2e);
+    pr.position.x = x;
+    g.add(pr);
+    props.push(pr);
+  }
+  // gun turrets: a dome on the spine, one under the belly, one in the tail
+  for (const [y, z, flip] of [[1.6, -6, 1], [-1.6, 2, -1], [1.7, 4, 1]]) {
+    const t = new Mesh(new SphereGeometry(0.75, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2), GLASS());
+    t.position.set(0, y, z); if (flip < 0) t.rotation.x = Math.PI;
+    g.add(t);
+    const gun = new Mesh(new CylinderGeometry(0.08, 0.08, 1.8, 6).rotateX(Math.PI / 2), DARK());
+    gun.position.set(0, y + 0.3 * flip, z - 1);
+    g.add(gun);
+  }
+  g.userData = { props, flames: [], guns: [], tips: [], missiles: [], len: 30 };
+  return g;
+}
+
 /** A plane of a kind, ready to fly. */
-export function buildPlane(kind) {
+export function buildPlane(kind, paint = 'stock') {
   const id = PLANES[kind] ? kind : 'sparrow';
+  PAINT = PAINTS[paint] ? paint : 'stock';
   return BUILD[id]();
 }
 

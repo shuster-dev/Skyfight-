@@ -10,8 +10,9 @@
 // to fight; they step out as real pilots come in.
 import { Room } from '@colyseus/core';
 import { verifyToken } from '../auth.js';
+import { Bomber } from '../boss.js';
 import { normalize, payKill, view } from '../pilot.js';
-import { PLANES, PLANE_ORDER, displayName, levelOf, statsOf, killReward } from '../../shared/planes.js';
+import { PAINT_ORDER, PLANES, PLANE_ORDER, displayName, levelOf, statsOf, killReward } from '../../shared/planes.js';
 import { ARENA, hitsSolid, spawnPoint, surfaceAt } from '../../shared/arena.js';
 import { fly, forward, newBody, plausibleMove } from '../../shared/flight.js';
 import { ASSIST_SHARE, CREDIT_MS, FLARE, GUN, MISSILE, RAM, REPAIR, RESPAWN, ramDamage, aimDir, offNose, pickTarget, segmentHit, steerMissile } from '../../shared/combat.js';
@@ -41,6 +42,12 @@ export class ArenaRoom extends Room {
     this.now = Date.now();
     this.rosterDirty = true;
     this.noBots = !!opts.noBots;
+    // 'teams': blue against red, no friendly fire; otherwise everyone for themselves
+    this.teams = opts.mode === 'teams';
+    this.score = { b: 0, r: 0 };
+    this.setMetadata({ mode: this.teams ? 'teams' : 'ffa' });
+    // the bomber event (server/boss.js); the tests' rooms turn it off or hurry it
+    this.bomber = new Bomber(this, opts.boss === false ? { first: Infinity } : opts.bossFirst ? { first: opts.bossFirst, stays: opts.bossStays, hp: opts.bossHp, hpPerPilot: opts.bossHp ? 0 : undefined } : {});
     this.setSimulationInterval((dt) => this.tick(Math.min(dt, 100) / 1000), TICK_MS);
 
     this.onMessage('pose', (client, m) => this.onPose(client, m));
@@ -73,7 +80,7 @@ export class ArenaRoom extends Room {
       this.drop(p.key);
     }
     const pilot = auth.pilot;
-    const p = this.addPlane({ uid: auth.id, sid: client.sessionId, name: displayName(pilot), plane: pilot.plane, level: pilot.level, upgrades: pilot.upgrades, pilot });
+    const p = this.addPlane({ uid: auth.id, sid: client.sessionId, name: displayName(pilot), plane: pilot.plane, paint: pilot.paint, level: pilot.level, upgrades: pilot.upgrades, pilot, team: this.pickTeam(true) });
     this.bySession.set(client.sessionId, p.key);
     this.fillBots();
   }
@@ -87,7 +94,7 @@ export class ArenaRoom extends Room {
     const p = this.planes.get(this.bySession.get(client.sessionId));
     if (!p || p.greeted) return;
     p.greeted = true;
-    client.send('welcome', { key: p.key, stats: p.stats, roster: this.roster(), pilot: view(p.pilot) });
+    client.send('welcome', { key: p.key, stats: p.stats, roster: this.roster(), pilot: view(p.pilot), mode: this.teams ? 'teams' : 'ffa', team: p.team, score: this.score, room: this.roomId });
     this.spawn(p);
   }
 
@@ -106,11 +113,11 @@ export class ArenaRoom extends Room {
 
   // ---- planes -------------------------------------------------------------
 
-  addPlane({ uid = '', sid = '', name, plane, level, upgrades = {}, pilot = null, bot = null }) {
+  addPlane({ uid = '', sid = '', name, plane, paint = 'stock', level, upgrades = {}, pilot = null, bot = null, team = '' }) {
     const key = (++this.seq).toString(36);
     const stats = statsOf(plane, upgrades);
     const p = {
-      key, uid, sid, name, plane, level, bot, pilot, stats,
+      key, uid, sid, name, plane, paint, team, level, bot, pilot, stats,
       hp: stats.hp, alive: false, respawnAt: 0, shieldUntil: 0,
       ...newBody(spawnPoint(0), stats),
       vel: { x: 0, y: 0, z: 0 },
@@ -218,6 +225,7 @@ export class ArenaRoom extends Room {
       if (p.hp < p.stats.hp && this.now - p.lastHurt > REPAIR.after * 1000) p.hp = Math.min(p.stats.hp, p.hp + REPAIR.perSec * dt);
     }
     this.collisions();
+    this.bomber.tick(dt, this.now);
     this.moveBullets(dt);
     this.moveMissiles(dt);
     if (this.tickN % 60 === 0) this.fillBots();
@@ -229,7 +237,7 @@ export class ArenaRoom extends Room {
     const every = 1 / p.stats.rate;
     if (!p.firing) { p.fireT = Math.min(every, p.fireT + dt); return; }
     p.fireT += dt;
-    const others = [...this.planes.values()];
+    const others = this.targets(p);
     while (p.fireT >= every) {
       p.fireT -= every;
       const f = forward(p.yaw, p.pitch);
@@ -239,7 +247,7 @@ export class ArenaRoom extends Room {
       // from the wing the barrel is on, alternating
       const side = (p.gun++ % 2 ? 1 : -1) * 2.2, rx = Math.cos(p.yaw), rz = -Math.sin(p.yaw);
       this.bullets.push({
-        owner: p.key, t: 0, dmg: p.stats.dmg,
+        owner: p.key, team: p.team, t: 0, dmg: p.stats.dmg,
         x: p.x + f.x * 5 + rx * side, y: p.y + f.y * 5, z: p.z + f.z * 5 + rz * side,
         vx: d.x * GUN.speed + f.x * p.speed, vy: d.y * GUN.speed + f.y * p.speed, vz: d.z * GUN.speed + f.z * p.speed,
       });
@@ -273,13 +281,14 @@ export class ArenaRoom extends Room {
       const nx = b.x + b.vx * dt, ny = b.y + b.vy * dt, nz = b.z + b.vz * dt;
       let hit = null, tBest = 2;
       for (const p of alive) {
-        if (p.key === b.owner) continue;
+        if (p.key === b.owner || (b.team && p.team === b.team)) continue; // teammates' rounds pass through
         // where the target was when the shooter saw it is a little behind
         // where it is: the sphere is fat enough to cover that
         const t = segmentHit(b.x, b.y, b.z, nx, ny, nz, p.x, p.y, p.z, GUN.hitR);
         if (t >= 0 && t < tBest) tBest = t, hit = p;
       }
       if (hit) { this.hurt(hit, b.owner, b.dmg, 'guns'); continue; }
+      if (b.owner !== 'boss' && this.bomber.hitBy(b.x, b.y, b.z, nx, ny, nz)) { this.bomber.hurt(b.owner, b.dmg); continue; }
       b.x = nx; b.y = ny; b.z = nz; b.t += dt;
       // a round stops in whatever solid thing it flies into
       if (b.t < GUN.life && (b.y > 270 || !hitsSolid(b.x, b.y, b.z, 0))) keep.push(b);
@@ -289,7 +298,7 @@ export class ArenaRoom extends Room {
 
   launch(p) {
     if (p.ammo < 1) return;
-    const target = pickTarget(p, [...this.planes.values()], MISSILE.lockCone, MISSILE.lockRange);
+    const target = pickTarget(p, this.targets(p), MISSILE.lockCone, MISSILE.lockRange);
     p.ammo--;
     const f = forward(p.yaw, p.pitch);
     const m = { id: (++this.seq).toString(36), owner: p.key, target: target?.key || '', t: 0, x: p.x + f.x * 4, y: p.y + f.y * 4 - 1, z: p.z + f.z * 4, yaw: p.yaw, pitch: p.pitch };
@@ -303,7 +312,7 @@ export class ArenaRoom extends Room {
     const keep = [];
     for (const m of this.missiles) {
       const px = m.x, py = m.y, pz = m.z;
-      steerMissile(m, this.planes.get(m.target), dt);
+      steerMissile(m, m.target === 'boss' ? this.bomber.target : this.planes.get(m.target), dt);
       m.t += dt;
       let hit = null;
       if (m.t > MISSILE.arm) for (const p of this.planes.values()) {
@@ -313,6 +322,11 @@ export class ArenaRoom extends Room {
       if (hit) {
         this.broadcast('boom', [q(m.x), q(m.y), q(m.z)]);
         this.hurt(hit, m.owner, MISSILE.dmg, 'missile');
+        continue;
+      }
+      if (m.t > MISSILE.arm && this.bomber.hitBy(px, py, pz, m.x, m.y, m.z, 2)) {
+        this.broadcast('boom', [q(m.x), q(m.y), q(m.z)]);
+        this.bomber.hurt(m.owner, MISSILE.dmg);
         continue;
       }
       if (m.t > MISSILE.life || hitsSolid(m.x, m.y, m.z, 0)) {
@@ -367,6 +381,8 @@ export class ArenaRoom extends Room {
 
   hurt(p, by, dmg, how) {
     if (!p.alive || this.now < p.shieldUntil) return;
+    const from = this.planes.get(by);
+    if (this.teams && how !== 'collision' && from && from.team === p.team) return;
     p.hp -= dmg;
     p.lastHurt = this.now;
     const d = p.damagers.get(by) || { dmg: 0, at: 0 };
@@ -397,11 +413,12 @@ export class ArenaRoom extends Room {
     const victim = { level: p.level, bot: !!p.bot };
     if (killer && killer !== p) {
       killer.kills++; killer.streak++;
+      if (this.teams && killer.team && killer.team !== p.team) this.score[killer.team]++, this.broadcast('score', this.score);
       this.pay(killer, victim, { streak: killer.streak - 1 });
     }
     for (const a of assists) this.pay(a, victim, { assist: true });
     p.damagers.clear();
-    this.broadcast('down', { v: p.key, k: killer && killer !== p ? killer.key : '', how, into, a: assists.map((a) => a.key), x: q(p.x), y: q(p.y), z: q(p.z) });
+    this.broadcast('down', { v: p.key, k: killer && killer !== p ? killer.key : by === 'boss' ? 'boss' : '', how, into, a: assists.map((a) => a.key), x: q(p.x), y: q(p.y), z: q(p.z) });
     this.rosterDirty = true;
   }
 
@@ -434,11 +451,32 @@ export class ArenaRoom extends Room {
       ps.push([p.key, q(p.x), q(p.y), q(p.z), q(p.yaw, 1000), q(p.pitch, 1000), q(p.roll, 1000), Math.round(Math.max(0, p.hp) / p.stats.hp * 100), flags, q(p.speed)]);
     }
     const ms = this.missiles.map((m) => [m.id, q(m.x), q(m.y), q(m.z), q(m.yaw, 1000), q(m.pitch, 1000), m.target]);
-    this.broadcast('s', { t: this.now, p: ps, m: ms });
+    this.broadcast('s', { t: this.now, p: ps, m: ms, b: this.bomber.snap() });
+  }
+
+  /** What this plane's guns and missiles may go for: its foes, and the bomber. */
+  targets(p) {
+    const t = this.foes(p), b = this.bomber.target;
+    return b ? [...t, b] : t;
+  }
+
+  /** Who this plane may shoot at: everyone, or in teams the other side. */
+  foes(p) {
+    const all = [...this.planes.values()];
+    return this.teams ? all.filter((o) => o.team !== p.team) : all;
+  }
+
+  /** The side a newcomer joins: fewer people first, then fewer planes. */
+  pickTeam(human) {
+    if (!this.teams) return '';
+    const n = { b: 0, r: 0 }, h = { b: 0, r: 0 };
+    for (const p of this.planes.values()) if (p.team) n[p.team]++, p.bot || h[p.team]++;
+    if (human && h.b !== h.r) return h.b < h.r ? 'b' : 'r';
+    return n.b <= n.r ? 'b' : 'r';
   }
 
   roster() {
-    return [...this.planes.values()].map((p) => ({ key: p.key, name: p.name, plane: p.plane, level: p.level, bot: !!p.bot, kills: p.kills, deaths: p.deaths, streak: p.streak }));
+    return [...this.planes.values()].map((p) => ({ key: p.key, name: p.name, plane: p.plane, paint: p.paint, team: p.team, level: p.level, bot: !!p.bot, kills: p.kills, deaths: p.deaths, streak: p.streak }));
   }
 
   // ---- bots ---------------------------------------------------------------
@@ -447,8 +485,13 @@ export class ArenaRoom extends Room {
     const humans = [...this.planes.values()].filter((p) => !p.bot).length;
     const bots = [...this.planes.values()].filter((p) => p.bot);
     const want = this.noBots || !humans ? 0 : Math.max(0, Math.min(MAX_BOTS, FILL_TO - humans));
-    // they leave when they are not needed: the one doing worst goes first
-    while (bots.length > want) this.drop(bots.sort((a, b) => a.kills - b.kills).shift().key);
+    // they leave when they are not needed: from the bigger side, the one doing worst first
+    const side = () => { const n = { b: 0, r: 0 }; for (const p of this.planes.values()) if (p.team) n[p.team]++; return n; };
+    while (bots.length > want) {
+      const n = side(), big = n.b > n.r ? 'b' : n.r > n.b ? 'r' : '';
+      bots.sort((a, b) => (big ? (b.team === big) - (a.team === big) : 0) || a.kills - b.kills);
+      this.drop(bots.shift().key);
+    }
     const lv = humans ? Math.round([...this.planes.values()].filter((p) => !p.bot).reduce((s, p) => s + p.level, 0) / humans) : 1;
     let n = bots.length;
     while (n++ < want) {
@@ -458,7 +501,9 @@ export class ArenaRoom extends Room {
       const open = PLANE_ORDER.filter((k) => PLANES[k].level <= level);
       const plane = open[Math.floor(Math.random() * open.length)];
       const tier = Math.min(5, Math.floor(level / 5));
-      const p = this.addPlane({ name, plane, level, upgrades: { engine: tier, armor: tier, guns: tier, missiles: tier, flares: tier }, bot: { xp: 0, skill: 0.35 + Math.random() * 0.4, target: '', think: 0, jink: 0, jinkDir: 1, hurtAt: 0 } });
+      // some bots fly in paint, as pilots who have earned it would
+      const paint = Math.random() < 0.4 ? PAINT_ORDER[1 + Math.floor(Math.random() * (PAINT_ORDER.length - 2))] : 'stock';
+      const p = this.addPlane({ team: this.pickTeam(false), name, plane, paint, level, upgrades: { engine: tier, armor: tier, guns: tier, missiles: tier, flares: tier }, bot: { xp: 0, skill: 0.35 + Math.random() * 0.4, target: '', think: 0, jink: 0, jinkDir: 1, hurtAt: 0 } });
       this.spawn(p);
     }
   }
@@ -471,7 +516,7 @@ export class ArenaRoom extends Room {
   botFly(p, dt) {
     const ai = p.bot;
     ai.think -= dt;
-    let t = this.planes.get(ai.target);
+    let t = ai.target === 'boss' ? this.bomber.target : this.planes.get(ai.target);
     if (ai.think <= 0 || !t || !t.alive) {
       ai.think = 1.5 + Math.random() * 1.5;
       // the nearest, but one already hunted by others counts as further:
@@ -480,10 +525,13 @@ export class ArenaRoom extends Room {
       for (const o of this.planes.values()) if (o.bot && o !== p && o.bot.target) hunted.set(o.bot.target, (hunted.get(o.bot.target) || 0) + 1);
       let best = null, bestD = Infinity;
       for (const o of this.planes.values()) {
-        if (o === p || !o.alive || this.now < o.shieldUntil) continue;
+        if (o === p || !o.alive || this.now < o.shieldUntil || (this.teams && o.team === p.team)) continue;
         const d = Math.hypot(o.x - p.x, o.y - p.y, o.z - p.z) * (1 + 0.8 * (hunted.get(o.key) || 0));
         if (d < bestD) bestD = d, best = o;
       }
+      // the bomber, now and then, when it is about and not too far
+      const bb = this.bomber.target;
+      if (bb && Math.random() < 0.35 && Math.hypot(bb.x - p.x, bb.z - p.z) < 1000) best = bb;
       // whoever is shooting at it, if they are close
       const att = this.planes.get(ai.attacker);
       if (att?.alive && this.now - ai.hurtAt < 4000 && Math.random() < 0.7) best = att;

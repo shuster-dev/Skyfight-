@@ -4,10 +4,10 @@ import { Net } from './net.js';
 import { Controls } from './controls.js';
 import { sound } from './audio.js';
 import { makeRenderer, makeWorld, inCloud } from './gfx/scene.js';
-import { buildPlane, animatePlane } from './gfx/planes.js';
+import { buildPlane, buildBomber, animatePlane } from './gfx/planes.js';
 import { Fx } from './gfx/fx.js';
 import { Hangar } from './gfx/hangar.js';
-import { PLANES, PLANE_ORDER, UPGRADES, UPGRADE_ORDER, TIER_MAX, nextTier, statsOf, levelProgress, planeOpen, planeOwned, cleanCallsign, displayName } from '../shared/planes.js';
+import { PAINTS, PAINT_ORDER, PLANES, PLANE_ORDER, UPGRADES, UPGRADE_ORDER, TIER_MAX, nextTier, statsOf, levelProgress, planeOpen, planeOwned, cleanCallsign, displayName } from '../shared/planes.js';
 import { ARENA, BRIDGE, groundAt, underBridge } from '../shared/arena.js';
 import { fly, forward, newBody } from '../shared/flight.js';
 import { FLARE, GUN, MISSILE, RESPAWN, aimDir, offNose, pickTarget } from '../shared/combat.js';
@@ -43,7 +43,7 @@ const S = {
   preview: [], previewKind: '',
 };
 window.__sky = S; // the browser tests look in here
-S.world = world; S.camera = camera; S.buildPlane = buildPlane; S.scene = scene;
+S.world = world; S.camera = camera; S.buildPlane = buildPlane; S.buildBomber = buildBomber; S.scene = scene;
 S.look = controls.look;
 
 // ---- the camera's rig, and the showcase behind the menus ------------------
@@ -97,6 +97,7 @@ function showcase(t, dt, wide) {
 // ---- boot -----------------------------------------------------------------
 
 async function boot() {
+  pickQuality(Q.pick);
   resize();
   requestAnimationFrame(frame);
   setPreview(['sparrow', 'hornet', 'viper']);
@@ -183,6 +184,7 @@ $('#login-form').addEventListener('submit', async (e) => {
 function openSettings() {
   $('#set-sound').checked = !sound.muted;
   $('#set-invert').checked = controls.invert;
+  $('#set-quality').value = Q.pick;
   $('#set-account').textContent = S.account.guest ? 'הטייס עדיין לא שמור — שמרו אותו בהאנגר.' : `מחובר כ־${S.account.username}`;
   show('#btn-logout', !S.account.guest);
   show('#sheet-settings');
@@ -200,7 +202,16 @@ $('#btn-logout').addEventListener('click', () => { net.logout(); location.reload
 
 // ---- the hangar -----------------------------------------------------------
 
-let tab = 'planes', viewing = '';
+let tab = 'planes', viewing = '', paintView = '';
+// which sky: everyone for themselves, or blue against red; and an invite, if the link carried one
+S.gameMode = (() => { try { return localStorage.getItem('sky.mode') || 'ffa'; } catch { return 'ffa'; } })();
+S.invite = new URLSearchParams(location.search).get('room') || '';
+const paintMode = () => $$('.h-mode button').forEach((b) => b.classList.toggle('on', b.dataset.mode === S.gameMode));
+$$('.h-mode button').forEach((b) => b.addEventListener('click', () => {
+  S.gameMode = b.dataset.mode;
+  try { localStorage.setItem('sky.mode', S.gameMode); } catch {}
+  paintMode();
+}));
 function showHangar() {
   S.mode = 'hangar';
   ['#screen-title', '#hud', '#death'].forEach((s) => show(s, false));
@@ -210,6 +221,7 @@ function showHangar() {
   sound.engine(false);
   clearPreview();
   viewing = S.pilot.plane;
+  paintView = S.pilot.paint;
   renderHangar();
 }
 
@@ -226,10 +238,12 @@ function renderHangar() {
   $('#h-gold').textContent = fmt(p.gold);
   $('#h-xp').style.width = `${levelProgress(p.xp) * 100}%`;
   show('#btn-save', S.account.guest);
+  show('#h-invite', !!S.invite);
+  paintMode();
   show('#tab-planes', tab === 'planes');
   show('#tab-ups', tab === 'ups');
   show('#tab-board', tab === 'board');
-  hangar.show(viewing || p.plane);
+  hangar.show(viewing || p.plane, paintView || p.paint);
   if (tab === 'planes') renderPlanes();
   if (tab === 'ups') renderUps();
   if (tab === 'board') renderBoard();
@@ -252,12 +266,40 @@ function renderPlanes() {
   else if (own) { act.textContent = 'בחר'; act.dataset.pick = k; }
   else if (open) { act.innerHTML = `קנה · <span class="num">${fmt(d.price)}</span>`; act.classList.add('buy'); act.dataset.buy = k; act.disabled = p.gold < d.price; }
   else { act.textContent = `נפתח ברמה ${d.level}`; act.disabled = true; }
+  // the paint: a row of colours, the one tried on is the one on the table
+  const pv = paintView || p.paint;
+  $('#hp-paints').innerHTML = PAINT_ORDER.map((id) => `<button type="button" class="sw ${id === pv ? 'on' : ''} ${p.paints.includes(id) ? 'own' : ''}" data-paint="${id}" style="--c:${PAINTS[id].swatch}" aria-label="${PAINTS[id].he}"></button>`).join('');
+  const pa = $('#hp-paint-act'), P = PAINTS[pv];
+  pa.className = 'h-act small';
+  pa.disabled = false;
+  delete pa.dataset.wear; delete pa.dataset.buy;
+  if (pv === p.paint) { pa.textContent = `צבע: ${P.he}`; pa.disabled = true; }
+  else if (p.paints.includes(pv)) { pa.textContent = `צבע ${P.he} · החל`; pa.dataset.wear = pv; }
+  else { pa.innerHTML = `צבע ${P.he} · <span class="num">${fmt(P.price)}</span>`; pa.classList.add('buy'); pa.dataset.buy = pv; pa.disabled = p.gold < P.price; }
 }
+$('#hp-paints').addEventListener('click', (e) => {
+  const id = e.target.closest('[data-paint]')?.dataset.paint;
+  if (!id) return;
+  paintView = id;
+  hangar.show(viewing || S.pilot.plane, id);
+  renderPlanes();
+});
+$('#hp-paint-act').addEventListener('click', async (e) => {
+  const b = e.currentTarget, wear = b.dataset.wear, buy = b.dataset.buy;
+  if (!wear && !buy) return;
+  try {
+    const r = await net.api(buy ? '/api/pilot/buy-paint' : '/api/pilot/paint', { paint: wear || buy });
+    S.pilot = r.pilot;
+    paintView = S.pilot.paint;
+    if (buy) sound.coin(), toast(`צבע ${PAINTS[buy].he} שלך`);
+    renderHangar();
+  } catch (x) { toast(err(x)); }
+});
 
 const step = (dir) => {
   const i = PLANE_ORDER.indexOf(viewing || S.pilot.plane);
   viewing = PLANE_ORDER[(i + dir + PLANE_ORDER.length) % PLANE_ORDER.length];
-  hangar.show(viewing);
+  hangar.show(viewing, paintView || S.pilot.paint);
   renderPlanes();
 };
 // in a right-to-left page the arrow on the right goes back
@@ -331,7 +373,8 @@ async function launch() {
   btn.disabled = true;
   btn.textContent = 'ממריא…';
   try {
-    const room = await net.join();
+    const room = await net.join(S.gameMode, S.invite);
+    if (S.invite) S.invite = '', history.replaceState(null, '', location.pathname), show('#h-invite', false);
     S.room = room;
     S.leaving = false;
     S.others.clear(); S.roster.clear(); S.missiles = [];
@@ -353,9 +396,11 @@ async function launch() {
 function hook(room) {
   room.onMessage('welcome', (m) => {
     S.myKey = m.key;
+    S.teams = m.mode === 'teams'; S.myTeam = m.team || ''; S.roomId = m.room || room.roomId;
+    paintTeams(m.score);
     S.pilot = m.pilot;
     for (const r of m.roster) S.roster.set(r.key, r);
-    const mesh = buildPlane(S.pilot.plane);
+    const mesh = buildPlane(S.pilot.plane, S.pilot.paint);
     scene.add(mesh);
     S.me = { stats: m.stats, alive: false, hp: m.stats.hp, ammo: m.stats.missiles, shieldUntil: 0, gunT: 0, gun: 0, mesh, body: null, reloadT: 0 };
     $('#hud-name').textContent = displayName(S.pilot);
@@ -376,6 +421,7 @@ function hook(room) {
   });
   room.onMessage('fix', (m) => { if (S.me?.body) Object.assign(S.me.body, m); });
   room.onMessage('s', onSnapshot);
+  room.onMessage('score', (sc) => paintTeams(sc));
   room.onMessage('roster', (list) => {
     S.roster = new Map(list.map((r) => [r.key, r]));
     paintScore();
@@ -383,7 +429,7 @@ function hook(room) {
   room.onMessage('hit', (m) => {
     S.hitFlash = 0.12;
     sound.hit();
-    const o = S.others.get(m.v);
+    const o = m.v === 'boss' ? S.boss : S.others.get(m.v);
     o && fx.spark(o.mesh.position);
   });
   room.onMessage('hurt', (m) => {
@@ -394,6 +440,7 @@ function hook(room) {
     $('#vig').style.opacity = big ? 1 : 0.6;
     setTimeout(() => ($('#vig').style.opacity = 0), 160);
     sound.hurt();
+    hitFrom(m.by);
   });
   room.onMessage('fired', (m) => { if (S.me) S.me.ammo = m.ammo; sound.launch(); });
   room.onMessage('flared', (m) => {
@@ -413,6 +460,22 @@ function hook(room) {
     sound.boom(near(p) * 0.7);
     if (m.a === S.myKey || m.b === S.myKey) toast('התנגשות');
   });
+  // the bomber: it comes, its gunners fire, it goes down (or away)
+  room.onMessage('bossStart', () => { toast('מפציץ מעל העיר — הפילו אותו יחד', 'lvl'); sound.warn(); });
+  room.onMessage('bt', (a) => {
+    MZ.set(a[0] / 10, a[1] / 10, a[2] / 10);
+    DIR.set(a[3] / 1000, a[4] / 1000, a[5] / 1000);
+    fx.tracer(MZ, DIR, GUN.speed);
+  });
+  room.onMessage('bossDown', (m) => {
+    const p = new Vector3(m.at[0] / 10, m.at[1] / 10, m.at[2] / 10);
+    fx.explode(p, 3); fx.explode(p.clone().add(new Vector3(12, 0, 0)), 2); fx.explode(p.clone().add(new Vector3(-12, 0, 0)), 2);
+    sound.boom(1);
+    const top = m.top?.[0];
+    feed(`<span class="w">המפציץ הופל</span>${top ? ` ${esc(top.name)} · ${top.pct}%` : ''}`, m.top?.some((r) => r.key === S.myKey));
+    clearBoss();
+  });
+  room.onMessage('bossGone', () => { toast('המפציץ ברח'); clearBoss(); });
   room.onMessage('boom', (b) => {
     const p = new Vector3(b[0] / 10, b[1] / 10, b[2] / 10);
     fx.pop(p, 1.4);
@@ -440,13 +503,13 @@ function onSnapshot(s) {
     let o = S.others.get(key);
     const r = S.roster.get(key);
     if (!o) {
-      o = { key, kind: r?.plane || 'sparrow', mesh: buildPlane(r?.plane || 'sparrow'), buf: [], fireT: 0, gun: 0, smokeT: 0, tag: null };
+      o = { key, kind: r?.plane || 'sparrow', paint: r?.paint || 'stock', mesh: buildPlane(r?.plane || 'sparrow', r?.paint), buf: [], fireT: 0, gun: 0, smokeT: 0, tag: null };
       scene.add(o.mesh);
       S.others.set(key, o);
     }
-    if (r && r.plane !== o.kind) {
+    if (r && (r.plane !== o.kind || (r.paint || 'stock') !== o.paint)) {
       // a different plane under the same key (it changed in the hangar)
-      scene.remove(o.mesh); o.mesh = buildPlane(r.plane); o.kind = r.plane; scene.add(o.mesh);
+      scene.remove(o.mesh); o.mesh = buildPlane(r.plane, r.paint); o.kind = r.plane; o.paint = r.paint || 'stock'; scene.add(o.mesh);
     }
     o.buf.push({ t: now, x: x / 10, y: y / 10, z: z / 10, yaw: yaw / 1000, pitch: pitch / 1000, roll: roll / 1000, speed: spd / 10 });
     if (o.buf.length > 8) o.buf.shift();
@@ -454,10 +517,49 @@ function onSnapshot(s) {
   }
   for (const [k, o] of S.others) if (!seen.has(k)) { scene.remove(o.mesh); o.tag?.remove(); S.others.delete(k); }
   S.missiles = s.m.map(([id, x, y, z, yaw, pitch, target]) => ({ id, x: x / 10, y: y / 10, z: z / 10, yaw: yaw / 1000, pitch: pitch / 1000, target }));
+  bossSnap(s.b, now);
   if (S.missiles.some((m) => m.target === S.myKey)) S.warnUntil = Math.max(S.warnUntil, now + 300);
 }
 
-function nameOf(key) { return S.roster.get(key)?.name || '?'; }
+/** The bomber on screen: built when it first appears, moved between snapshots. */
+function bossSnap(b, now) {
+  if (!b) { if (S.boss) clearBoss(); return; }
+  if (!S.boss) {
+    const mesh = buildBomber();
+    scene.add(mesh);
+    S.boss = { key: 'boss', alive: true, mesh, x: b[0] / 10, y: b[1] / 10, z: b[2] / 10, yaw: b[3] / 1000, pitch: 0, vel: { x: 0, y: 0, z: 0 }, to: null };
+    mesh.position.set(S.boss.x, S.boss.y, S.boss.z);
+  }
+  const B = S.boss, nx = b[0] / 10, ny = b[1] / 10, nz = b[2] / 10;
+  if (B.at) B.vel = { x: (nx - B.tx) / ((now - B.at) / 1000 || 1), y: (ny - B.ty) / ((now - B.at) / 1000 || 1), z: (nz - B.tz) / ((now - B.at) / 1000 || 1) };
+  B.tx = nx; B.ty = ny; B.tz = nz; B.tyaw = b[3] / 1000; B.at = now;
+  B.hp = b[4] / 10; B.left = b[5];
+}
+function clearBoss() {
+  if (!S.boss) return;
+  scene.remove(S.boss.mesh);
+  S.boss = null;
+  show('#bossbar', false);
+}
+/** Per frame: glide toward the latest snapshot, props turning; and its bar. */
+function tickBoss(dt, time) {
+  const B = S.boss;
+  if (!B) return;
+  const k = Math.min(1, dt * 6);
+  B.x += (B.tx - B.x) * k; B.y += (B.ty - B.y) * k; B.z += (B.tz - B.z) * k;
+  B.yaw += Math.atan2(Math.sin(B.tyaw - B.yaw), Math.cos(B.tyaw - B.yaw)) * k;
+  B.mesh.position.set(B.x, B.y, B.z);
+  B.mesh.rotation.set(0, B.yaw, Math.sin(time * 0.4) * 0.03, 'YXZ');
+  animatePlane(B.mesh, dt, { speed: 40, time });
+  if (B.hp < 35) smoke(B, dt, B.mesh.position);
+  show('#bossbar');
+  $('#bb-hp').style.width = `${B.hp}%`;
+  $('#bb-left').textContent = `${Math.floor(B.left / 60)}:${String(B.left % 60).padStart(2, '0')}`;
+}
+/** What my guns and missiles may go for: foes, and the bomber. */
+const aimables = () => (S.boss ? [...foes(), S.boss] : foes());
+
+function nameOf(key) { return key === 'boss' ? 'המפציץ' : S.roster.get(key)?.name || '?'; }
 
 function onDown(m) {
   const p = new Vector3(m.x / 10, m.y / 10, m.z / 10);
@@ -472,6 +574,7 @@ function onDown(m) {
     S.deadAt = performance.now();
     S.wreck = { from: p.clone(), back: tmpV.subVectors(camera.position, p).setY(0).normalize().clone() };
     S.killer = m.k ? { name: nameOf(m.k), how: m.how } : null;
+    S.killcam = m.k && S.others.has(m.k) ? { key: m.k, until: performance.now() + 2600 } : null;
     sound.engine(false);
     show('#death');
     $('#death-title').textContent = m.how === 'collision' ? 'התנגשת' : m.how === 'crash' && !m.k ? 'התרסקת' : 'הופלת';
@@ -484,7 +587,8 @@ function onDown(m) {
 function onReward(m) {
   const before = S.pilot.level;
   S.pilot = m.pilot;
-  toast(`${m.assist ? 'סיוע' : 'הפלה'}  +${m.xp} XP  +${m.gold} זהב`);
+  toast(m.boss ? `המפציץ · ${m.share}% מהנזק  +${m.xp} XP  +${m.gold} זהב` : `${m.assist ? 'סיוע' : 'הפלה'}  +${m.xp} XP  +${m.gold} זהב`);
+  if (m.boss && m.top) setTimeout(() => toast('הכי הרבה נזק למפציץ', 'lvl'), 900);
   sound.coin();
   if (m.streak >= 3 && !m.assist) toast(`רצף של ${m.streak}`);
   if (m.up || S.pilot.level > before) {
@@ -506,6 +610,7 @@ async function leaveSky(why) {
   S.me = null;
   for (const o of S.others.values()) scene.remove(o.mesh), o.tag?.remove();
   S.others.clear();
+  clearBoss();
   fx.syncMissiles([], 0);
   $('#tags').innerHTML = '';
   // the pilot as the server has them now (the pay is in)
@@ -531,7 +636,7 @@ function frame(t) {
     renderer.render(hangar.scene, hangar.camera);
     return;
   }
-  if (S.mode === 'air') air(dt, time);
+  if (S.mode === 'air') air(dt, time), watchFrames(t);
   else if (S.mode !== 'look') showcase(time, dt, wide); // 'look': a tool holds the camera
   fx.syncMissiles(S.missiles, dt);
   fx.tick(dt, camera);
@@ -540,6 +645,7 @@ function frame(t) {
 }
 
 function air(dt, time) {
+  tickBoss(dt, time);
   const me = S.me;
   const now = performance.now();
   // others: drawn a tenth of a second in the past, between two snapshots
@@ -602,8 +708,16 @@ function air(dt, time) {
     sound.engine(true, b.speed, b.boosting);
     chase(b, dt, input);
   } else if (me) {
-    // down: the camera pulls back and up, and watches the wreck burn
-    if (S.wreck) {
+    // down: first the one who did it — the camera rides beside them for a
+    // couple of seconds — then back to watch the wreck burn
+    const k = S.killcam && now < S.killcam.until ? S.others.get(S.killcam.key) : null;
+    if (k && k.alive) {
+      const f = forward(k.yaw, 0), side = tmpV.set(Math.cos(k.yaw), 0, -Math.sin(k.yaw));
+      camPos.set(k.x - f.x * 26 + side.x * 14, k.y + 7, k.z - f.z * 26 + side.z * 14);
+      camera.position.lerp(camPos, Math.min(1, dt * 3));
+      camera.up.set(0, 1, 0);
+      camera.lookAt(k.x, k.y, k.z);
+    } else if (S.wreck) {
       camPos.copy(S.wreck.from).add(tmpV.set(0, 28, 0)).addScaledVector(S.wreck.back, 70);
       camera.position.lerp(camPos, Math.min(1, dt * 1.6));
       camera.up.set(0, 1, 0);
@@ -657,7 +771,7 @@ function guns(o, mesh, rate, dt, mine) {
     const m = muzzles[(holder.gun = (holder.gun || 0) + 1) % muzzles.length];
     MZ.copy(m).applyEuler(mesh.rotation).add(mesh.position);
     // the room leads the guns at a target near the nose: so does the tracer
-    const target = mine ? pickTarget(o, [...S.others.values()], GUN.assistCone, GUN.assistRange) : null;
+    const target = mine ? pickTarget(o, aimables(), GUN.assistCone, GUN.assistRange) : null;
     const d = aimDir(o, target);
     const f = forward(o.yaw, o.pitch);
     DIR.set(d.x * GUN.speed + f.x * (o.speed || 60), d.y * GUN.speed + f.y * (o.speed || 60), d.z * GUN.speed + f.z * (o.speed || 60));
@@ -668,11 +782,31 @@ function guns(o, mesh, rate, dt, mine) {
   }
 }
 
+/** A badly hurt plane burns: flame at the engine, a trail of black smoke. */
 function smoke(o, dt, pos) {
   o.smokeT = (o.smokeT || 0) + dt;
-  if (o.smokeT < 0.06) return;
+  if (o.smokeT < 0.05) return;
   o.smokeT = 0;
-  fx.puff(pos || o.mesh.position, { color: 0x333338, size: 1.4, grow: 5, life: 1.6, rise: 1 });
+  const p = pos || o.mesh.position;
+  fx.puff(p, { color: 0x2a2a2e, size: 1.6, grow: 6, life: 2.2, rise: 1 });
+  fx.fire(p);
+}
+
+/**
+ * Where the shots came from: a red arc at the edge of the screen, turned
+ * toward the one who fired (or the bomber), fading in a second.
+ */
+function hitFrom(key) {
+  const src = key === 'boss' ? S.boss : S.others.get(key);
+  if (!src || src.x === undefined) return;
+  const v = tmpV.set(src.x, src.y, src.z).applyMatrix4(camera.matrixWorldInverse);
+  const ang = Math.atan2(v.x, -v.z); // 0 ahead, + to the right
+  const box = $('#hitdir');
+  const el = document.createElement('i');
+  el.style.transform = `rotate(${ang}rad)`;
+  box.append(el);
+  while (box.children.length > 4) box.firstChild.remove();
+  setTimeout(() => el.remove(), 1200);
 }
 
 // ---- the head-up display ------------------------------------------------------
@@ -692,7 +826,7 @@ function hud(dt, now) {
     const c = inCloud(world.clouds, b.x, b.y, b.z);
     $('#white').style.opacity = me.alive ? Math.min(0.85, c * 1.6) : 0;
     // the lock: what a missile would go after now
-    const t = me.alive ? pickTarget({ ...b, alive: true }, [...S.others.values()].filter((o) => o.alive && !o.shield), MISSILE.lockCone, MISSILE.lockRange) : null;
+    const t = me.alive ? pickTarget({ ...b, alive: true }, aimables().filter((o) => o.alive && !o.shield), MISSILE.lockCone, MISSILE.lockRange) : null;
     const lock = $('#lock');
     if (t && project(P.set(t.x, t.y, t.z))) {
       show(lock);
@@ -704,7 +838,7 @@ function hud(dt, now) {
     if (project(P.set(b.x + f.x * 300, b.y + f.y * 300, b.z + f.z * 300))) cross.style.left = `${P.x}px`, cross.style.top = `${P.y}px`;
     // the aim pip: where the nearest plane ahead will be when the rounds get
     // there. Crosshair on it and the guns are helped onto it (shared/combat.js)
-    const g = me.alive ? pickTarget({ ...b, alive: true }, [...S.others.values()].filter((o) => o.alive), 0.5, GUN.assistRange + 150) : null;
+    const g = me.alive ? pickTarget({ ...b, alive: true }, aimables().filter((o) => o.alive), 0.5, GUN.assistRange + 150) : null;
     const lead = $('#lead');
     if (g) {
       const d = Math.hypot(g.x - b.x, g.y - b.y, g.z - b.z), tt = d / (GUN.speed + b.speed), v = g.vel || { x: 0, y: 0, z: 0 };
@@ -753,8 +887,9 @@ function tags() {
     const behind = P.clone().project(camera).z > 1;
     if (!behind && project(P)) {
       const bar = o.hp < 100 ? `<div class="mini"><i style="width:${o.hp}%"></i></div>` : '';
-      html += `<div class="tagp" style="left:${P.x}px;top:${P.y}px">${esc(r?.name || '')} <span style="opacity:.7">${r?.level || ''}</span>${d < 900 ? ` · <span class="num">${Math.round(d)}m</span>` : ''}${bar}</div>`;
-    } else if (arrows < 3) {
+      const side = S.teams ? (r?.team === S.myTeam ? ' mate' : ' foe') : '';
+      html += `<div class="tagp${side}" style="left:${P.x}px;top:${P.y}px">${esc(r?.name || '')} <span style="opacity:.7">${r?.level || ''}</span>${d < 900 ? ` · <span class="num">${Math.round(d)}m</span>` : ''}${bar}</div>`;
+    } else if (arrows < 3 && !(S.teams && r?.team === S.myTeam)) {
       arrows++;
       // where it is, folded onto the edge of the screen
       const v = new Vector3(o.x, o.y, o.z).applyMatrix4(camera.matrixWorldInverse);
@@ -763,8 +898,48 @@ function tags() {
       html += `<div class="arrow" style="left:${cx + Math.sin(ang) * R - 9}px;top:${cy - Math.cos(ang) * R - 8}px;transform:rotate(${ang}rad)"></div>`;
     }
   }
+  // the bomber: a tag when in view, a gold arrow at the edge when not
+  const B = S.boss;
+  if (B) {
+    P.set(B.x, B.y + 9, B.z);
+    const behind = P.clone().project(camera).z > 1;
+    const d = Math.hypot(B.x - me.x, B.y - me.y, B.z - me.z);
+    if (!behind && project(P)) html += `<div class="tagp boss" style="left:${P.x}px;top:${P.y}px">מפציץ · <span class="num">${Math.round(d)}m</span></div>`;
+    else {
+      const v = new Vector3(B.x, B.y, B.z).applyMatrix4(camera.matrixWorldInverse), ang = Math.atan2(v.x, v.y);
+      const cx = innerWidth / 2, cy = innerHeight / 2, R = Math.min(cx, cy) - 40;
+      html += `<div class="arrow boss" style="left:${cx + Math.sin(ang) * R - 9}px;top:${cy - Math.cos(ang) * R - 8}px;transform:rotate(${ang}rad)"></div>`;
+    }
+  }
   box.innerHTML = html;
 }
+
+/** Who I may shoot at: everyone, or in teams the other side. */
+function foes() {
+  const all = [...S.others.values()];
+  return S.teams ? all.filter((o) => S.roster.get(o.key)?.team !== S.myTeam) : all;
+}
+
+/** The team score at the top, blue against red. */
+function paintTeams(sc) {
+  show('#teamscore', !!S.teams);
+  if (!S.teams || !sc) return;
+  $('#ts-b').textContent = sc.b; $('#ts-r').textContent = sc.r;
+  $('#teamscore').dataset.mine = S.myTeam;
+}
+
+/** A link that brings a friend into this very room. */
+async function invite() {
+  if (!S.roomId) return;
+  const url = `${location.origin}/?room=${encodeURIComponent(S.roomId)}`;
+  const text = `בוא לטוס איתי ב־Skyfight${S.teams ? ' (קבוצות)' : ''}`;
+  try {
+    if (navigator.share) return await navigator.share({ title: 'Skyfight', text, url });
+  } catch { return; }
+  try { await navigator.clipboard.writeText(url); toast('הקישור הועתק — שלחו לחבר'); } catch { prompt('הקישור לזירה:', url); }
+}
+$('#invite-btn').addEventListener('click', invite);
+$('#btn-invite2').addEventListener('click', invite);
 
 function paintScore() {
   const rows = [...S.roster.values()].sort((a, b) => b.kills - a.kills || a.deaths - b.deaths);
@@ -795,6 +970,44 @@ function toast(text, cls = '') {
   host.append(t);
   setTimeout(() => t.remove(), 1900);
 }
+
+// ---- how much to draw ------------------------------------------------------
+//
+// Three levels; 'auto' starts from what the device probably manages and
+// steps down by itself when the frames slow, back up when they have room.
+const QUALITY = { low: 1, med: 1.35, high: Math.min(devicePixelRatio || 1, 2) };
+const LEVELS = ['low', 'med', 'high'];
+const Q = {
+  pick: (() => { try { return localStorage.getItem('sky.quality') || 'auto'; } catch { return 'auto'; } })(),
+  level: '', frames: 0, since: 0, slow: 0, fast: 0, hold: 0,
+};
+function setLevel(level) {
+  if (Q.level === level) return;
+  Q.level = level;
+  renderer.setPixelRatio(Math.min(QUALITY[level], devicePixelRatio || 1));
+  world.setQuality(level);
+  resize();
+}
+function pickQuality(v) {
+  Q.pick = v;
+  try { localStorage.setItem('sky.quality', v); } catch {}
+  setLevel(v === 'auto' ? (controls.touch ? 'med' : 'high') : v);
+}
+/** Per frame, in the air: count frames; every 3 s, judge. */
+function watchFrames(now) {
+  if (Q.pick !== 'auto') return;
+  Q.frames++;
+  if (!Q.since) Q.since = now;
+  if (now - Q.since < 3000) return;
+  const fps = Q.frames * 1000 / (now - Q.since);
+  Q.frames = 0; Q.since = now;
+  const i = LEVELS.indexOf(Q.level);
+  if (fps < 38) { Q.fast = 0; if (++Q.slow >= 2 && i > 0) setLevel(LEVELS[i - 1]), Q.slow = 0, Q.hold = now + 60000; }
+  else if (fps > 57) { Q.slow = 0; if (++Q.fast >= 3 && i < 2 && now > Q.hold) setLevel(LEVELS[i + 1]), Q.fast = 0; }
+  else Q.slow = Q.fast = 0;
+  S.fps = Math.round(fps);
+}
+$('#set-quality').addEventListener('change', (e) => pickQuality(e.target.value));
 
 function resize() {
   renderer.setSize(innerWidth, innerHeight, false);

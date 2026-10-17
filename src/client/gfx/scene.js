@@ -61,7 +61,8 @@ export function makeWorld(renderer) {
   scene.add(city);
   const bridge = makeBridge();
   scene.add(bridge);
-  scene.add(makeTrees(heights));
+  const trees = makeTrees(heights);
+  scene.add(trees);
   const clouds = makeClouds();
   scene.add(clouds);
   const traffic = makeTraffic();
@@ -69,8 +70,28 @@ export function makeWorld(renderer) {
   const ships = makeShips();
   scene.add(ships.group);
 
+  /**
+   * How much to draw. 'high' is everything; 'med' drops the small things you
+   * barely see from a cockpit; 'low' also thins the clouds, calms the sea,
+   * and draws less far. (The pixel ratio, the biggest cost, is main.js's.)
+   */
+  function setQuality(level) {
+    const low = level === 'low', med = level === 'med';
+    trees.children[1].visible = !low;           // the upper tier of each tree
+    trees.children[2].visible = !low && !med;   // the trunks
+    city.children[1].visible = !low;            // plant rooms on the roofs
+    traffic.group.visible = !low;
+    ships.group.visible = !low;
+    clouds.children.forEach((c, i) => (c.visible = !low || i % 3 === 0));
+    sea.material.uniforms.detail.value = low ? 0 : 1;
+    const far = low ? 2400 : med ? 3000 : 3400;
+    scene.fog.far = far; scene.fog.near = far * 0.2;
+    sea.material.uniforms.fogFar.value = far; sea.material.uniforms.fogNear.value = far * 0.2;
+    camera.far = far + 2000; camera.updateProjectionMatrix();
+  }
+
   return {
-    scene, camera, sky, sea, clouds,
+    scene, camera, sky, sea, clouds, setQuality,
     /** Per frame: the sky follows the camera, the sea and the traffic move. */
     tick(t, dt = 0.016) {
       sky.position.copy(camera.position);
@@ -227,14 +248,14 @@ function makeSea(H) {
   const m = new ShaderMaterial({
     fog: true,
     uniforms: {
-      time: { value: 0 }, depth: { value: depth }, span: { value: SPAN },
+      time: { value: 0 }, detail: { value: 1 }, depth: { value: depth }, span: { value: SPAN },
       deep: { value: new Color(0x0b3a63) }, mid: { value: new Color(0x16608c) }, shallow: { value: new Color(0x2fa7a4) }, foam: { value: new Color(0xf2f7fa) },
       skyC: { value: new Color(SKY.horizon) }, fogColor: { value: new Color(SKY.fog) }, fogNear: { value: 700 }, fogFar: { value: 3400 },
       sunDir: { value: new Vector3(SUN_DIR.x, SUN_DIR.y, SUN_DIR.z).normalize() },
     },
     vertexShader: `varying vec3 vW; varying float vFog;
       void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; vec4 mv = viewMatrix * w; vFog = -mv.z; gl_Position = projectionMatrix * mv; }`,
-    fragmentShader: `uniform float time; uniform sampler2D depth; uniform float span; uniform vec3 deep; uniform vec3 mid; uniform vec3 shallow; uniform vec3 foam; uniform vec3 skyC;
+    fragmentShader: `uniform float time; uniform float detail; uniform sampler2D depth; uniform float span; uniform vec3 deep; uniform vec3 mid; uniform vec3 shallow; uniform vec3 foam; uniform vec3 skyC;
       uniform vec3 fogColor; uniform float fogNear; uniform float fogFar; uniform vec3 sunDir; varying vec3 vW; varying float vFog;
       vec2 wave(vec2 p, vec2 d, float f, float s){ float a = dot(p, d) * f + time * s; return d * cos(a) * f; }
       void main(){
@@ -246,10 +267,12 @@ function makeSea(H) {
         g += wave(vW.xz, normalize(vec2(1.0, 0.3)), 0.031, 0.9) * 0.35;
         g += wave(vW.xz, normalize(vec2(-0.4, 1.0)), 0.047, 1.2) * 0.3;
         g += wave(vW.xz, normalize(vec2(0.7, -0.7)), 0.083, 1.7) * 0.22;
-        g += wave(vW.xz, normalize(vec2(-0.9, -0.2)), 0.131, 2.3) * 0.16;
-        g += wave(vW.xz, normalize(vec2(0.2, 0.95)), 0.211, 2.9) * 0.1;
-        g += wave(vW.xz, normalize(vec2(-0.6, -0.8)), 0.337, 3.7) * 0.07;
-        g += wave(vW.xz, normalize(vec2(0.95, -0.3)), 0.53, 4.6) * 0.05;
+        if (detail > 0.5) {
+          g += wave(vW.xz, normalize(vec2(-0.9, -0.2)), 0.131, 2.3) * 0.16;
+          g += wave(vW.xz, normalize(vec2(0.2, 0.95)), 0.211, 2.9) * 0.1;
+          g += wave(vW.xz, normalize(vec2(-0.6, -0.8)), 0.337, 3.7) * 0.07;
+          g += wave(vW.xz, normalize(vec2(0.95, -0.3)), 0.53, 4.6) * 0.05;
+        }
         // the swell fades with distance, as the eye would lose it
         float dist = length(cameraPosition - vW);
         g *= 1.0 - smoothstep(300.0, 2200.0, dist) * 0.8;
