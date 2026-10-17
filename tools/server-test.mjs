@@ -65,8 +65,15 @@ try {
     const solo = await pilot(g.token);
     ok('welcome: a key and the plane\'s numbers', await until(() => !!solo.key && got(solo, 'welcome')[0]?.m.stats?.hp === 100));
     ok('in the air at a spawn point', await until(() => solo.pose && solo.pose.y > 100));
-    ok('bots fill an empty sky', await until(() => solo.snap?.p?.length >= 6, 4000), solo.snap?.p?.length);
-    ok('the roster marks them as bots', await until(() => got(solo, 'roster').at(-1)?.m.filter((r) => r.bot).length >= 5));
+    ok('bots fill the sky to ten planes', await until(() => solo.snap?.p?.length === 10, 4000), solo.snap?.p?.length);
+    ok('the roster marks them as bots: nine, and me', await until(() => got(solo, 'roster').at(-1)?.m.filter((r) => r.bot).length === 9));
+    const kinds = got(solo, 'roster').at(-1).m.filter((r) => r.bot);
+    ok('the bots fly different things', new Set(kinds.map((r) => `${r.plane}/${r.gun}/${r.level}`)).size > 1, kinds.map((r) => `${r.plane}/${r.gun}/${r.level}`));
+    // a second person takes a bot's seat
+    const two = await pilot(h.token);
+    ok('a second pilot in: still ten, one bot fewer', await until(() => { const r = got(solo, 'roster').at(-1)?.m || []; return r.length === 10 && r.filter((x) => x.bot).length === 8; }, 4000), (got(solo, 'roster').at(-1)?.m || []).map((x) => x.bot));
+    await two.room.leave();
+    ok('and the bot comes back when they leave', await until(() => (got(solo, 'roster').at(-1)?.m || []).filter((x) => x.bot).length === 9, 4000));
     // a pose no plane could fly is put back
     solo.room.send('pose', [solo.pose.x + 900, solo.pose.y, solo.pose.z, 0, 0, 0, 60, 0]);
     ok('a teleport is corrected', await until(() => got(solo, 'fix').length > 0));
@@ -252,6 +259,13 @@ try {
   ok('flying low through a pad patches the plane up to full', healed && healed.gain > 0 && healed.hp >= 100, { healed, fixes: got(rp, 'fix').length });
   ok('and the pad is spent for a while, for everyone', got(rp, 'pad').some((e) => e.m.i === 0 && e.m.s === HEAL.every));
   await rp.room.leave();
+
+  console.log('\nfive against five');
+  {
+    const tm = await pilot(g2.token, 'arena_teams');
+    ok('a teams sky is five a side', await until(() => { const r = got(tm, 'roster').at(-1)?.m || []; return r.length === 10 && r.filter((x) => x.team === 'b').length === 5 && r.filter((x) => x.team === 'r').length === 5; }, 4000), (got(tm, 'roster').at(-1)?.m || []).map((x) => x.team + (x.bot ? '*' : '')));
+    await tm.room.leave();
+  }
 
   console.log('\nthe bomber');
   const bz = await pilot(back.token, 'arena_boss_test');

@@ -13,7 +13,7 @@ import { Room } from '@colyseus/core';
 import { verifyToken } from '../auth.js';
 import { Bomber } from '../boss.js';
 import { normalize, payKill, view } from '../pilot.js';
-import { PAINT_ORDER, PLANES, PLANE_ORDER, displayName, levelOf, statsOf, tiersOf, killReward } from '../../shared/planes.js';
+import { GUNS, GUN_ORDER, MISSILES, MISSILE_ORDER, PAINT_ORDER, PLANES, PLANE_ORDER, UPGRADE_ORDER, displayName, levelOf, statsOf, tiersOf, killReward } from '../../shared/planes.js';
 import { ARENA, hitsSolid, spawnPoint, surfaceAt, HEAL, HEALS, healAt } from '../../shared/arena.js';
 import { Q, fly, forward, newBody, plausibleMove } from '../../shared/flight.js';
 import { ASSIST_SHARE, CREDIT_MS, FLARE, GUN, MISSILE, RAM, REPAIR, RESPAWN, ramDamage, aimDir, blastDamage, closestOn, DODGE, dodgeChance, offNose, pickTarget, segmentHit, steerMissile } from '../../shared/combat.js';
@@ -24,13 +24,13 @@ const MAX_POSES_PER_SEC = 40;
 const IDLE_MS = 20000;
 const BOT_NAMES = ['נץ', 'עיט', 'ברק', 'סערה', 'שחף', 'רעם', 'Falcon', 'Ghost', 'Raven', 'Blaze', 'Nomad', 'Hawk', 'Comet', 'Storm'];
 /** How many planes the room wants in the air; bots make up the difference. */
-export const FILL_TO = 7;
-export const MAX_BOTS = 6;
+/** Every sky has this many planes: bots fill what people do not. Teams are half each. */
+export const SKY_SIZE = 10;
 
 const q = (v, k = 10) => Math.round(v * k);
 
 export class ArenaRoom extends Room {
-  maxClients = 40;
+  maxClients = SKY_SIZE;
 
   onCreate(opts = {}) {
     this.store = opts.store;
@@ -83,7 +83,7 @@ export class ArenaRoom extends Room {
       this.drop(p.key);
     }
     const pilot = auth.pilot;
-    const p = this.addPlane({ uid: auth.id, sid: client.sessionId, name: displayName(pilot), plane: pilot.plane, paint: pilot.paint, level: pilot.level, upgrades: tiersOf(pilot, pilot.plane), pilot, team: this.pickTeam(true) });
+    const p = this.addPlane({ uid: auth.id, sid: client.sessionId, name: displayName(pilot), plane: pilot.plane, paint: pilot.paint, level: pilot.level, upgrades: tiersOf(pilot, pilot.plane), arms: { gun: pilot.gun, missile: pilot.missile }, pilot, team: this.pickTeam(true) });
     this.bySession.set(client.sessionId, p.key);
     presence.enter(auth.id, this.roomId, this.teams ? 'teams' : 'ffa');
     this.fillBots();
@@ -121,9 +121,9 @@ export class ArenaRoom extends Room {
 
   // ---- planes -------------------------------------------------------------
 
-  addPlane({ uid = '', sid = '', name, plane, paint = 'stock', level, upgrades = {}, pilot = null, bot = null, team = '' }) {
+  addPlane({ uid = '', sid = '', name, plane, paint = 'stock', level, upgrades = {}, arms = {}, pilot = null, bot = null, team = '' }) {
     const key = (++this.seq).toString(36);
-    const stats = statsOf(plane, upgrades);
+    const stats = statsOf(plane, upgrades, arms);
     const p = {
       key, uid, sid, name, plane, paint, team, level, bot, pilot, stats,
       hp: stats.hp, alive: false, respawnAt: 0, shieldUntil: 0,
@@ -256,12 +256,12 @@ export class ArenaRoom extends Room {
       p.fireT -= every;
       const f = forward(p.yaw, p.pitch);
       // the aim help is for people: a bot gets a sliver of it
-      const target = pickTarget(p, others, p.bot ? GUN.assistCone * 0.4 : GUN.assistCone, GUN.assistRange);
+      const target = pickTarget(p, others, p.bot ? GUN.assistCone * 0.4 : GUN.assistCone, p.stats.gunRange);
       const d = aimDir(p, target);
       // from the wing the barrel is on, alternating
       const side = (p.gun++ % 2 ? 1 : -1) * 2.2, rx = Math.cos(p.yaw), rz = -Math.sin(p.yaw);
       this.bullets.push({
-        owner: p.key, team: p.team, t: 0, dmg: p.stats.dmg,
+        owner: p.key, team: p.team, t: 0, dmg: p.stats.dmg, life: p.stats.gunRange / GUN.speed,
         x: p.x + f.x * 5 + rx * side, y: p.y + f.y * 5, z: p.z + f.z * 5 + rz * side,
         vx: d.x * GUN.speed + f.x * p.speed, vy: d.y * GUN.speed + f.y * p.speed, vz: d.z * GUN.speed + f.z * p.speed,
       });
@@ -310,17 +310,19 @@ export class ArenaRoom extends Room {
       if (b.owner !== 'boss' && this.bomber.hitBy(b.x, b.y, b.z, nx, ny, nz)) { this.bomber.hurt(b.owner, b.dmg); continue; }
       b.x = nx; b.y = ny; b.z = nz; b.t += dt;
       // a round stops in whatever solid thing it flies into
-      if (b.t < GUN.life && (b.y > 270 || !hitsSolid(b.x, b.y, b.z, 0))) keep.push(b);
+      if (b.t < (b.life || GUN.life) && (b.y > 270 || !hitsSolid(b.x, b.y, b.z, 0))) keep.push(b);
     }
     this.bullets = keep;
   }
 
   launch(p) {
     if (p.ammo < 1) return;
-    const target = pickTarget(p, this.targets(p), MISSILE.lockCone, MISSILE.lockRange);
+    const target = pickTarget(p, this.targets(p), MISSILE.lockCone, p.stats.mRange);
     p.ammo--;
     const f = forward(p.yaw, p.pitch);
-    const m = { id: (++this.seq).toString(36), owner: p.key, target: target?.key || '', t: 0, x: p.x + f.x * 4, y: p.y + f.y * 4 - 1, z: p.z + f.z * 4, yaw: p.yaw, pitch: p.pitch };
+    // its model's flight and punch; fuel for half again its reach
+    const st = p.stats;
+    const m = { id: (++this.seq).toString(36), owner: p.key, target: target?.key || '', t: 0, speed: st.mSpeed, turn: st.mTurn, dmg: st.mDmg, life: (st.mRange * 1.5) / st.mSpeed, x: p.x + f.x * 4, y: p.y + f.y * 4 - 1, z: p.z + f.z * 4, yaw: p.yaw, pitch: p.pitch };
     this.missiles.push(m);
     if (target?.sid) this.sendTo(target, 'incoming', { from: p.key });
     const me = p.sid && this.clients.find((c) => c.sessionId === p.sid);
@@ -359,10 +361,10 @@ export class ArenaRoom extends Room {
       }
       if (at) {
         this.burst(m, at);
-        if (at.boss) this.bomber.hurt(m.owner, MISSILE.dmg);
+        if (at.boss) this.bomber.hurt(m.owner, m.dmg);
         continue;
       }
-      if (m.t > MISSILE.life || hitsSolid(m.x, m.y, m.z, 0)) {
+      if (m.t > (m.life || MISSILE.life) || hitsSolid(m.x, m.y, m.z, 0)) {
         this.broadcast('boom', [q(m.x), q(m.y), q(m.z)]);
         continue;
       }
@@ -388,7 +390,7 @@ export class ArenaRoom extends Room {
     this.broadcast('boom', [q(at.x), q(at.y), q(at.z)]);
     for (const p of [...this.planes.values()]) {
       if (!p.alive || p.key === m.owner || p.key === m.ignore) continue;
-      const dmg = blastDamage(Math.hypot(p.x - at.x, p.y - at.y, p.z - at.z));
+      const dmg = blastDamage(Math.hypot(p.x - at.x, p.y - at.y, p.z - at.z), m.dmg);
       if (dmg > 0) this.hurt(p, m.owner, dmg, 'missile');
     }
   }
@@ -564,36 +566,56 @@ export class ArenaRoom extends Room {
   }
 
   roster() {
-    return [...this.planes.values()].map((p) => ({ key: p.key, name: p.name, plane: p.plane, paint: p.paint, team: p.team, level: p.level, bot: !!p.bot, kills: p.kills, deaths: p.deaths, streak: p.streak }));
+    return [...this.planes.values()].map((p) => ({ key: p.key, name: p.name, plane: p.plane, paint: p.paint, gun: p.stats.gun, team: p.team, level: p.level, bot: !!p.bot, kills: p.kills, deaths: p.deaths, streak: p.streak }));
   }
 
   // ---- bots ---------------------------------------------------------------
 
+  /**
+   * Keep the sky at SKY_SIZE planes: a bot for every seat no person has —
+   * two pilots in, eight bots. In teams each side is kept at half, so a
+   * person who joins blue sends a blue bot home. With nobody in, no bots.
+   */
   fillBots() {
-    const humans = [...this.planes.values()].filter((p) => !p.bot).length;
-    const bots = [...this.planes.values()].filter((p) => p.bot);
-    const want = this.noBots || !humans ? 0 : Math.max(0, Math.min(MAX_BOTS, FILL_TO - humans));
-    // they leave when they are not needed: from the bigger side, the one doing worst first
-    const side = () => { const n = { b: 0, r: 0 }; for (const p of this.planes.values()) if (p.team) n[p.team]++; return n; };
-    while (bots.length > want) {
-      const n = side(), big = n.b > n.r ? 'b' : n.r > n.b ? 'r' : '';
-      bots.sort((a, b) => (big ? (b.team === big) - (a.team === big) : 0) || a.kills - b.kills);
-      this.drop(bots.shift().key);
+    const all = [...this.planes.values()];
+    const humans = all.filter((p) => !p.bot);
+    const sides = this.teams ? ['b', 'r'] : [''];
+    const seats = this.teams ? SKY_SIZE / 2 : SKY_SIZE;
+    for (const side of sides) {
+      const mine = (p) => !this.teams || p.team === side;
+      const people = humans.filter(mine).length;
+      const bots = all.filter((p) => p.bot && mine(p));
+      const want = this.noBots || !humans.length ? 0 : Math.max(0, seats - people);
+      // the one doing worst goes home first
+      bots.sort((a, b) => a.kills - b.kills);
+      while (bots.length > want) this.drop(bots.shift().key);
+      for (let n = bots.length; n < want; n++) this.addBot(side, humans);
     }
-    const lv = humans ? Math.round([...this.planes.values()].filter((p) => !p.bot).reduce((s, p) => s + p.level, 0) / humans) : 1;
-    let n = bots.length;
-    while (n++ < want) {
-      const used = new Set([...this.planes.values()].map((p) => p.name));
-      const name = BOT_NAMES.filter((x) => !used.has(x))[Math.floor(Math.random() * 6)] || 'Bot';
-      const level = Math.max(1, lv + Math.round(Math.random() * 4 - 2));
-      const open = PLANE_ORDER.filter((k) => PLANES[k].level <= level);
-      const plane = open[Math.floor(Math.random() * open.length)];
-      const tier = Math.min(5, Math.floor(level / 5));
-      // some bots fly in paint, as pilots who have earned it would
-      const paint = Math.random() < 0.4 ? PAINT_ORDER[1 + Math.floor(Math.random() * (PAINT_ORDER.length - 2))] : 'stock';
-      const p = this.addPlane({ team: this.pickTeam(false), name, plane, paint, level, upgrades: { engine: tier, turbo: tier, guns: tier, armor: tier, missiles: tier, flares: tier }, bot: { xp: 0, skill: 0.35 + Math.random() * 0.4, target: '', think: 0, jink: 0, jinkDir: 1, hurtAt: 0 } });
-      this.spawn(p);
-    }
+  }
+
+  /**
+   * A bot of its own make: a plane, a level, upgrades and weapons drawn at
+   * random around the people's level — some a little weaker, some
+   * stronger — so no two fights are the same.
+   */
+  addBot(team, humans) {
+    const lv = humans.length ? Math.round(humans.reduce((s, p) => s + p.level, 0) / humans.length) : 1;
+    const used = new Set([...this.planes.values()].map((p) => p.name));
+    const free = BOT_NAMES.filter((x) => !used.has(x));
+    const name = free[Math.floor(Math.random() * free.length)] || 'Bot';
+    // around the people's level, and now and then an ace well above it
+    const ace = Math.random() < 0.2 ? 4 + Math.floor(Math.random() * 6) : 0;
+    const level = Math.max(1, Math.min(30, lv + Math.round(Math.random() * 6 - 3) + ace));
+    const pick = (list) => list[Math.floor(Math.random() * list.length)];
+    const plane = pick(PLANE_ORDER.filter((k) => PLANES[k].level <= level));
+    // a tier or two short of what the level allows, or right up to it
+    const top = Math.min(5, Math.floor(level / 4));
+    const upgrades = Object.fromEntries(UPGRADE_ORDER.map((k) => [k, Math.max(0, top - Math.floor(Math.random() * 3))]));
+    const arms = { gun: pick(GUN_ORDER.filter((k) => GUNS[k].level <= level)), missile: pick(MISSILE_ORDER.filter((k) => MISSILES[k].level <= level)) };
+    // some bots fly in paint, as pilots who have earned it would
+    const paint = Math.random() < 0.4 ? PAINT_ORDER[1 + Math.floor(Math.random() * (PAINT_ORDER.length - 2))] : 'stock';
+    const p = this.addPlane({ team, name, plane, paint, level, upgrades, arms, bot: { xp: 0, skill: 0.3 + Math.random() * 0.5, target: '', think: 0, jink: 0, jinkDir: 1, hurtAt: 0 } });
+    this.spawn(p);
   }
 
   /**
@@ -638,8 +660,8 @@ export class ArenaRoom extends Room {
       input.climb = Math.max(-1, Math.min(1, (wantPitch - p.pitch) * 2.4));
       const dist = Math.hypot(t.x - p.x, t.y - p.y, t.z - p.z);
       input.boost = dist > 450 && p.fuel > 0.5;
-      fire = dist < 430 && offNose(p, p.yaw, p.pitch, t) < 0.09 + (1 - ai.skill) * 0.08;
-      if (p.ammo > 0 && dist < 600 && offNose(p, p.yaw, p.pitch, t) < MISSILE.lockCone * 0.7 && Math.random() < dt * 0.25 * ai.skill) this.launch(p);
+      fire = dist < p.stats.gunRange * 0.95 && offNose(p, p.yaw, p.pitch, t) < 0.09 + (1 - ai.skill) * 0.08;
+      if (p.ammo > 0 && dist < p.stats.mRange * 0.9 && offNose(p, p.yaw, p.pitch, t) < MISSILE.lockCone * 0.7 && Math.random() < dt * 0.25 * ai.skill) this.launch(p);
     }
     // a missile on its tail: flares, if it keeps its head
     if (p.flares > 0 && this.missiles.some((m) => m.target === p.key && m.t > 0.6) && Math.random() < dt * 1.2 * ai.skill) this.flare(p);

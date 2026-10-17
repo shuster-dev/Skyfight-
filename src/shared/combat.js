@@ -40,9 +40,9 @@ export const DODGE = { near: 28, far: 170, turn: 0.35, over: 0.4, best: 0.9, wor
 export const dodgeChance = (d) => (d < DODGE.near || d > DODGE.far ? 0 : DODGE.best - (DODGE.best - DODGE.worst) * (d - DODGE.near) / (DODGE.far - DODGE.near));
 
 /** How much of a missile's blast reaches a plane `d` metres from it. */
-export const blastDamage = (d) => d <= MISSILE.full ? MISSILE.dmg
+export const blastDamage = (d, dmg = MISSILE.dmg) => d <= MISSILE.full ? dmg
   : d >= MISSILE.blast ? 0
-  : MISSILE.dmg * (1 - (1 - MISSILE.edge) * (d - MISSILE.full) / (MISSILE.blast - MISSILE.full));
+  : dmg * (1 - (1 - MISSILE.edge) * (d - MISSILE.full) / (MISSILE.blast - MISSILE.full));
 
 /** The point along a→b nearest c: 0..1. */
 export function closestOn(ax, ay, az, bx, by, bz, cx, cy, cz) {
@@ -134,19 +134,19 @@ export function aimDir(shooter, target) {
   return { x: px / n, y: py / n, z: pz / n };
 }
 
-/** Steer a missile toward its target, turning at most `MISSILE.turn` rad/s. */
+/** Steer a missile toward its target, turning at most its own `turn` rad/s (its model's), at its own speed. */
 export function steerMissile(m, target, dt) {
   if (target && target.alive) {
     const dx = target.x - m.x, dy = target.y - m.y, dz = target.z - m.z;
     const wantYaw = Math.atan2(-dx, -dz);
     const wantPitch = Math.atan2(dy, Math.hypot(dx, dz));
     let dy_ = Math.atan2(Math.sin(wantYaw - m.yaw), Math.cos(wantYaw - m.yaw));
-    const k = MISSILE.turn * dt;
+    const k = (m.turn || MISSILE.turn) * dt;
     m.yaw += Math.max(-k, Math.min(k, dy_));
     m.pitch += Math.max(-k, Math.min(k, wantPitch - m.pitch));
   }
   const f = forward(m.yaw, m.pitch);
-  m.x += f.x * MISSILE.speed * dt;
-  m.y += f.y * MISSILE.speed * dt;
-  m.z += f.z * MISSILE.speed * dt;
+  m.x += f.x * (m.speed || MISSILE.speed) * dt;
+  m.y += f.y * (m.speed || MISSILE.speed) * dt;
+  m.z += f.z * (m.speed || MISSILE.speed) * dt;
 }

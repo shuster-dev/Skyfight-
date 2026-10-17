@@ -1,10 +1,10 @@
 // The rules, checked without a server or a browser: flying, shooting, paying,
 // and the hangar's prices. `npm run qa`
-import { PLANES, PLANE_ORDER, UPGRADES, TIER_COST, TIER_LEVEL, statsOf, xpAt, xpStep, levelOf, levelProgress, killReward, cleanCallsign, nextTier, MAX_LEVEL } from '../src/shared/planes.js';
+import { GUNS, MISSILES, GUN_ORDER, MISSILE_ORDER, PLANES, PLANE_ORDER, UPGRADES, TIER_COST, TIER_LEVEL, statsOf, xpAt, xpStep, levelOf, levelProgress, killReward, cleanCallsign, nextTier, MAX_LEVEL } from '../src/shared/planes.js';
 import { ARENA, BRIDGE, BUILDINGS, HEAL, HEALS, groundAt, healAt, hitsSolid, inBay, spawnPoint, surfaceAt, terrainAt, underBridge } from '../src/shared/arena.js';
 import { fly, flyQ, forward, newBody, newBodyQ, plausibleMove, BOOST, Q } from '../src/shared/flight.js';
 import { GUN, MISSILE, RAM, aimDir, blastDamage, closestOn, DODGE, dodgeChance, offNose, pickTarget, ramDamage, segmentHit, steerMissile } from '../src/shared/combat.js';
-import { newPilot, normalize, buyPlane, buyUpgrade, choosePlane, payKill, view } from '../src/server/pilot.js';
+import { buyArm, equipArm, newPilot, normalize, buyPlane, buyUpgrade, choosePlane, payKill, view } from '../src/server/pilot.js';
 
 let pass = 0, fail = 0;
 const ok = (name, cond, info) => {
@@ -31,6 +31,12 @@ ok('prices rise with level', PLANE_ORDER.every((k, i) => !i || PLANES[k].price >
   ok('flares 3+: one more flare, and faster reload', up.flares === base.flares + 1 && up.flareReload < base.flareReload);
   ok('missiles 3+: one more missile, and faster reload', up.missiles === 2 && up.reload < base.reload);
   ok('nonsense tiers are clamped', statsOf('sparrow', { engine: 99 }).speed === up.speed && statsOf('sparrow', { engine: -4 }).speed === 56);
+  ok('the free gun reaches 300 m, the free missile 350 m', statsOf('sparrow').gunRange === 300 && statsOf('sparrow').mRange === 350);
+  ok('a better gun reaches further', GUN_ORDER.every((k, i) => !i || GUNS[k].range > GUNS[GUN_ORDER[i - 1]].range));
+  ok('a better missile reaches further and hits harder', MISSILE_ORDER.every((k, i) => !i || (MISSILES[k].range > MISSILES[MISSILE_ORDER[i - 1]].range && MISSILES[k].dmg > MISSILES[MISSILE_ORDER[i - 1]].dmg)));
+  ok('a gun changes the plane\'s fire', near(statsOf('sparrow', {}, { gun: 'g4' }).rate, statsOf('sparrow').rate * GUNS.g4.rate) && near(statsOf('sparrow', {}, { gun: 'g5' }).dmg, statsOf('sparrow').dmg * GUNS.g5.dmg));
+  ok('the missile carried sets its flight and punch', statsOf('phantom', {}, { missile: 'm5' }).mDmg === MISSILES.m5.dmg && statsOf('phantom', {}, { missile: 'm5' }).mSpeed === MISSILES.m5.speed);
+  ok('the market opens by level and costs more as it goes', [GUNS, MISSILES].every((shelf) => Object.values(shelf).every((w, i, a) => !i || (w.level > a[i - 1].level && w.price > a[i - 1].price))));
   ok('an unknown plane flies as the first', statsOf('nope').plane === 'sparrow');
 }
 
@@ -215,6 +221,21 @@ console.log('\nthe hangar');
   ok('five tiers and no more', p.upgrades.sparrow.engine === 5 && buyUpgrade(p, 'engine').error === 'max' && nextTier(p, 'engine') === null);
   ok('an unknown upgrade is refused', buyUpgrade(p, 'laser').error === 'no_such_upgrade');
   ok('a plane bought later starts with none', (p.gold = 1e6, buyPlane(p, 'bulldog').ok) && Object.values(p.upgrades.bulldog).every((t) => t === 0));
+  {
+    const m = newPilot('arms');
+    ok('a new pilot carries the free gun and missile', m.gun === 'g1' && m.missile === 'm1' && m.arms.guns[0] === 'g1');
+    m.gold = 100000; m.xp = 0; normalize(m);
+    ok('a weapon above the level is refused', buyArm(m, 'missiles', 'm2').error === 'level');
+    m.xp = xpAt(10); normalize(m);
+    ok('bought: paid for, owned and carried', buyArm(m, 'missiles', 'm2').ok && m.missile === 'm2' && m.gold === 100000 - MISSILES.m2.price);
+    ok('not twice', buyArm(m, 'missiles', 'm2').error === 'owned');
+    ok('back to one owned', equipArm(m, 'missiles', 'm1').ok && m.missile === 'm1');
+    ok('not one not owned', equipArm(m, 'guns', 'g3').error === 'not_owned');
+    ok('no gold, no gun', (m.gold = 10, buyArm(m, 'guns', 'g3').error === 'gold'));
+    ok('nonsense is refused, prototype keys too', buyArm(m, '__proto__', 'toString').error === 'no_such_weapon' && buyArm(m, 'guns', 'constructor').error === 'no_such_weapon' && equipArm(m, 'missiles', 'hasOwnProperty').error === 'no_such_weapon');
+    const bad = normalize({ id: 'z', arms: { guns: ['laser'], missiles: ['m9'] }, gun: 'laser', missile: 'm9' });
+    ok('a broken arms record is mended', bad.gun === 'g1' && bad.missile === 'm1' && bad.arms.guns.join() === 'g1');
+  }
   const q = newPilot('u2');
   const r = payKill(q, { level: 1, bot: true });
   ok('a kill pays xp, gold and counts', q.xp === r.xp && q.gold === r.gold && q.kills === 1);
