@@ -52,6 +52,10 @@ export const sound = {
   launch() { burst(0.6, 900, 0.35, 'bandpass', 2400); },
   flare() { burst(0.35, 3000, 0.12, 'highpass', 1200); },
   warn() { tone(880, 0.09, 0.18, 'square'); setTimeout(() => tone(880, 0.09, 0.18, 'square'), 140); },
+  /** The missile warning's beep: higher when it is time to break. */
+  beep(now) { tone(now ? 1320 : 990, 0.05, 0.12, 'square'); },
+  /** A missile going past, close. */
+  whoosh() { burst(0.7, 1800, 0.3, 'bandpass', 300); },
   level() { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => tone(f, 0.16, 0.2, 'triangle'), i * 110)); },
   coin() { tone(988, 0.07, 0.15, 'triangle'); setTimeout(() => tone(1319, 0.12, 0.15, 'triangle'), 70); },
 };

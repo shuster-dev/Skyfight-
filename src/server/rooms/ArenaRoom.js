@@ -13,10 +13,10 @@ import { Room } from '@colyseus/core';
 import { verifyToken } from '../auth.js';
 import { Bomber } from '../boss.js';
 import { normalize, payKill, view } from '../pilot.js';
-import { PAINT_ORDER, PLANES, PLANE_ORDER, displayName, levelOf, statsOf, killReward } from '../../shared/planes.js';
-import { ARENA, hitsSolid, spawnPoint, surfaceAt } from '../../shared/arena.js';
+import { PAINT_ORDER, PLANES, PLANE_ORDER, displayName, levelOf, statsOf, tiersOf, killReward } from '../../shared/planes.js';
+import { ARENA, hitsSolid, spawnPoint, surfaceAt, HEAL, HEALS, healAt } from '../../shared/arena.js';
 import { Q, fly, forward, newBody, plausibleMove } from '../../shared/flight.js';
-import { ASSIST_SHARE, CREDIT_MS, FLARE, GUN, MISSILE, RAM, REPAIR, RESPAWN, ramDamage, aimDir, blastDamage, closestOn, offNose, pickTarget, segmentHit, steerMissile } from '../../shared/combat.js';
+import { ASSIST_SHARE, CREDIT_MS, FLARE, GUN, MISSILE, RAM, REPAIR, RESPAWN, ramDamage, aimDir, blastDamage, closestOn, DODGE, dodgeChance, offNose, pickTarget, segmentHit, steerMissile } from '../../shared/combat.js';
 
 const TICK_MS = 1000 / 30;
 const SNAP_EVERY = 2;          // 15 snapshots a second
@@ -38,6 +38,8 @@ export class ArenaRoom extends Room {
     this.bySession = new Map(); // sessionId -> key
     this.bullets = [];
     this.missiles = [];
+    this.startHp = opts.startHp || 0;
+    this.healReady = HEALS.map(() => 0); // when each repair pad is ready again
     this.seq = 0;
     this.tickN = 0;
     this.now = Date.now();
@@ -81,7 +83,7 @@ export class ArenaRoom extends Room {
       this.drop(p.key);
     }
     const pilot = auth.pilot;
-    const p = this.addPlane({ uid: auth.id, sid: client.sessionId, name: displayName(pilot), plane: pilot.plane, paint: pilot.paint, level: pilot.level, upgrades: pilot.upgrades, pilot, team: this.pickTeam(true) });
+    const p = this.addPlane({ uid: auth.id, sid: client.sessionId, name: displayName(pilot), plane: pilot.plane, paint: pilot.paint, level: pilot.level, upgrades: tiersOf(pilot, pilot.plane), pilot, team: this.pickTeam(true) });
     this.bySession.set(client.sessionId, p.key);
     presence.enter(auth.id, this.roomId, this.teams ? 'teams' : 'ffa');
     this.fillBots();
@@ -96,7 +98,7 @@ export class ArenaRoom extends Room {
     const p = this.planes.get(this.bySession.get(client.sessionId));
     if (!p || p.greeted) return;
     p.greeted = true;
-    client.send('welcome', { key: p.key, stats: p.stats, roster: this.roster(), pilot: view(p.pilot), mode: this.teams ? 'teams' : 'ffa', team: p.team, score: this.score, room: this.roomId });
+    client.send('welcome', { key: p.key, stats: p.stats, roster: this.roster(), pilot: view(p.pilot), mode: this.teams ? 'teams' : 'ffa', team: p.team, score: this.score, room: this.roomId, pads: this.healReady.map((t) => Math.max(0, Math.ceil((t - Date.now()) / 1000))) });
     this.spawn(p);
     // friends already in this sky hear that you came
     for (const q of this.planes.values()) if (q !== p && q.pilot?.friends?.includes(p.uid)) this.sendTo(q, 'friendIn', { name: p.name });
@@ -163,7 +165,8 @@ export class ArenaRoom extends Room {
     }
     Object.assign(p, newBody(best, p.stats));
     p.q = null;
-    p.hp = p.stats.hp; p.alive = true; p.firing = false;
+    // (the tests' pad room sends planes up already hurt)
+    p.hp = p.stats.hp * (this.startHp || 1); p.alive = true; p.firing = false;
     p.shieldUntil = this.now + RESPAWN.shield * 1000;
     p.ammo = p.stats.missiles; p.reloadT = 0; p.flares = p.stats.flares; p.flareT = 0;
     p.damagers.clear(); p.lastHurt = 0;
@@ -229,6 +232,8 @@ export class ArenaRoom extends Room {
         p.firing = false;
         if (this.now - p.poseAt > IDLE_MS) { this.clients.find((c) => c.sessionId === p.sid)?.leave(4002); continue; }
       }
+      this.heading(p);
+      this.repair(p);
       this.guns(p, dt);
       this.reload(p, dt);
       if (p.hp < p.stats.hp && this.now - p.lastHurt > REPAIR.after * 1000) p.hp = Math.min(p.stats.hp, p.hp + REPAIR.perSec * dt);
@@ -268,7 +273,12 @@ export class ArenaRoom extends Room {
     if (p.flares < 1) return;
     p.flares--;
     let pulled = 0;
-    for (const m of this.missiles) if (m.target === p.key && Math.random() < FLARE.decoy) m.target = '', pulled++;
+    for (const m of this.missiles) {
+      if (m.target !== p.key || Math.random() >= FLARE.decoy) continue;
+      // it goes for the flare, falling away behind, and bursts on it
+      m.target = ''; m.ignore = p.key; pulled++;
+      m.decoy = { x: p.x - p.vel.x * 0.15, y: p.y - 2, z: p.z - p.vel.z * 0.15, vx: p.vel.x * 0.25, vy: -4, vz: p.vel.z * 0.25, t: 0 };
+    }
     this.broadcast('flare', { k: p.key });
     this.sendTo(p, 'flared', { flares: p.flares, pulled });
   }
@@ -321,14 +331,26 @@ export class ArenaRoom extends Room {
     const keep = [];
     for (const m of this.missiles) {
       const px = m.x, py = m.y, pz = m.z;
-      steerMissile(m, m.target === 'boss' ? this.bomber.target : this.planes.get(m.target), dt);
+      const d = m.decoy;
+      if (d) {
+        d.t += dt; d.vy -= 9 * dt;
+        d.x += d.vx * dt; d.y += d.vy * dt; d.z += d.vz * dt;
+      }
+      const prey = m.target === 'boss' ? this.bomber.target : this.planes.get(m.target);
+      steerMissile(m, d ? { x: d.x, y: d.y, z: d.z, alive: true } : prey, dt);
       m.t += dt;
+      if (prey && prey.key !== 'boss') this.dodge(m, prey);
+      if (d && (d.t > 2.4 || Math.hypot(d.x - m.x, d.y - m.y, d.z - m.z) < 8)) {
+        // on the flare: it bursts there, harmless to the one who threw it
+        this.burst(m, { x: m.x, y: m.y, z: m.z });
+        continue;
+      }
       // the fuse: the first plane it passes close by, whoever it is
       let at = null;
       if (m.t > MISSILE.arm) {
         let best = 2;
         for (const p of this.planes.values()) {
-          if (!p.alive || p.key === m.owner) continue;
+          if (!p.alive || p.key === m.owner || p.key === m.ignore) continue;
           const t = closestOn(px, py, pz, m.x, m.y, m.z, p.x, p.y, p.z);
           const x = px + (m.x - px) * t, y = py + (m.y - py) * t, z = pz + (m.z - pz) * t;
           if (t < best && Math.hypot(p.x - x, p.y - y, p.z - z) < MISSILE.fuse) best = t, at = { x, y, z };
@@ -336,13 +358,7 @@ export class ArenaRoom extends Room {
         if (!at && this.bomber.hitBy(px, py, pz, m.x, m.y, m.z, 4)) at = { x: m.x, y: m.y, z: m.z, boss: true };
       }
       if (at) {
-        this.broadcast('boom', [q(at.x), q(at.y), q(at.z)]);
-        // the blast: everyone near takes some, the nearest the most
-        for (const p of [...this.planes.values()]) {
-          if (!p.alive || p.key === m.owner) continue;
-          const dmg = blastDamage(Math.hypot(p.x - at.x, p.y - at.y, p.z - at.z));
-          if (dmg > 0) this.hurt(p, m.owner, dmg, 'missile');
-        }
+        this.burst(m, at);
         if (at.boss) this.bomber.hurt(m.owner, MISSILE.dmg);
         continue;
       }
@@ -353,6 +369,60 @@ export class ArenaRoom extends Room {
       keep.push(m);
     }
     this.missiles = keep;
+  }
+
+  /** Through a repair pad that is ready, and hurt: patched up to full. */
+  repair(p) {
+    if (p.hp >= p.stats.hp) return;
+    const i = healAt(p.x, p.y, p.z);
+    if (i < 0 || this.now < (this.healReady[i] || 0)) return;
+    this.healReady[i] = this.now + HEAL.every * 1000;
+    const was = p.hp;
+    p.hp = p.stats.hp;
+    this.sendTo(p, 'healed', { hp: Math.round(p.hp), gain: Math.round(p.hp - was) });
+    this.broadcast('pad', { i, s: HEAL.every });
+  }
+
+  /** A missile goes off: everyone near takes some, the nearest the most. */
+  burst(m, at) {
+    this.broadcast('boom', [q(at.x), q(at.y), q(at.z)]);
+    for (const p of [...this.planes.values()]) {
+      if (!p.alive || p.key === m.owner || p.key === m.ignore) continue;
+      const dmg = blastDamage(Math.hypot(p.x - at.x, p.y - at.y, p.z - at.z));
+      if (dmg > 0) this.hurt(p, m.owner, dmg, 'missile');
+    }
+  }
+
+  /** Where each plane's nose has been pointing, the last moment or so: a hard break shows in it. */
+  heading(p) {
+    const f = forward(p.yaw, p.pitch), h = (p.hdg ||= []);
+    h.push([this.now, f.x, f.y, f.z]);
+    while (h.length > 2 && this.now - h[1][0] > DODGE.over * 1000) h.shift();
+  }
+
+  /** How far the nose has swung over the last DODGE.over seconds, radians. */
+  broke(p) {
+    const h = p.hdg;
+    if (!h || h.length < 2) return 0;
+    const [, ax, ay, az] = h[0], [, bx, by, bz] = h[h.length - 1];
+    return Math.acos(Math.max(-1, Math.min(1, ax * bx + ay * by + az * bz)));
+  }
+
+  /**
+   * The missile closing on its prey: a hard break inside the window may
+   * shake it off. It then flies on past, blind, and will not go off by the
+   * one it lost.
+   */
+  dodge(m, p) {
+    if (m.tried) return;
+    const d = Math.hypot(p.x - m.x, p.y - m.y, p.z - m.z);
+    if (d > DODGE.far || d < DODGE.near || this.broke(p) < DODGE.turn) return;
+    m.tried = true;
+    if (Math.random() >= dodgeChance(d)) return;
+    m.target = ''; m.ignore = p.key;
+    this.sendTo(p, 'dodged', { d: Math.round(d) });
+    const by = this.planes.get(m.owner);
+    by && this.sendTo(by, 'missed', { v: p.key });
   }
 
   // ---- planes meeting in the air ------------------------------------------
@@ -521,7 +591,7 @@ export class ArenaRoom extends Room {
       const tier = Math.min(5, Math.floor(level / 5));
       // some bots fly in paint, as pilots who have earned it would
       const paint = Math.random() < 0.4 ? PAINT_ORDER[1 + Math.floor(Math.random() * (PAINT_ORDER.length - 2))] : 'stock';
-      const p = this.addPlane({ team: this.pickTeam(false), name, plane, paint, level, upgrades: { engine: tier, armor: tier, guns: tier, missiles: tier, flares: tier }, bot: { xp: 0, skill: 0.35 + Math.random() * 0.4, target: '', think: 0, jink: 0, jinkDir: 1, hurtAt: 0 } });
+      const p = this.addPlane({ team: this.pickTeam(false), name, plane, paint, level, upgrades: { engine: tier, turbo: tier, guns: tier, armor: tier, missiles: tier, flares: tier }, bot: { xp: 0, skill: 0.35 + Math.random() * 0.4, target: '', think: 0, jink: 0, jinkDir: 1, hurtAt: 0 } });
       this.spawn(p);
     }
   }

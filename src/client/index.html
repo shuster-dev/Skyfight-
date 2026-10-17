@@ -105,6 +105,11 @@
   .up .t { flex: 1; min-width: 0; }
   .up .t b { font-size: 16px; letter-spacing: 0.5px; }
   .up .t small { display: block; color: var(--dim); font-size: 12px; margin-top: 3px; }
+  .up-head { padding: 12px 0 4px; display: flex; align-items: baseline; gap: 10px; }
+  .up-head b { font-size: 20px; letter-spacing: 1px; }
+  .up-head small { color: var(--dim); font-size: 12px; }
+  .up .t small.nums { color: #bfe9e2; font-size: 12px; margin-top: 4px; }
+  .up .t small.nums em { font-style: normal; color: var(--teal); }
   .segs { display: flex; gap: 4px; margin-top: 8px; }
   .segs i { width: 26px; height: 4px; background: rgba(255,255,255,0.14); }
   .segs i.on { background: var(--teal); }
@@ -138,12 +143,15 @@
   @media (orientation: landscape) and (max-height: 500px) {
     .h-tabs { top: 50px; }
     .h-plane .pname { font-size: 56px; }
-    .h-panel { top: 92px; bottom: 80px; }
+    .h-panel { top: 92px; bottom: 116px; }
+    .up { padding: 8px 0; }
+    .up .t small { margin-top: 1px; }
+    .up-head { padding: 6px 0 0; }
     .h-launch .go { height: 50px; }
   }
   /* ---------- in the air ---------- */
   #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
-  #hud .tl { position: absolute; top: max(10px, env(safe-area-inset-top)); right: 12px; width: min(240px, 46vw); }
+  #hud .tl { position: absolute; top: max(10px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); width: min(240px, 46vw); }
   .hpbox { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 8px 10px; backdrop-filter: blur(8px); }
   .hpbox .row { display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; }
   .hp { height: 10px; border-radius: 6px; background: rgba(255, 255, 255, 0.1); margin-top: 5px; overflow: hidden; }
@@ -151,13 +159,13 @@
   .hp.low > i { background: linear-gradient(90deg, #ff4d5e, #ff9a3c); }
   /* the board in the air: small, the top three and you, out of the way */
   /* the radar, top left; the short board under it */
-  #radar-box { position: absolute; top: max(10px, env(safe-area-inset-top)); left: 12px; width: 112px; text-align: center; }
+  #radar-box { position: absolute; top: max(10px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left)); width: 112px; text-align: center; }
   #radar { width: 112px; height: 112px; display: block; border-radius: 50%; border: 1px solid rgba(120, 220, 200, 0.35); }
   #radar-near { font-size: 11px; font-weight: 700; color: #ff9a9a; margin-top: 2px; text-shadow: 0 1px 2px #000; min-height: 14px; }
-  .tagdot { position: absolute; width: 5px; height: 5px; margin: -2.5px; border-radius: 50%; background: rgba(255, 120, 130, 0.9); box-shadow: 0 0 3px #000; }
+  .tagdot { position: absolute; left: 0; top: 0; will-change: transform; width: 5px; height: 5px; margin: -2.5px; border-radius: 50%; background: rgba(255, 120, 130, 0.9); box-shadow: 0 0 3px #000; }
   .tagdot.mate { background: #8fc0ff; }
   @media (orientation: landscape) and (max-height: 500px) { #radar-box { width: 92px; } #radar { width: 92px; height: 92px; } #hud .tr { top: 120px !important; } }
-  #hud .tr { position: absolute; top: calc(max(10px, env(safe-area-inset-top)) + 134px); left: 12px; width: min(150px, 34vw); background: rgba(8, 12, 18, 0.45); border-radius: 8px; padding: 4px 8px; font-size: 11px; line-height: 1.35; }
+  #hud .tr { position: absolute; top: calc(max(10px, env(safe-area-inset-top)) + 134px); left: max(12px, env(safe-area-inset-left)); width: min(150px, 34vw); background: rgba(8, 12, 18, 0.45); border-radius: 8px; padding: 4px 8px; font-size: 11px; line-height: 1.35; }
   #hud .tr .r { display: flex; gap: 6px; padding: 2px 0; }
   #hud .tr .r .n { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #hud .tr .r.me { color: var(--accent); font-weight: 800; }
@@ -184,11 +192,21 @@
     background-repeat: no-repeat; filter: drop-shadow(0 0 1px #000); transition: width 0.15s, height 0.15s, margin 0.15s; }
   #lock.ready { width: 22px; height: 22px; margin: -11px; --c: #ff4040; opacity: 1; }
   .tags { position: absolute; inset: 0; }
-  .tagp { position: absolute; transform: translate(-50%, -100%); text-align: center; font-size: 10.5px; font-weight: 700; opacity: 0.9; text-shadow: 0 1px 2px #000, 0 0 4px #000; white-space: nowrap; }
+  .tagp { position: absolute; left: 0; top: 0; will-change: transform; text-align: center; font-size: 10.5px; font-weight: 700; opacity: 0.9; text-shadow: 0 1px 2px #000, 0 0 4px #000; white-space: nowrap; }
   .tagp .mini { width: 44px; height: 4px; margin: 3px auto 0; background: rgba(0, 0, 0, 0.5); border-radius: 2px; overflow: hidden; }
   .tagp .mini i { display: block; height: 100%; background: var(--red); }
   .tagp.off { color: #ff8a95; }
   .arrow { position: absolute; width: 0; height: 0; border-left: 9px solid transparent; border-right: 9px solid transparent; border-bottom: 16px solid var(--red); filter: drop-shadow(0 0 3px #000); }
+  /* patched up on a repair pad: the screen's edges glow green a moment */
+  #heal-flash { position: absolute; inset: 0; pointer-events: none; opacity: 0; box-shadow: inset 0 0 90px rgba(77,255,154,0.75); }
+  #heal-flash.on { animation: healglow 1s ease-out; }
+  @keyframes healglow { 0% { opacity: 1; } 100% { opacity: 0; } }
+  /* a missile coming for you: a red ring round it, or an arrow at the edge */
+  #threat { position: absolute; width: 0; height: 0; pointer-events: none; }
+  #threat i { position: absolute; left: -23px; top: -23px; width: 46px; height: 46px; border: 3px solid #ff3b3b; border-radius: 50%; box-shadow: 0 0 10px rgba(255,59,59,0.8); animation: blink 0.25s infinite alternate; }
+  #threat b { position: absolute; left: -30px; top: 26px; width: 60px; text-align: center; font-size: 12px; font-weight: 800; color: #ff6b6b; text-shadow: 0 1px 3px #000; }
+  #threat.edge i { border-radius: 0; border: 0; width: 0; height: 0; left: -16px; top: -16px; box-shadow: none; border-left: 32px solid #ff3b3b; border-top: 16px solid transparent; border-bottom: 16px solid transparent; transform: rotate(var(--a)); transform-origin: 16px 16px; filter: drop-shadow(0 0 4px rgba(255,59,59,0.9)); }
+  #warn.now { background: #ff2a2a; font-size: 20px; padding: 9px 22px; }
   #warn { position: absolute; top: 30%; left: 50%; transform: translateX(-50%); padding: 7px 18px; border-radius: 4px; background: rgba(200, 30, 45, 0.85); font-weight: 800; font-size: 16px; letter-spacing: 1px; animation: blink 0.5s infinite alternate; }
   #edge { position: absolute; top: 38%; left: 50%; transform: translateX(-50%); padding: 6px 14px; border-radius: 12px; background: rgba(255, 176, 46, 0.85); color: #241200; font-weight: 800; }
   @keyframes blink { to { opacity: 0.45; } }
@@ -205,9 +223,9 @@
   .msl { display: flex; gap: 3px; }
   .msl i { width: 7px; height: 16px; border-radius: 3px; background: rgba(255, 255, 255, 0.2); }
   .msl i.on { background: #fff; }
-  #menu-btn { pointer-events: auto; position: absolute; bottom: max(14px, env(safe-area-inset-bottom)); right: 12px; background: rgba(8, 12, 18, 0.35); }
+  #menu-btn { pointer-events: auto; position: absolute; bottom: max(14px, env(safe-area-inset-bottom)); right: max(12px, env(safe-area-inset-right)); background: rgba(8, 12, 18, 0.35); }
   #corner .icon-btn { background: rgba(8, 12, 18, 0.45); }
-  #invite-btn { pointer-events: auto; position: absolute; bottom: max(62px, calc(env(safe-area-inset-bottom) + 52px)); right: 12px; background: rgba(8, 12, 18, 0.35); }
+  #invite-btn { pointer-events: auto; position: absolute; bottom: max(62px, calc(env(safe-area-inset-bottom) + 52px)); right: max(12px, env(safe-area-inset-right)); background: rgba(8, 12, 18, 0.35); }
   #teamscore { position: absolute; top: max(10px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); display: flex; gap: 8px; align-items: center; padding: 4px 14px; background: rgba(8, 12, 18, 0.5); border-radius: 4px; font-size: 14px; font-weight: 800; letter-spacing: 1px; }
   #teamscore .b { color: #6aa8ff; } #teamscore .r { color: #ff6a6a; } #teamscore .sep { opacity: 0.5; }
   #bossbar { position: absolute; top: max(40px, calc(env(safe-area-inset-top) + 32px)); left: 50%; transform: translateX(-50%); width: min(340px, 60vw); }
@@ -352,6 +370,8 @@
 <div id="hud" class="hidden">
   <div class="tags" id="tags"></div>
   <div id="cross"></div>
+  <div id="heal-flash"></div>
+  <div id="threat" class="hidden"><i></i><b id="threat-d"></b></div>
   <div id="lock" class="hidden"></div>
   <div id="lead" class="hidden"></div>
   <div id="hitdir"></div>

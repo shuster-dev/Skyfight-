@@ -3,9 +3,9 @@
 // handful of draw calls.
 import {
   AdditiveBlending, BoxGeometry, Color, ConeGeometry, CylinderGeometry, DynamicDrawUsage, Group, IcosahedronGeometry,
-  InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshStandardMaterial, Object3D, Quaternion, SphereGeometry, Vector3,
+  InstancedMesh, Matrix4, ShaderMaterial, Mesh, MeshBasicMaterial, MeshStandardMaterial, Object3D, Quaternion, SphereGeometry, Vector3,
 } from 'three';
-import { GUN } from '../../shared/combat.js';
+import { GUN, MISSILE } from '../../shared/combat.js';
 
 const O = new Object3D(), V = new Vector3(), Q = new Quaternion(), Z = new Vector3(0, 0, 1), C = new Color();
 
@@ -26,7 +26,24 @@ export class Fx {
     this.sm.setColorAt(0, C.set(0xffffff));
     this.puffs = [];
     // fireballs: glowing, additive
-    this.fb = new InstancedMesh(new IcosahedronGeometry(1, 1), new MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, blending: AdditiveBlending, depthWrite: false }), 260);
+    // soft at the edges (the more side-on the surface, the more see-through),
+    // hot in the middle: a ball of fire, not a lit polyhedron
+    this.fb = new InstancedMesh(new IcosahedronGeometry(1, 2), new ShaderMaterial({
+      transparent: true, depthWrite: false,
+      vertexShader: `varying vec3 vC; varying float vF;
+        void main() {
+          vec4 mv = modelViewMatrix * instanceMatrix * vec4(position, 1.0);
+          vec3 n = normalize(normalMatrix * mat3(instanceMatrix) * normal);
+          vF = abs(dot(n, normalize(-mv.xyz)));
+          vC = instanceColor;
+          gl_Position = projectionMatrix * mv;
+        }`,
+      fragmentShader: `varying vec3 vC; varying float vF;
+        void main() {
+          vec3 c = mix(vC, vec3(1.0, 0.93, 0.7), pow(vF, 3.0) * 0.85);
+          gl_FragColor = vec4(c, pow(vF, 1.2) * 0.95);
+        }`,
+    }), 260);
     this.fb.instanceMatrix.setUsage(DynamicDrawUsage);
     this.fb.frustumCulled = false;
     this.fb.setColorAt(0, C.set(0xffffff));
@@ -103,22 +120,40 @@ export class Fx {
     this.balls.push({ p: p.clone(), s: 0.8, t: 0, life: 0.12 });
   }
 
-  /** Bring the missiles on screen in line with the room's list. */
-  syncMissiles(list, dt) {
+  /**
+   * Bring the missiles on screen in line with the room's list. Between the
+   * room's word on them (`age` seconds old) each flies on at its own speed,
+   * so it streaks rather than hops; a small error left is eased out.
+   */
+  syncMissiles(list, dt, age = 0) {
     const seen = new Set();
     for (const m of list) {
       seen.add(m.id);
       let e = this.missiles.get(m.id);
+      const f = V.set(-Math.sin(m.yaw) * Math.cos(m.pitch), Math.sin(m.pitch), -Math.cos(m.yaw) * Math.cos(m.pitch));
+      const want = new Vector3(m.x, m.y, m.z).addScaledVector(f, MISSILE.speed * age);
       if (!e) {
         e = { mesh: missileMesh(), trailT: 0 };
-        e.mesh.position.set(m.x, m.y, m.z);
+        e.mesh.position.copy(want);
         this.scene.add(e.mesh);
         this.missiles.set(m.id, e);
       }
-      e.mesh.position.lerp(V.set(m.x, m.y, m.z), Math.min(1, dt * 12));
+      const p = e.mesh.position;
+      p.addScaledVector(f, MISSILE.speed * dt);
+      p.lerp(want, Math.min(1, dt * 8));
+      if (p.distanceTo(want) > 40) p.copy(want);
       e.mesh.rotation.set(m.pitch, m.yaw, 0, 'YXZ');
+      // the motor: a flickering flame and a hot point you can see from far off
+      const fl = e.mesh.userData.flame;
+      fl.scale.set(1, 1, 0.8 + Math.random() * 0.6);
+      e.mesh.userData.glow.scale.setScalar(2.2 + Math.random() * 0.8);
+      // a thick white trail, from the tail
       e.trailT += dt;
-      if (e.trailT > 0.03) { e.trailT = 0; this.puff(e.mesh.position, { color: 0xf2f2f2, size: 1.1, grow: 3.5, life: 1.6, rise: 0.6 }); }
+      if (e.trailT > 0.02) {
+        e.trailT = 0;
+        const tail = new Vector3(0, 0, 2.2).applyEuler(e.mesh.rotation).add(p);
+        this.puff(tail, { color: 0xf4f4f4, size: 1.3, grow: 4.5, life: 2.2, rise: 0.4 });
+      }
     }
     for (const [id, e] of this.missiles) if (!seen.has(id)) { this.scene.remove(e.mesh); this.missiles.delete(id); }
   }
@@ -186,7 +221,7 @@ export class Fx {
       O.scale.setScalar(b.s * (0.5 + k * 1.2) * (1 - k * k));
       O.updateMatrix();
       this.fb.setMatrixAt(n, O.matrix);
-      this.fb.setColorAt(n, b.flare ? C.setRGB(1, 0.97, 0.85) : C.setHSL(0.09 - k * 0.07, 1, 0.62 - k * 0.3));
+      this.fb.setColorAt(n, b.flare ? C.setRGB(1, 0.97, 0.85) : C.setHSL(0.1 - k * 0.08, 1, 0.62 - k * 0.32));
       n++;
     }
     this.fb.count = n;
@@ -213,20 +248,28 @@ export class Fx {
 }
 
 function missileMesh() {
+  // a little over life size: a real one is a pencil at fighting distance
   const g = new Group();
-  const body = new Mesh(new CylinderGeometry(0.22, 0.22, 2.6, 8).rotateX(Math.PI / 2), new MeshStandardMaterial({ color: 0xe8e8ee, flatShading: true }));
-  const nose = new Mesh(new ConeGeometry(0.22, 0.6, 8).rotateX(-Math.PI / 2), new MeshStandardMaterial({ color: 0xd8432f, flatShading: true }));
-  nose.position.z = -1.6;
-  const glow = new Mesh(new SphereGeometry(0.45, 8, 6), new MeshBasicMaterial({ color: 0xffb347, transparent: true, opacity: 0.9, blending: AdditiveBlending, depthWrite: false }));
-  glow.position.z = 1.4;
-  g.add(body, nose, glow);
+  const white = new MeshStandardMaterial({ color: 0xeef0f4, roughness: 0.4, metalness: 0.2 });
+  const body = new Mesh(new CylinderGeometry(0.32, 0.32, 3.6, 10).rotateX(Math.PI / 2), white);
+  const nose = new Mesh(new ConeGeometry(0.32, 0.9, 10).rotateX(-Math.PI / 2), new MeshStandardMaterial({ color: 0x3a3f47, roughness: 0.3 }));
+  nose.position.z = -2.25;
+  const band = new Mesh(new CylinderGeometry(0.335, 0.335, 0.25, 10).rotateX(Math.PI / 2), new MeshStandardMaterial({ color: 0xd8b13a }));
+  band.position.z = -1.2;
+  // the motor's flame: a hot cone out of the tail, and a glow round it
+  const flame = new Mesh(new ConeGeometry(0.3, 2.4, 8).rotateX(-Math.PI / 2).translate(0, 0, 3.0), new MeshBasicMaterial({ color: 0xffc46b, transparent: true, opacity: 0.95, blending: AdditiveBlending, depthWrite: false }));
+  const glow = new Mesh(new SphereGeometry(0.5, 10, 8), new MeshBasicMaterial({ color: 0xff9a3c, transparent: true, opacity: 0.85, blending: AdditiveBlending, depthWrite: false, fog: false }));
+  glow.position.z = 2.0;
+  g.add(body, nose, band, flame, glow);
+  g.userData.flame = flame; g.userData.glow = glow;
   for (let i = 0; i < 4; i++) {
-    const f = new Mesh(new BoxGeometry(0.05, 0.6, 0.5), new MeshStandardMaterial({ color: 0x9aa0aa }));
-    f.position.z = 1.0;
     const a = new Group();
-    a.rotation.z = i * Math.PI / 2;
-    f.position.y = 0.3;
-    a.add(f);
+    a.rotation.z = i * Math.PI / 2 + Math.PI / 4;
+    const tail = new Mesh(new BoxGeometry(0.05, 0.75, 0.7), white);
+    tail.position.set(0, 0.5, 1.4);
+    const canard = new Mesh(new BoxGeometry(0.05, 0.45, 0.35), white);
+    canard.position.set(0, 0.4, -1.5);
+    a.add(tail, canard);
     g.add(a);
   }
   return g;

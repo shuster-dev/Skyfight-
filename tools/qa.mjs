@@ -1,9 +1,9 @@
 // The rules, checked without a server or a browser: flying, shooting, paying,
 // and the hangar's prices. `npm run qa`
 import { PLANES, PLANE_ORDER, UPGRADES, TIER_COST, TIER_LEVEL, statsOf, xpAt, xpStep, levelOf, levelProgress, killReward, cleanCallsign, nextTier, MAX_LEVEL } from '../src/shared/planes.js';
-import { ARENA, BRIDGE, BUILDINGS, groundAt, hitsSolid, inBay, spawnPoint, surfaceAt, terrainAt, underBridge } from '../src/shared/arena.js';
+import { ARENA, BRIDGE, BUILDINGS, HEAL, HEALS, groundAt, healAt, hitsSolid, inBay, spawnPoint, surfaceAt, terrainAt, underBridge } from '../src/shared/arena.js';
 import { fly, flyQ, forward, newBody, newBodyQ, plausibleMove, BOOST, Q } from '../src/shared/flight.js';
-import { GUN, MISSILE, RAM, aimDir, blastDamage, closestOn, offNose, pickTarget, ramDamage, segmentHit, steerMissile } from '../src/shared/combat.js';
+import { GUN, MISSILE, RAM, aimDir, blastDamage, closestOn, DODGE, dodgeChance, offNose, pickTarget, ramDamage, segmentHit, steerMissile } from '../src/shared/combat.js';
 import { newPilot, normalize, buyPlane, buyUpgrade, choosePlane, payKill, view } from '../src/server/pilot.js';
 
 let pass = 0, fail = 0;
@@ -18,15 +18,19 @@ ok('the first plane is free and open at level 1', PLANES.sparrow.price === 0 && 
 ok('every plane has a Hebrew name and a description', PLANE_ORDER.every((k) => PLANES[k].he && PLANES[k].desc));
 ok('prices rise with level', PLANE_ORDER.every((k, i) => !i || PLANES[k].price > PLANES[PLANE_ORDER[i - 1]].price));
 {
-  const base = statsOf('sparrow'), up = statsOf('sparrow', { engine: 5, armor: 5, guns: 5, missiles: 5, flares: 5 });
-  ok('no upgrades: the plane as it is', base.hp === 100 && base.speed === 60 && base.missiles === 1);
-  ok('engine 5: a quarter faster', near(up.speed, 60 * 1.25) && near(up.boost, 92 * 1.25));
-  ok('armor 5: 60% more health', up.hp === 160);
-  ok('guns 5: 30% more damage and 30% faster fire', near(up.dmg, base.dmg * 1.3) && near(up.rate, base.rate * 1.3));
-  ok('engine 5: the burner refills faster', up.fill > base.fill * 1.7);
-  ok('flares 3+: one more flare, and faster reload', up.flares === base.flares + 1 && up.flareReload < base.flareReload * 0.4);
+  const ALL5 = { engine: 5, turbo: 5, guns: 5, armor: 5, missiles: 5, flares: 5 };
+  const base = statsOf('sparrow'), up = statsOf('sparrow', ALL5), best = statsOf('phantom'), third = statsOf('bulldog');
+  ok('no upgrades: the plane as it is', base.hp === 100 && base.speed === 56 && base.missiles === 1);
+  ok('the starter is heavy and slow to fire', base.turn < best.turn && base.speed < best.speed && base.rate * base.dmg < Math.min(...PLANE_ORDER.slice(1).map((k) => statsOf(k).rate * statsOf(k).dmg)));
+  ok('the starter\'s engine at 5 flies like the best plane', near(up.speed, best.speed) && near(up.turn, best.turn) && near(up.climb, best.climb));
+  ok('its turbo at 5 too', near(up.boost, best.boost) && near(up.fill, best.fill));
+  ok('its guns at 5 match the third best, not the best', near(up.rate * up.dmg, third.rate * third.dmg) && up.rate * up.dmg < best.rate * best.dmg);
+  ok('its armour at 5 matches the third best', up.hp === third.hp);
+  ok('each tier is a fifth of the way', near(statsOf('sparrow', { engine: 2 }).speed, base.speed + (best.speed - base.speed) * 0.4));
+  ok('the best plane still gains from an upgrade', statsOf('phantom', ALL5).speed > best.speed && statsOf('phantom', ALL5).rate * statsOf('phantom', ALL5).dmg > best.rate * best.dmg);
+  ok('flares 3+: one more flare, and faster reload', up.flares === base.flares + 1 && up.flareReload < base.flareReload);
   ok('missiles 3+: one more missile, and faster reload', up.missiles === 2 && up.reload < base.reload);
-  ok('nonsense tiers are clamped', statsOf('sparrow', { engine: 99 }).speed === up.speed && statsOf('sparrow', { engine: -4 }).speed === 60);
+  ok('nonsense tiers are clamped', statsOf('sparrow', { engine: 99 }).speed === up.speed && statsOf('sparrow', { engine: -4 }).speed === 56);
   ok('an unknown plane flies as the first', statsOf('nope').plane === 'sparrow');
 }
 
@@ -76,12 +80,19 @@ console.log('\nthe arena');
   ok('the ground is the same every time', terrainAt(100, 33) === terrainAt(100, 33));
 }
 
+console.log('\nrepair pads');
+ok('a few pads, on land', HEALS.length >= 4 && HEALS.every((p) => terrainAt(p.x, p.z) > 1));
+ok('each on open ground: nothing to fly into over it', HEALS.every((p) => [6, 15, 30, HEAL.h - 2].every((h) => [[0, 0], [HEAL.r - 3, 0], [0, HEAL.r - 3], [-(HEAL.r - 3), 0], [0, -(HEAL.r - 3)]].every(([dx, dz]) => !hitsSolid(p.x + dx, groundAt(p.x + dx, p.z + dz) + h, p.z + dz, 1)))));
+ok('low over a pad is on it', healAt(HEALS[1].x + 5, HEALS[1].y + 20, HEALS[1].z) === 1);
+ok('high over it is not', healAt(HEALS[1].x, HEALS[1].y + HEAL.h + 5, HEALS[1].z) === -1);
+ok('beside it is not', healAt(HEALS[1].x + HEAL.r + 2, HEALS[1].y + 10, HEALS[1].z) === -1);
+
 console.log('\nflying');
 {
   const st = statsOf('sparrow');
   const b = newBody({ x: 0, y: 300, z: 0, yaw: 0 }, st);
   for (let i = 0; i < 30; i++) fly(b, {}, st, 1 / 30);
-  ok('yaw 0 flies toward -z at cruise', b.z < -55 && near(b.x, 0, 1e-6) && near(b.speed, 60, 0.5), b);
+  ok('yaw 0 flies toward -z at cruise', b.z < -52 && near(b.x, 0, 1e-6) && near(b.speed, st.speed, 0.5), b);
   const r = newBody({ x: 0, y: 300, z: 0, yaw: 0 }, st);
   for (let i = 0; i < 30; i++) fly(r, { turn: 1 }, st, 1 / 30);
   ok('right turns right (+x when heading -z)', r.x > 5, r.x);
@@ -106,7 +117,7 @@ console.log('\nflying');
   for (let i = 0; i < 60; i++) fly(bo, { boost: true }, st, 1 / 30);
   ok('the burner speeds up and burns the tank', bo.speed > 80 && bo.fuel < 0.6, bo);
   for (let i = 0; i < 30 * 8; i++) fly(bo, { boost: true }, st, 1 / 30);
-  ok('an empty tank burns no more', !bo.boosting && bo.fuel <= BOOST.min + 0.01);
+  ok('an empty tank burns no more, and does not sputter back on', !bo.boosting && bo.dry && bo.fuel < BOOST.relight);
 }
 {
   const st = statsOf('sparrow');
@@ -170,6 +181,10 @@ ok('a missile passing close goes off by a plane it was not after', closestOn(0, 
 ok('the blast hurts in full up close', blastDamage(2) === MISSILE.dmg && blastDamage(MISSILE.full) === MISSILE.dmg);
 ok('less further out, nothing past the blast', blastDamage(12) < MISSILE.dmg && blastDamage(12) > blastDamage(18) && blastDamage(MISSILE.blast + 1) === 0);
 ok('the fuse is inside the blast', blastDamage(MISSILE.fuse) > 0);
+ok('a break at the last moment nearly always shakes a missile', dodgeChance(DODGE.near) === DODGE.best && DODGE.best >= 0.85);
+ok('a break at the edge of the window rarely does', near(dodgeChance(DODGE.far), DODGE.worst) && dodgeChance(DODGE.far) < 0.3);
+ok('too early, or too late, it does not at all', dodgeChance(DODGE.far + 1) === 0 && dodgeChance(DODGE.near - 1) === 0);
+ok('the later, the better', dodgeChance(60) > dodgeChance(120));
 ok('a graze side by side takes a bite', ramDamage(5) === RAM.min);
 ok('a head-on at speed brings down even the heaviest plane', ramDamage(60 + 70) >= 100 && ramDamage(120 + 120) >= statsOf('bulldog', { armor: 5 }).hp, ramDamage(240));
 ok('more speed, more damage', ramDamage(80) > ramDamage(40));
@@ -188,13 +203,18 @@ console.log('\nthe hangar');
   ok('back to the first plane', choosePlane(p, 'sparrow').ok && p.plane === 'sparrow');
   ok('not one you do not own', choosePlane(p, 'phantom').error === 'not_owned');
   p.gold = 1000;
-  ok('the first upgrade costs its price', buyUpgrade(p, 'engine').ok && p.upgrades.engine === 1 && p.gold === 1000 - TIER_COST[0], p);
+  const c1 = nextTier(p, 'engine', 'sparrow').cost;
+  ok('an upgrade is for one plane: the one flown', buyUpgrade(p, 'engine').ok && p.upgrades.sparrow.engine === 1 && p.upgrades.hornet.engine === 0 && p.gold === 1000 - c1, p);
+  ok('a better plane\'s tier costs more', nextTier(p, 'engine', 'hornet').cost > c1 && c1 < TIER_COST[0]);
+  ok('or another plane you own', buyUpgrade(p, 'armor', 'hornet').ok && p.upgrades.hornet.armor === 1 && !p.upgrades.sparrow.armor);
+  ok('not a plane you do not own', buyUpgrade(p, 'armor', 'phantom').error === 'not_owned');
   p.gold = 1e6;
   ok('the second tier waits for its level', buyUpgrade(p, 'engine').error === 'level' && p.level < TIER_LEVEL[1]);
   p.xp = xpAt(30); normalize(p);
   for (let i = 0; i < 9; i++) buyUpgrade(p, 'engine');
-  ok('five tiers and no more', p.upgrades.engine === 5 && buyUpgrade(p, 'engine').error === 'max' && nextTier(p, 'engine') === null);
+  ok('five tiers and no more', p.upgrades.sparrow.engine === 5 && buyUpgrade(p, 'engine').error === 'max' && nextTier(p, 'engine') === null);
   ok('an unknown upgrade is refused', buyUpgrade(p, 'laser').error === 'no_such_upgrade');
+  ok('a plane bought later starts with none', (p.gold = 1e6, buyPlane(p, 'bulldog').ok) && Object.values(p.upgrades.bulldog).every((t) => t === 0));
   const q = newPilot('u2');
   const r = payKill(q, { level: 1, bot: true });
   ok('a kill pays xp, gold and counts', q.xp === r.xp && q.gold === r.gold && q.kills === 1);
@@ -207,7 +227,9 @@ console.log('\nthe hangar');
   const lv = payKill(z, { level: 5, bot: false });
   ok('a level up pays a gold bonus on top', lv.up && lv.bonus === 200 && z.gold === lv.gold + 200, lv);
   const broken = normalize({ id: 'x', xp: -5, plane: 'jet', planes: ['jet'], upgrades: { engine: 77 } });
-  ok('a broken record is mended', broken.xp === 0 && broken.plane === 'sparrow' && broken.upgrades.engine === 5 && broken.upgrades.armor === 0 && broken.upgrades.flares === 0);
+  ok('a broken record is mended', broken.xp === 0 && broken.plane === 'sparrow' && broken.upgrades.sparrow.engine === 5 && broken.upgrades.sparrow.armor === 0 && broken.upgrades.sparrow.turbo === 0);
+  const old = normalize({ id: 'y', xp: 0, plane: 'hornet', planes: ['sparrow', 'hornet'], upgrades: { engine: 2, guns: 3, armor: 0, missiles: 1, flares: 0 } });
+  ok('old upgrades (for every plane) stay, on each plane owned', old.upgrades.hornet.guns === 3 && old.upgrades.sparrow.engine === 2 && old.upgrades.hornet.turbo === 0);
   ok('the view has no id', !('id' in view(p)));
 }
 

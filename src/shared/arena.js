@@ -225,3 +225,21 @@ export function spawnPoint(n, count = 12) {
   // facing the middle: forward is (-sin yaw, -cos yaw), so yaw = atan2(x, z)
   return { x, y, z, yaw: Math.atan2(x, z), pitch: 0 };
 }
+
+/**
+ * Repair pads: rings of light on open ground. Fly low through one (inside
+ * `r` metres, under `h` above the ground) and the airframe is patched up to
+ * full; then the pad is spent for `every` seconds. Spread round the land
+ * side, on flat ground clear of anything to fly into.
+ */
+export const HEAL = { r: 26, h: 45, every: 30 };
+export const HEALS = [[433, 250], [139, 788], [69, -394], [520, -300], [156, -886]].map(([x, z]) => ({ x, z, y: groundAt(x, z) }));
+
+/** The pad a plane at (x, y, z) is flying through, as its index, or -1. */
+export function healAt(x, y, z) {
+  for (let i = 0; i < HEALS.length; i++) {
+    const p = HEALS[i];
+    if (Math.hypot(x - p.x, z - p.z) < HEAL.r && y < p.y + HEAL.h) return i;
+  }
+  return -1;
+}
