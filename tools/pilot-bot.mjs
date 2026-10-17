@@ -52,7 +52,7 @@ room.onMessage('reward', (m) => {
   if (m.pilot.level > st.level) st.levels.push(`${m.pilot.level}@${Math.round((Date.now() - t0) / 1000)}s`);
   st.level = m.pilot.level;
 });
-for (const t of ['roster', 'hurt', 'incoming', 'boom', 'pong']) room.onMessage(t, () => {});
+for (const t of ['roster', 'hurt', 'incoming', 'boom', 'pong', 'flare', 'flared']) room.onMessage(t, () => {});
 room.send('hello');
 
 // the stick, worked out the way a decent player would

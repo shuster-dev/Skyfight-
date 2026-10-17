@@ -7,9 +7,9 @@ import { makeRenderer, makeWorld, inCloud } from './gfx/scene.js';
 import { buildPlane, animatePlane } from './gfx/planes.js';
 import { Fx } from './gfx/fx.js';
 import { PLANES, PLANE_ORDER, UPGRADES, UPGRADE_ORDER, TIER_MAX, nextTier, statsOf, levelProgress, planeOpen, planeOwned, cleanCallsign, displayName } from '../shared/planes.js';
-import { ARENA, groundAt } from '../shared/arena.js';
+import { ARENA, BRIDGE, groundAt, underBridge } from '../shared/arena.js';
 import { fly, forward, newBody } from '../shared/flight.js';
-import { GUN, MISSILE, RESPAWN, aimDir, pickTarget } from '../shared/combat.js';
+import { FLARE, GUN, MISSILE, RESPAWN, aimDir, pickTarget } from '../shared/combat.js';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -26,7 +26,7 @@ const err = (e) => ERR[e?.code] || 'משהו השתבש — נסו שוב';
 const net = new Net();
 const controls = new Controls();
 const renderer = makeRenderer($('#game'));
-const world = makeWorld();
+const world = makeWorld(renderer);
 const { scene, camera } = world;
 const fx = new Fx(scene);
 
@@ -41,6 +41,7 @@ const S = {
   preview: [], previewKind: '',
 };
 window.__sky = S; // the browser tests look in here
+S.world = world; S.camera = camera; S.buildPlane = buildPlane; S.scene = scene;
 S.look = controls.look;
 
 // ---- the camera's rig, and the showcase behind the menus ------------------
@@ -62,7 +63,8 @@ function clearPreview() { for (const p of S.preview) scene.remove(p.mesh); S.pre
 
 /** Planes flying a slow circle over the islands, the camera beside them. */
 function showcase(t, dt, wide) {
-  const R = 520, w = 0.055, a = t * w;
+  // round the bridge and the city, low enough to see them
+  const R = 380, w = 0.07, a = t * w, ox = BRIDGE.x - 60, oz = BRIDGE.cz;
   const lead = S.preview[0];
   if (!lead) return;
   const slots = [[0, 0, 0], [-34, -6, 34], [34, -10, 40]];
@@ -70,9 +72,9 @@ function showcase(t, dt, wide) {
     const [sx, sy, sz] = slots[p.slot] || [0, 0, 0];
     // along the circle; the formation offset is in the plane's own frame
     const yaw = -a; // flying counter-clockwise, nose along the tangent
-    const cx = Math.cos(a) * R, cz = Math.sin(a) * R;
+    const cx = ox + Math.cos(a) * R, cz = oz + Math.sin(a) * R;
     const fx_ = -Math.sin(yaw), fz = -Math.cos(yaw), rx = Math.cos(yaw), rz = -Math.sin(yaw);
-    p.mesh.position.set(cx + rx * sx - fx_ * sz, 240 + sy + Math.sin(t * 0.9 + p.slot) * 1.5, cz + rz * sx - fz * sz);
+    p.mesh.position.set(cx + rx * sx - fx_ * sz, 215 + sy + Math.sin(t * 0.9 + p.slot) * 1.5, cz + rz * sx - fz * sz);
     p.mesh.rotation.set(Math.sin(t * 0.5 + p.slot) * 0.04, yaw, -0.18 + Math.sin(t * 0.7 + p.slot) * 0.05, 'YXZ');
     animatePlane(p.mesh, dt, { speed: 60, time: t });
   }
@@ -231,7 +233,7 @@ function renderHangar() {
 }
 
 function renderPlanes() {
-  const p = S.pilot, max = { hp: 165, speed: 74, turn: 1.95, dmg: 7 * 12 * 4 };
+  const p = S.pilot, max = { hp: 200, speed: 80, turn: 1.95, dps: 80 };
   $('#tab-planes').innerHTML = PLANE_ORDER.map((k) => {
     const d = PLANES[k], own = planeOwned(p, k), open = planeOpen(p, k), sel = p.plane === k;
     const st = statsOf(k, p.upgrades);
@@ -242,9 +244,10 @@ function renderPlanes() {
           : `<button class="pbtn" disabled>🔒 נפתח ברמה ${d.level}</button>`;
     return `<div class="pcard ${sel ? 'sel' : ''} ${open ? '' : 'locked'}" data-view="${k}">
       <h3>${d.he} <span class="role">${d.role}</span></h3>
+      <div class="era"><span class="num">${d.era}</span> · ${d.kind}</div>
       <p>${d.desc}</p>
-      <div class="bars">${bar('חיים', st.hp, max.hp)}${bar('מהירות', st.speed, max.speed)}${bar('תמרון', d.turn, max.turn)}${bar('אש', st.dmg * d.rate * d.guns, max.dmg)}</div>
-      <div class="bars" style="margin-top:4px"><span>טילים</span><span>${'🚀'.repeat(st.missiles)}</span></div>
+      <div class="bars">${bar('חיים', st.hp, max.hp)}${bar('מהירות', st.speed, max.speed)}${bar('תמרון', d.turn, max.turn)}${bar('אש', st.dmg * d.rate, max.dps)}</div>
+      <div class="arms">🔫 ${d.guns}<br>🚀 ${st.missiles} × ${d.missile} · 🎆 ${st.flares} נורים</div>
       ${btn}
     </div>`;
   }).join('');
@@ -347,7 +350,7 @@ function hook(room) {
     const me = S.me;
     if (!me) return;
     me.body = newBody(m, me.stats);
-    me.alive = true; me.hp = m.hp; me.ammo = m.ammo; me.reloadT = 0;
+    me.alive = true; me.hp = m.hp; me.ammo = m.ammo; me.reloadT = 0; me.crashed = false; me.flares = m.flares ?? me.stats.flares; me.flareT = 0;
     me.shieldUntil = performance.now() + m.shield * 1000;
     me.mesh.visible = true;
     // the camera starts behind, not wherever the last life ended
@@ -377,6 +380,14 @@ function hook(room) {
     sound.hurt();
   });
   room.onMessage('fired', (m) => { if (S.me) S.me.ammo = m.ammo; sound.launch(); });
+  room.onMessage('flared', (m) => {
+    if (S.me) S.me.flares = m.flares;
+    if (m.pulled) S.warnUntil = 0, toast('🎆 הטיל הוטעה!');
+  });
+  room.onMessage('flare', (m) => {
+    const p = m.k === S.myKey ? S.me?.mesh : S.others.get(m.k)?.mesh;
+    if (p) fx.flares(p.position, p.rotation), sound.flare();
+  });
   room.onMessage('incoming', () => { S.warnUntil = performance.now() + 3500; sound.warn(); });
   room.onMessage('boom', (b) => {
     const p = new Vector3(b[0] / 10, b[1] / 10, b[2] / 10);
@@ -491,10 +502,10 @@ function frame(t) {
   const time = t / 1000;
   const wide = innerWidth > innerHeight;
   if (S.mode === 'air') air(dt, time);
-  else showcase(time, dt, wide);
+  else if (S.mode !== 'look') showcase(time, dt, wide); // 'look': a tool holds the camera
   fx.syncMissiles(S.missiles, dt);
   fx.tick(dt, camera);
-  world.tick(time);
+  world.tick(time, dt);
   renderer.render(scene, camera);
 }
 
@@ -527,23 +538,32 @@ function air(dt, time) {
 
   if (me?.body && me.alive) {
     const input = controls.read();
-    const res = fly(me.body, input, me.stats, dt);
+    const res = me.crashed ? '' : fly(me.body, input, me.stats, dt);
     const b = me.body;
     me.mesh.position.set(b.x, b.y, b.z);
     me.mesh.rotation.set(b.pitch, b.yaw, b.roll, 'YXZ');
     me.mesh.visible = now > me.shieldUntil || Math.floor(time * 8) % 2 === 0;
-    animatePlane(me.mesh, dt, { boost: b.boosting, speed: b.speed, time });
+    animatePlane(me.mesh, dt, { boost: b.boosting, speed: b.speed, time, ammo: me.ammo, ammoMax: me.stats.missiles });
     if (input.missile && me.ammo > 0) S.room?.send('missile');
+    if (input.flare && me.flares > 0) S.room?.send('flare');
+    if (me.flares < me.stats.flares) { me.flareT += dt; if (me.flareT >= FLARE.reload) me.flares++, me.flareT = 0; }
     if (me.ammo < me.stats.missiles) { me.reloadT += dt; if (me.reloadT >= me.stats.reload) me.ammo++, me.reloadT = 0; }
     me.firing = input.fire;
     if (input.fire) guns({ ...b, key: S.myKey, alive: true, _me: me }, me.mesh, me.stats.rate, dt, true);
     else me.gunT = Math.min(1 / me.stats.rate, me.gunT + dt);
     if (me.hp < me.stats.hp * 0.35) smoke(me, dt, me.mesh.position);
     if (res === 'crash') {
-      // the room needs to see it below the ground to call it
-      b.y = groundAt(b.x, b.z) + 0.3;
+      // the room needs to see it in the thing it hit to call it: into the
+      // ground (or the sea) it goes below the surface; into a building or
+      // the bridge it stays where it struck. Then it stops there.
+      if (b.hit === 'ground' || b.hit === 'sea') b.y = groundAt(b.x, b.z) + 0.3;
       S.sendT = 1;
+      me.crashed = true;
     }
+    // under the bridge: a cheer (once per pass)
+    const under = underBridge(b.x, b.y, b.z);
+    if (under && !me.under) toast('🌉 מתחת לגשר!');
+    me.under = under;
     S.sendT += dt;
     if (S.sendT >= 0.05) {
       S.sendT = 0;
@@ -594,6 +614,8 @@ function chase(b, dt, input) {
   if (Math.abs(camera.fov - fov) > 0.1) { camera.fov += (fov - camera.fov) * Math.min(1, dt * 4); camera.updateProjectionMatrix(); }
 }
 
+// cannons thump; machine guns rattle
+const HEAVY = new Set(['bulldog', 'viper', 'phantom']);
 /** Tracers from the muzzles of whoever is firing, at their rate. */
 const MZ = new Vector3(), DIR = new Vector3();
 function guns(o, mesh, rate, dt, mine) {
@@ -611,7 +633,8 @@ function guns(o, mesh, rate, dt, mine) {
     DIR.set(d.x * GUN.speed + f.x * (o.speed || 60), d.y * GUN.speed + f.y * (o.speed || 60), d.z * GUN.speed + f.z * (o.speed || 60));
     const sp = DIR.length();
     fx.tracer(MZ, DIR.normalize(), sp);
-    if (mine) sound.shot();
+    fx.muzzle(MZ);
+    if (mine) sound.shot(HEAVY.has(S.pilot.plane));
   }
 }
 
@@ -660,6 +683,7 @@ function hud(dt, now) {
     $('#hud-fuel').style.width = `${me.body.fuel * 100}%`;
   }
   $('#hud-msl').innerHTML = Array.from({ length: me.stats.missiles }, (_, i) => `<i class="${i < me.ammo ? 'on' : ''}"></i>`).join('');
+  $('#hud-flr').innerHTML = Array.from({ length: me.stats.flares }, (_, i) => `<i class="${i < (me.flares ?? 0) ? 'on' : ''}"></i>`).join('');
   tags();
 }
 

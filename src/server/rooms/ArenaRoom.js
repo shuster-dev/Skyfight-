@@ -12,9 +12,9 @@ import { Room } from '@colyseus/core';
 import { verifyToken } from '../auth.js';
 import { normalize, payKill, view } from '../pilot.js';
 import { PLANES, PLANE_ORDER, displayName, levelOf, statsOf, killReward } from '../../shared/planes.js';
-import { ARENA, groundAt, spawnPoint } from '../../shared/arena.js';
+import { ARENA, hitsSolid, spawnPoint, surfaceAt } from '../../shared/arena.js';
 import { fly, forward, newBody, plausibleMove } from '../../shared/flight.js';
-import { ASSIST_SHARE, CREDIT_MS, GUN, MISSILE, REPAIR, RESPAWN, aimDir, offNose, pickTarget, segmentHit, steerMissile } from '../../shared/combat.js';
+import { ASSIST_SHARE, CREDIT_MS, FLARE, GUN, MISSILE, REPAIR, RESPAWN, aimDir, offNose, pickTarget, segmentHit, steerMissile } from '../../shared/combat.js';
 
 const TICK_MS = 1000 / 30;
 const SNAP_EVERY = 2;          // 15 snapshots a second
@@ -44,6 +44,10 @@ export class ArenaRoom extends Room {
     this.setSimulationInterval((dt) => this.tick(Math.min(dt, 100) / 1000), TICK_MS);
 
     this.onMessage('pose', (client, m) => this.onPose(client, m));
+    this.onMessage('flare', (client) => {
+      const p = this.planeOf(client);
+      p && this.flare(p);
+    });
     this.onMessage('missile', (client) => {
       const p = this.planeOf(client);
       p && this.launch(p);
@@ -111,7 +115,7 @@ export class ArenaRoom extends Room {
       ...newBody(spawnPoint(0), stats),
       vel: { x: 0, y: 0, z: 0 },
       firing: false, fireT: 0, gun: 0,
-      ammo: stats.missiles, reloadT: 0,
+      ammo: stats.missiles, reloadT: 0, flares: stats.flares, flareT: 0,
       lastHurt: 0, damagers: new Map(),
       kills: 0, deaths: 0, streak: 0,
       poseAt: 0, poses: 0, poseWindow: 0, strikes: 0,
@@ -147,12 +151,12 @@ export class ArenaRoom extends Room {
     Object.assign(p, newBody(best, p.stats));
     p.hp = p.stats.hp; p.alive = true; p.firing = false;
     p.shieldUntil = this.now + RESPAWN.shield * 1000;
-    p.ammo = p.stats.missiles; p.reloadT = 0;
+    p.ammo = p.stats.missiles; p.reloadT = 0; p.flares = p.stats.flares; p.flareT = 0;
     p.damagers.clear(); p.lastHurt = 0;
     p.poseAt = Date.now();
     if (p.bot) p.bot.target = '', p.bot.think = 0;
     const c = p.sid && this.clients.find((x) => x.sessionId === p.sid);
-    c && c.send('spawn', { x: p.x, y: p.y, z: p.z, yaw: p.yaw, pitch: 0, shield: RESPAWN.shield, hp: p.hp, ammo: p.ammo });
+    c && c.send('spawn', { x: p.x, y: p.y, z: p.z, yaw: p.yaw, pitch: 0, shield: RESPAWN.shield, hp: p.hp, ammo: p.ammo, flares: p.flares });
   }
 
   // ---- what clients say ---------------------------------------------------
@@ -187,7 +191,9 @@ export class ArenaRoom extends Room {
     p.firing = !!(flags & 1);
     p.boosting = !!(flags & 2);
     p.poseAt = now;
-    if (y < groundAt(x, z) + ARENA.clearance - 1.5) this.down(p, '', 'crash');
+    // into something solid (a little slack: the client's own check is first)
+    const into = hitsSolid(x, y + 1.5, z, 0.5);
+    if (into) this.down(p, '', 'crash', into);
   }
 
   // ---- the tick -----------------------------------------------------------
@@ -238,7 +244,21 @@ export class ArenaRoom extends Room {
     }
   }
 
+  /** Flares out: every missile on this plane's tail may go for them instead. */
+  flare(p) {
+    if (p.flares < 1) return;
+    p.flares--;
+    let pulled = 0;
+    for (const m of this.missiles) if (m.target === p.key && Math.random() < FLARE.decoy) m.target = '', pulled++;
+    this.broadcast('flare', { k: p.key });
+    this.sendTo(p, 'flared', { flares: p.flares, pulled });
+  }
+
   reload(p, dt) {
+    if (p.flares < p.stats.flares) {
+      p.flareT += dt;
+      if (p.flareT >= FLARE.reload) p.flares++, p.flareT = 0;
+    }
     if (p.ammo >= p.stats.missiles) return void (p.reloadT = 0);
     p.reloadT += dt;
     if (p.reloadT >= p.stats.reload) p.ammo++, p.reloadT = 0;
@@ -259,7 +279,8 @@ export class ArenaRoom extends Room {
       }
       if (hit) { this.hurt(hit, b.owner, b.dmg, 'guns'); continue; }
       b.x = nx; b.y = ny; b.z = nz; b.t += dt;
-      if (b.t < GUN.life && b.y > 0 && (b.y > 240 || b.y > groundAt(b.x, b.z))) keep.push(b);
+      // a round stops in whatever solid thing it flies into
+      if (b.t < GUN.life && (b.y > 270 || !hitsSolid(b.x, b.y, b.z, 0))) keep.push(b);
     }
     this.bullets = keep;
   }
@@ -292,7 +313,7 @@ export class ArenaRoom extends Room {
         this.hurt(hit, m.owner, MISSILE.dmg, 'missile');
         continue;
       }
-      if (m.t > MISSILE.life || m.y < groundAt(m.x, m.z) + 0.5) {
+      if (m.t > MISSILE.life || hitsSolid(m.x, m.y, m.z, 0)) {
         this.broadcast('boom', [q(m.x), q(m.y), q(m.z)]);
         continue;
       }
@@ -322,7 +343,7 @@ export class ArenaRoom extends Room {
    * A plane goes down. Whoever did it is paid; so is anyone who did a fair
    * share of it. A crash with someone on your tail is their kill.
    */
-  down(p, by, how) {
+  down(p, by, how, into = '') {
     if (!p.alive) return;
     p.alive = false; p.hp = 0; p.firing = false;
     p.respawnAt = this.now + RESPAWN.delay * 1000;
@@ -339,7 +360,7 @@ export class ArenaRoom extends Room {
     }
     for (const a of assists) this.pay(a, victim, { assist: true });
     p.damagers.clear();
-    this.broadcast('down', { v: p.key, k: killer && killer !== p ? killer.key : '', how, a: assists.map((a) => a.key), x: q(p.x), y: q(p.y), z: q(p.z) });
+    this.broadcast('down', { v: p.key, k: killer && killer !== p ? killer.key : '', how, into, a: assists.map((a) => a.key), x: q(p.x), y: q(p.y), z: q(p.z) });
     this.rosterDirty = true;
   }
 
@@ -443,18 +464,20 @@ export class ArenaRoom extends Room {
       fire = dist < 430 && offNose(p, p.yaw, p.pitch, t) < 0.09 + (1 - ai.skill) * 0.08;
       if (p.ammo > 0 && dist < 600 && offNose(p, p.yaw, p.pitch, t) < MISSILE.lockCone * 0.7 && Math.random() < dt * 0.25 * ai.skill) this.launch(p);
     }
+    // a missile on its tail: flares, if it keeps its head
+    if (p.flares > 0 && this.missiles.some((m) => m.target === p.key && m.t > 0.6) && Math.random() < dt * 1.2 * ai.skill) this.flare(p);
     // hit: break hard one way for a moment
     if (this.now - ai.hurtAt < 300 && ai.jink <= 0 && Math.random() < 0.5) ai.jink = 0.8 + Math.random(), ai.jinkDir = Math.random() < 0.5 ? -1 : 1;
     if (ai.jink > 0) ai.jink -= dt, input.turn = ai.jinkDir, input.climb = 0.4, fire = false;
     // the ground, two and a half seconds ahead, and right under it
     const f = forward(p.yaw, p.pitch), look = Math.max(60, p.speed * 2.5);
-    const ahead = groundAt(p.x + f.x * look, p.z + f.z * look), under = groundAt(p.x, p.z);
+    const ahead = Math.max(surfaceAt(p.x + f.x * look, p.z + f.z * look), surfaceAt(p.x + f.x * look * 0.5, p.z + f.z * look * 0.5)), under = surfaceAt(p.x, p.z);
     if (p.y + f.y * look < ahead + 45 || p.y < under + 50) input.climb = 1, fire = false;
     if (p.y > ARENA.ceiling - 30) input.climb = Math.min(input.climb, -0.4);
     p.firing = fire;
     const r = fly(p, input, p.stats, dt);
     const fv = forward(p.yaw, p.pitch);
     p.vel.x = fv.x * p.speed; p.vel.y = fv.y * p.speed; p.vel.z = fv.z * p.speed;
-    if (r === 'crash') this.down(p, '', 'crash');
+    if (r === 'crash') this.down(p, '', 'crash', p.hit);
   }
 }

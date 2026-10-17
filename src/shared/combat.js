@@ -23,6 +23,13 @@ export const MISSILE = {
   arm: 0.25,
 };
 
+/**
+ * Flares: hot decoys that pull a missile off its target. Each one fired
+ * throws every missile chasing you with this chance; one comes back every
+ * `reload` seconds.
+ */
+export const FLARE = { decoy: 0.85, reload: 10 };
+
 /** Seconds of no damage before the airframe starts patching itself. */
 export const REPAIR = { after: 6, perSec: 5 };
 /** Seconds between going down and coming back, and of grace on arrival. */

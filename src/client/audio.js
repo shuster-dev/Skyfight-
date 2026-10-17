@@ -45,11 +45,12 @@ export const sound = {
     engine.ng.gain.setTargetAtTime(boost ? 0.5 : 0.08, t, 0.15);
     engine.g.gain.setTargetAtTime(0.11, t, 0.2);
   },
-  shot() { burst(0.05, 2200, 0.16, 'bandpass'); },
+  shot(heavy) { heavy ? burst(0.09, 700, 0.22, 'lowpass', 160) : burst(0.045, 2400, 0.13, 'bandpass'); },
   hit() { tone(1300, 0.05, 0.12, 'square', 2200); },
   hurt() { burst(0.12, 600, 0.3, 'lowpass'); },
   boom(near = 1) { burst(0.9, 260, 0.9 * near, 'lowpass', 70); },
   launch() { burst(0.6, 900, 0.35, 'bandpass', 2400); },
+  flare() { burst(0.35, 3000, 0.12, 'highpass', 1200); },
   warn() { tone(880, 0.09, 0.18, 'square'); setTimeout(() => tone(880, 0.09, 0.18, 'square'), 140); },
   level() { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => tone(f, 0.16, 0.2, 'triangle'), i * 110)); },
   coin() { tone(988, 0.07, 0.15, 'triangle'); setTimeout(() => tone(1319, 0.12, 0.15, 'triangle'), 70); },
