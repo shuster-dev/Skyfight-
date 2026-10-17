@@ -1,0 +1,29 @@
+{
+  "name": "skyfight",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Skyfight — קרב מטוסים אונליין בדפדפן, כולם נגד כולם",
+  "scripts": {
+    "build": "node tools/build.mjs",
+    "dev": "node tools/build.mjs && node src/server/index.js",
+    "start": "node src/server/index.js",
+    "qa": "node tools/qa.mjs",
+    "test": "npm run qa && npm run test:server",
+    "test:server": "node tools/server-test.mjs",
+    "test:browser": "node tools/build.mjs && node tools/smoke.mjs"
+  },
+  "dependencies": {
+    "@colyseus/core": "0.16.24",
+    "@colyseus/ws-transport": "0.16.5",
+    "express": "4.21.2",
+    "mongodb": "6.12.0"
+  },
+  "devDependencies": {
+    "colyseus.js": "0.16.22",
+    "esbuild": "0.23.1",
+    "playwright": "1.63.0",
+    "three": "0.185.1"
+  },
+  "engines": { "node": ">=20" }
+}

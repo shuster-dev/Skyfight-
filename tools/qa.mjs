@@ -1,0 +1,155 @@
+// The rules, checked without a server or a browser: flying, shooting, paying,
+// and the hangar's prices. `npm run qa`
+import { PLANES, PLANE_ORDER, UPGRADES, TIER_COST, TIER_LEVEL, statsOf, xpAt, xpStep, levelOf, levelProgress, killReward, cleanCallsign, nextTier, MAX_LEVEL } from '../src/shared/planes.js';
+import { ARENA, ISLANDS, groundAt, spawnPoint } from '../src/shared/arena.js';
+import { fly, forward, newBody, plausibleMove, BOOST } from '../src/shared/flight.js';
+import { GUN, MISSILE, aimDir, offNose, pickTarget, segmentHit, steerMissile } from '../src/shared/combat.js';
+import { newPilot, normalize, buyPlane, buyUpgrade, choosePlane, payKill, view } from '../src/server/pilot.js';
+
+let pass = 0, fail = 0;
+const ok = (name, cond, info) => {
+  if (cond) { pass++; console.log('  ok  ', name); } else { fail++; console.log('  FAIL', name, info === undefined ? '' : JSON.stringify(info)); }
+};
+const near = (a, b, e = 1e-6) => Math.abs(a - b) <= e;
+
+console.log('\nplanes');
+ok('five planes, in order of level', PLANE_ORDER.length === 5 && PLANE_ORDER.every((k, i) => !i || PLANES[k].level > PLANES[PLANE_ORDER[i - 1]].level));
+ok('the first plane is free and open at level 1', PLANES.sparrow.price === 0 && PLANES.sparrow.level === 1);
+ok('every plane has a Hebrew name and a description', PLANE_ORDER.every((k) => PLANES[k].he && PLANES[k].desc));
+ok('prices rise with level', PLANE_ORDER.every((k, i) => !i || PLANES[k].price > PLANES[PLANE_ORDER[i - 1]].price));
+{
+  const base = statsOf('sparrow'), up = statsOf('sparrow', { engine: 5, armor: 5, guns: 5, missiles: 5 });
+  ok('no upgrades: the plane as it is', base.hp === 100 && base.speed === 60 && base.missiles === 1);
+  ok('engine 5: a quarter faster', near(up.speed, 60 * 1.25) && near(up.boost, 92 * 1.25));
+  ok('armor 5: 60% more health', up.hp === 160);
+  ok('guns 5: half again the damage', near(up.dmg, 6 * 1.5));
+  ok('missiles 3+: one more missile, and faster reload', up.missiles === 2 && up.reload < base.reload);
+  ok('nonsense tiers are clamped', statsOf('sparrow', { engine: 99 }).speed === up.speed && statsOf('sparrow', { engine: -4 }).speed === 60);
+  ok('an unknown plane flies as the first', statsOf('nope').plane === 'sparrow');
+}
+
+console.log('\nlevels');
+ok('level 1 starts at 0', xpAt(1) === 0 && levelOf(0) === 1);
+ok('level 2 at the first step', levelOf(xpStep(1)) === 2 && levelOf(xpStep(1) - 1) === 1);
+ok('levels are monotone up to the cap', Array.from({ length: MAX_LEVEL - 1 }, (_, i) => xpAt(i + 2) > xpAt(i + 1)).every(Boolean));
+ok('the cap holds', levelOf(1e9) === MAX_LEVEL && levelProgress(1e9) === 1);
+ok('progress is a fraction', near(levelProgress(xpStep(1) / 2), 0.5));
+{
+  const human = killReward(5), bot = killReward(5, { bot: true });
+  ok('a pilot pays more than a bot', human.xp > bot.xp && human.gold > bot.gold, { human, bot });
+  ok('a higher level pays more', killReward(10).xp > killReward(2).xp);
+  ok('a streak adds, up to half again', killReward(5, { streak: 3 }).xp > human.xp && killReward(5, { streak: 50 }).xp === Math.round((60 + 40) * 1.5));
+  ok('an assist pays half', killReward(5, { assist: true }).xp === Math.round(human.xp / 2));
+  // the first level should not take an hour: about three bot kills
+  const k = Math.ceil(xpStep(1) / killReward(1, { bot: true }).xp);
+  ok('level 2 in a few kills', k >= 2 && k <= 4, k);
+}
+
+console.log('\ncallsigns');
+ok('Hebrew is a name', cleanCallsign('  טייס  מהיר ') === 'טייס מהיר');
+ok('Latin and digits', cleanCallsign('Ace_99') === 'Ace_99');
+ok('too short or too long is not', !cleanCallsign('a') && !cleanCallsign('x'.repeat(15)));
+ok('markup is not a name', !cleanCallsign('<b>hi</b>') && !cleanCallsign('a;drop'));
+
+console.log('\nthe arena');
+ok('islands do not overlap', ISLANDS.every((a, i) => ISLANDS.every((b, j) => i >= j || Math.hypot(a.x - b.x, a.z - b.z) > a.r + b.r)));
+ok('the sea is at zero', groundAt(5000, 5000) === 0 && groundAt(ARENA.radius - 1, 0) >= 0);
+ok('the big island has a peak', groundAt(-260, -180) > 150);
+ok('the ground is the same every time', groundAt(100, 33) === groundAt(100, 33));
+{
+  const pts = Array.from({ length: 12 }, (_, n) => spawnPoint(n));
+  ok('spawns are in the air, well clear of the ground', pts.every((s) => s.y > groundAt(s.x, s.z) + 80), pts.map((s) => Math.round(s.y - groundAt(s.x, s.z))));
+  ok('spawns face the middle', pts.every((s) => { const f = forward(s.yaw, 0); return f.x * -s.x + f.z * -s.z > 0.99 * Math.hypot(s.x, s.z); }));
+}
+
+console.log('\nflying');
+{
+  const st = statsOf('sparrow');
+  const b = newBody({ x: 0, y: 300, z: 0, yaw: 0 }, st);
+  for (let i = 0; i < 30; i++) fly(b, {}, st, 1 / 30);
+  ok('yaw 0 flies toward -z at cruise', b.z < -55 && near(b.x, 0, 1e-6) && near(b.speed, 60, 0.5), b);
+  const r = newBody({ x: 0, y: 300, z: 0, yaw: 0 }, st);
+  for (let i = 0; i < 30; i++) fly(r, { turn: 1 }, st, 1 / 30);
+  ok('right turns right (+x when heading -z)', r.x > 5, r.x);
+  ok('and banks right wing down', r.roll < -0.5, r.roll);
+  const c = newBody({ x: 0, y: 200, z: 0 }, st);
+  for (let i = 0; i < 30; i++) fly(c, { climb: 1 }, st, 1 / 30);
+  ok('climbing climbs', c.y > 215 && c.pitch > 0.9, c.y);
+  const l = newBody({ x: 0, y: 200, z: 0, pitch: 0.8 }, st);
+  for (let i = 0; i < 90; i++) fly(l, {}, st, 1 / 30);
+  ok('let go and the nose comes back level', Math.abs(l.pitch) < 0.1, l.pitch);
+  const u = newBody({ x: 0, y: ARENA.ceiling - 1, z: 0, pitch: 1 }, st);
+  for (let i = 0; i < 30; i++) fly(u, { climb: 1 }, st, 1 / 30);
+  ok('the ceiling holds', u.y <= ARENA.ceiling);
+  const d = newBody({ x: 3000, y: 50, z: 3000, pitch: -1.2 }, st);
+  let res = '';
+  for (let i = 0; i < 300 && res !== 'crash'; i++) res = fly(d, { climb: -1 }, st, 1 / 30);
+  ok('diving into the sea is a crash', res === 'crash');
+  const e = newBody({ x: ARENA.radius + 50, y: 300, z: 0, yaw: -Math.PI / 2 }, st); // heading +x, outward
+  for (let i = 0; i < 30 * 6; i++) fly(e, {}, st, 1 / 30);
+  ok('past the edge the plane is turned home', Math.hypot(e.x, e.z) < ARENA.radius + 150 && forward(e.yaw, 0).x < 0, { x: e.x, yaw: e.yaw });
+  const bo = newBody({ x: 0, y: 300, z: 0 }, st);
+  for (let i = 0; i < 60; i++) fly(bo, { boost: true }, st, 1 / 30);
+  ok('the burner speeds up and burns the tank', bo.speed > 80 && bo.fuel < 0.6, bo);
+  for (let i = 0; i < 30 * 8; i++) fly(bo, { boost: true }, st, 1 / 30);
+  ok('an empty tank burns no more', !bo.boosting && bo.fuel <= BOOST.min + 0.01);
+}
+{
+  const st = statsOf('sparrow');
+  ok('a normal move is plausible', plausibleMove({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: -60 }, 0.5, st));
+  ok('a teleport is not', !plausibleMove({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: -900 }, 0.5, st));
+}
+
+console.log('\nguns and missiles');
+ok('a segment through a sphere hits', segmentHit(0, 0, 0, 0, 0, -20, 0, 0, -10, 2) > 0.3);
+ok('a segment beside it does not', segmentHit(0, 0, 0, 0, 0, -20, 5, 0, -10, 2) === -1);
+ok('a segment that stops short does not', segmentHit(0, 0, 0, 0, 0, -5, 0, 0, -10, 2) === -1);
+{
+  const me = { x: 0, y: 100, z: 0, yaw: 0, pitch: 0, alive: true };
+  const ahead = { x: 0, y: 100, z: -200, alive: true, vel: { x: 50, y: 0, z: 0 } };
+  const side = { x: 200, y: 100, z: 0, alive: true };
+  ok('dead ahead is off the nose by ~0', offNose(me, 0, 0, ahead) < 1e-6);
+  ok('the target picked is the one in front', pickTarget(me, [me, ahead, side], 0.3, 500) === ahead);
+  ok('nothing in the cone: nothing', pickTarget(me, [me, side], 0.3, 500) === null);
+  const d = aimDir(me, ahead);
+  ok('guns lead a crossing target', d.x > 0.01 && d.z < -0.9, d);
+  const m = { x: 0, y: 100, z: 0, yaw: Math.PI / 2, pitch: 0 }; // facing -x
+  for (let i = 0; i < 90; i++) steerMissile(m, ahead, 1 / 30);
+  ok('a missile turns after its target', Math.hypot(m.x - ahead.x, m.z - ahead.z) < 200, m);
+}
+
+console.log('\nthe hangar');
+{
+  const p = newPilot('u1');
+  ok('a new pilot flies the first plane', p.plane === 'sparrow' && p.planes.includes('sparrow') && p.level === 1);
+  ok('cannot buy a plane above your level', buyPlane(p, 'hornet').error === 'level');
+  p.xp = xpAt(3); normalize(p);
+  ok('the level is worked out from xp', p.level === 3);
+  ok('cannot buy without the gold', buyPlane(p, 'hornet').error === 'gold');
+  p.gold = 2000;
+  ok('with both, it is bought and flown', buyPlane(p, 'hornet').ok && p.plane === 'hornet' && p.gold === 500);
+  ok('not twice', buyPlane(p, 'hornet').error === 'owned');
+  ok('back to the first plane', choosePlane(p, 'sparrow').ok && p.plane === 'sparrow');
+  ok('not one you do not own', choosePlane(p, 'phantom').error === 'not_owned');
+  p.gold = 1000;
+  ok('the first upgrade costs its price', buyUpgrade(p, 'engine').ok && p.upgrades.engine === 1 && p.gold === 1000 - TIER_COST[0], p);
+  p.gold = 1e6;
+  ok('the second tier waits for its level', buyUpgrade(p, 'engine').error === 'level' && p.level < TIER_LEVEL[1]);
+  p.xp = xpAt(30); normalize(p);
+  for (let i = 0; i < 9; i++) buyUpgrade(p, 'engine');
+  ok('five tiers and no more', p.upgrades.engine === 5 && buyUpgrade(p, 'engine').error === 'max' && nextTier(p, 'engine') === null);
+  ok('an unknown upgrade is refused', buyUpgrade(p, 'laser').error === 'no_such_upgrade');
+  const q = newPilot('u2');
+  const r = payKill(q, { level: 1, bot: true });
+  ok('a kill pays xp, gold and counts', q.xp === r.xp && q.gold === r.gold && q.kills === 1);
+  const a = payKill(q, { level: 1, bot: true }, { assist: true });
+  ok('an assist pays but is not a kill', q.kills === 1 && a.xp > 0);
+  for (let i = 0; i < 3; i++) payKill(q, { level: 1, bot: true });
+  ok('kills raise the level', q.level >= 2);
+  const broken = normalize({ id: 'x', xp: -5, plane: 'jet', planes: ['jet'], upgrades: { engine: 77 } });
+  ok('a broken record is mended', broken.xp === 0 && broken.plane === 'sparrow' && broken.upgrades.engine === 5 && broken.upgrades.armor === 0);
+  ok('the view has no id', !('id' in view(p)));
+}
+
+console.log(`\n${pass} passed, ${fail} failed`);
+process.exit(fail ? 1 : 0);
