@@ -156,6 +156,10 @@
   .tbtn.on { background: rgba(255, 255, 255, 0.35); }
   #btn-fire { right: max(18px, env(safe-area-inset-right)); bottom: max(80px, calc(env(safe-area-inset-bottom) + 70px)); width: 96px; height: 96px; background: rgba(255, 77, 94, 0.55); font-size: 30px; }
   #btn-missile { right: max(124px, calc(env(safe-area-inset-right) + 110px)); bottom: max(140px, calc(env(safe-area-inset-bottom) + 130px)); width: 64px; height: 64px; font-size: 24px; }
+  #btn-flare { right: max(132px, calc(env(safe-area-inset-right) + 118px)); bottom: max(220px, calc(env(safe-area-inset-bottom) + 210px)); width: 54px; height: 54px; font-size: 22px; }
+  .pcard .era { font-size: 12px; color: var(--teal); margin-top: 2px; }
+  .pcard .arms { font-size: 12px; color: var(--dim); margin-top: 6px; line-height: 1.5; }
+  .msl.flr i.on { background: #ffd25e; }
   #btn-boost { right: max(30px, env(safe-area-inset-right)); bottom: max(190px, calc(env(safe-area-inset-bottom) + 180px)); width: 64px; height: 64px; font-size: 24px; }
   .keys-help { position: absolute; bottom: max(60px, env(safe-area-inset-bottom)); right: 12px; font-size: 12px; color: rgba(255, 255, 255, 0.7); text-shadow: 0 1px 2px #000; line-height: 1.6; }
   #death { z-index: 12; }
@@ -176,6 +180,7 @@
     .tag { margin-bottom: 10px; }
     #btn-fire { bottom: max(30px, env(safe-area-inset-bottom)); }
     #btn-missile { bottom: max(80px, env(safe-area-inset-bottom)); }
+    #btn-flare { bottom: max(150px, env(safe-area-inset-bottom)); }
     #btn-boost { bottom: max(130px, env(safe-area-inset-bottom)); }
     .pcard p { display: none; }
   }
@@ -258,7 +263,7 @@
   <div class="tr" id="score"></div>
   <div id="feed"></div>
   <div id="toast"></div>
-  <div id="warn" class="hidden">⚠️ טיל ננעל עליך!</div>
+  <div id="warn" class="hidden">⚠️ טיל ננעל עליך! שחרר נורים 🎆</div>
   <div id="edge" class="hidden">↩ קצה הזירה — חוזרים פנימה</div>
   <div id="vig"></div>
   <div id="white"></div>
@@ -266,14 +271,16 @@
     <span class="num" id="hud-speed">0</span><span style="font-weight:400;opacity:.7">קמ"ש</span>
     <span>🔥</span><div class="fuel"><i id="hud-fuel"></i></div>
     <span>🚀</span><div class="msl" id="hud-msl"></div>
+    <span>🎆</span><div class="msl flr" id="hud-flr"></div>
   </div>
-  <div class="keys-help" id="keys-help">חצים / WASD — טיסה<br>רווח / עכבר שמאלי — ירי<br>Shift — מבער · E — טיל<br>גרירה עם עכבר ימני — הסתכלות</div>
+  <div class="keys-help" id="keys-help">חצים / WASD — טיסה<br>רווח / עכבר שמאלי — ירי<br>Shift — מבער · E — טיל · Q — נורים<br>גרירה עם עכבר ימני — הסתכלות</div>
   <div id="touch" class="hidden">
     <div id="touch-pad"></div>
     <div id="look-pad"></div>
     <div id="stick" class="hidden"><div id="stick-knob"></div></div>
     <button class="tbtn" id="btn-fire" type="button">🔫</button>
     <button class="tbtn" id="btn-missile" type="button">🚀</button>
+    <button class="tbtn" id="btn-flare" type="button">🎆</button>
     <button class="tbtn" id="btn-boost" type="button">🔥</button>
   </div>
   <button class="round" id="menu-btn" type="button" aria-label="האנגר">🏠</button>

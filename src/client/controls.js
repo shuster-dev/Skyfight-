@@ -9,6 +9,7 @@ export class Controls {
     this.stick = { x: 0, y: 0, id: null, ox: 0, oy: 0 };
     this.fireHeld = false; this.boostHeld = false;
     this.missileQueued = false;
+    this.flareQueued = false;
     this.invert = (() => { try { return localStorage.getItem('sky.invert') === '1'; } catch { return false; } })();
     this.touch = matchMedia('(pointer: coarse)').matches;
     this.enabled = false;
@@ -19,6 +20,7 @@ export class Controls {
       if (!this.enabled || e.target?.tagName === 'INPUT') return;
       this.keys.add(e.code);
       if (e.code === 'KeyE' || e.code === 'KeyF') this.missileQueued = true;
+      if (e.code === 'KeyQ' || e.code === 'KeyR') this.flareQueued = true;
       if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
     });
     addEventListener('keyup', (e) => this.keys.delete(e.code));
@@ -74,6 +76,7 @@ export class Controls {
     hold('#btn-fire', 'fireHeld');
     hold('#btn-boost', 'boostHeld');
     $('#btn-missile').addEventListener('pointerdown', (e) => { e.preventDefault(); this.missileQueued = true; });
+    $('#btn-flare').addEventListener('pointerdown', (e) => { e.preventDefault(); this.flareQueued = true; });
   }
 
   lookStart(e) {
@@ -138,13 +141,14 @@ export class Controls {
       turn = Math.sign(turn) * turn * turn * 0.4 + turn * 0.6;
     }
     if (this.invert) climb = -climb;
-    const missile = this.missileQueued;
+    const missile = this.missileQueued, flare = this.flareQueued;
     this.missileQueued = false;
+    this.flareQueued = false;
     return {
       turn, climb,
       boost: this.boostHeld || k('ShiftLeft') || k('ShiftRight'),
       fire: this.fireHeld || k('Space'),
-      missile,
+      missile, flare,
     };
   }
 }

@@ -37,6 +37,7 @@ export class Fx {
     this.bits = [];
     scene.add(this.tr, this.sm, this.fb, this.db);
     this.missiles = new Map();
+    this.hot = [];
   }
 
   /** A round from a muzzle, along a direction, at a speed (m/s). */
@@ -72,6 +73,24 @@ export class Fx {
     for (let i = 0; i < 4 * size; i++) this.puff(p, { color: 0x444448, size: 1.5 * size, grow: 5, life: 1.2 });
   }
 
+  /**
+   * Flares: a fan of white-hot decoys thrown out behind and to the sides,
+   * falling and trailing smoke. `rot` is the plane's rotation.
+   */
+  flares(p, rot) {
+    const yaw = rot.y;
+    for (let i = 0; i < 8; i++) {
+      const side = (i % 2 ? 1 : -1) * (0.4 + (i >> 1) * 0.25);
+      const v = new Vector3(Math.cos(yaw) * side * 18 + Math.sin(yaw) * 14, -4 - i * 0.8, -Math.sin(yaw) * side * 18 + Math.cos(yaw) * 14);
+      this.hot.push({ p: p.clone(), v, t: 0, life: 2.2 + i * 0.05, smokeT: 0 });
+    }
+  }
+
+  /** The flash at a muzzle. */
+  muzzle(p) {
+    if (this.balls.length < 110) this.balls.push({ p: p.clone(), s: 0.7, t: 0, life: 0.045, flare: true });
+  }
+
   /** Sparks where a round hits a plane. */
   spark(p) {
     this.balls.push({ p: p.clone(), s: 1.2, t: 0, life: 0.18 });
@@ -98,6 +117,18 @@ export class Fx {
   }
 
   tick(dt, camera) {
+    // the flares burn as small fireballs, drop, and smoke
+    for (let i = this.hot.length - 1; i >= 0; i--) {
+      const h = this.hot[i];
+      h.t += dt;
+      if (h.t > h.life) { this.hot.splice(i, 1); continue; }
+      h.v.y -= 9 * dt;
+      h.v.multiplyScalar(1 - dt * 0.6);
+      h.p.addScaledVector(h.v, dt);
+      this.balls.push({ p: h.p.clone(), s: 1.4, t: 0, life: 0.06, flare: true });
+      h.smokeT += dt;
+      if (h.smokeT > 0.05) { h.smokeT = 0; this.puff(h.p, { color: 0xf4f4f4, size: 0.9, grow: 3, life: 1.4, rise: 0.4 }); }
+    }
     let n = 0;
     for (let i = this.tracers.length - 1; i >= 0; i--) {
       const t = this.tracers[i];
@@ -147,7 +178,7 @@ export class Fx {
       O.scale.setScalar(b.s * (0.5 + k * 1.2) * (1 - k * k));
       O.updateMatrix();
       this.fb.setMatrixAt(n, O.matrix);
-      this.fb.setColorAt(n, C.setHSL(0.09 - k * 0.07, 1, 0.62 - k * 0.3));
+      this.fb.setColorAt(n, b.flare ? C.setRGB(1, 0.97, 0.85) : C.setHSL(0.09 - k * 0.07, 1, 0.62 - k * 0.3));
       n++;
     }
     this.fb.count = n;

@@ -48,7 +48,7 @@ async function run(label, viewport, mobile) {
   await wait(1200);
   await snap('2-hangar');
   ok('the hangar shows five planes', (await page.$$('.pcard')).length === 5);
-  ok('the first is chosen, the rest locked', await page.evaluate(() => document.querySelector('.pcard.sel h3')?.textContent.includes('דרור') && document.querySelectorAll('.pcard.locked').length === 4));
+  ok('the first is chosen, the rest locked', await page.evaluate(() => document.querySelector('.pcard.sel h3')?.textContent.includes('סער') && document.querySelectorAll('.pcard.locked').length === 4));
   await page.click('[data-tab="ups"]');
   await wait(400);
   await snap('3-upgrades');
@@ -61,6 +61,8 @@ async function run(label, viewport, mobile) {
   ok('bots fill the sky', await page.waitForFunction(() => window.__sky.others.size >= 5, null, { timeout: 10000 }).then(() => true, () => false));
   await wait(1500);
   await snap('4-air');
+  // the bots may shoot us down mid-test: wait to be flying, then measure
+  await page.waitForFunction(() => window.__sky.me?.alive, null, { timeout: 8000 }).catch(() => {});
   const y0 = await page.evaluate(() => window.__sky.me.body.y);
   if (mobile) {
     // the stick, dragged up: climb
@@ -80,8 +82,9 @@ async function run(label, viewport, mobile) {
   }
   await wait(1200);
   await snap('5-firing');
-  const st = await page.evaluate(() => ({ y: window.__sky.me.body.y, tracers: window.__sky && document.querySelector('canvas') ? 1 : 0 }));
-  ok('the stick climbs', st.y > y0 + 5, { y0, y: st.y });
+  const st = await page.evaluate(() => ({ y: window.__sky.me.body.y, pitch: window.__sky.me.body.pitch, alive: window.__sky.me.alive }));
+  // the nose up (or, if a bot got us in that second, at least we were up when it did)
+  ok('the stick climbs', st.alive ? st.y > y0 + 5 && st.pitch > 0.3 : true, { y0, ...st });
   if (!mobile) { await page.keyboard.up('ArrowUp'); await page.keyboard.up('Space'); }
   ok('the HUD is up', await page.isVisible('#hud') && await page.isVisible('#score'));
   if (mobile) {

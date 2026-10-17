@@ -1,7 +1,7 @@
 // The rules, checked without a server or a browser: flying, shooting, paying,
 // and the hangar's prices. `npm run qa`
 import { PLANES, PLANE_ORDER, UPGRADES, TIER_COST, TIER_LEVEL, statsOf, xpAt, xpStep, levelOf, levelProgress, killReward, cleanCallsign, nextTier, MAX_LEVEL } from '../src/shared/planes.js';
-import { ARENA, ISLANDS, groundAt, spawnPoint } from '../src/shared/arena.js';
+import { ARENA, BRIDGE, BUILDINGS, groundAt, hitsSolid, inBay, spawnPoint, surfaceAt, terrainAt, underBridge } from '../src/shared/arena.js';
 import { fly, forward, newBody, plausibleMove, BOOST } from '../src/shared/flight.js';
 import { GUN, MISSILE, aimDir, offNose, pickTarget, segmentHit, steerMissile } from '../src/shared/combat.js';
 import { newPilot, normalize, buyPlane, buyUpgrade, choosePlane, payKill, view } from '../src/server/pilot.js';
@@ -52,14 +52,26 @@ ok('too short or too long is not', !cleanCallsign('a') && !cleanCallsign('x'.rep
 ok('markup is not a name', !cleanCallsign('<b>hi</b>') && !cleanCallsign('a;drop'));
 
 console.log('\nthe arena');
-ok('islands do not overlap', ISLANDS.every((a, i) => ISLANDS.every((b, j) => i >= j || Math.hypot(a.x - b.x, a.z - b.z) > a.r + b.r)));
-ok('the sea is at zero', groundAt(5000, 5000) === 0 && groundAt(ARENA.radius - 1, 0) >= 0);
-ok('the big island has a peak', groundAt(-260, -180) > 150);
-ok('the ground is the same every time', groundAt(100, 33) === groundAt(100, 33));
 {
+  const B = BRIDGE;
+  ok('the sea is to the west, at zero', groundAt(-600, 0) === 0 && terrainAt(-600, 0) < 0);
+  ok('mountains rise in the east', terrainAt(1100, 0) > 150, terrainAt(1100, 0));
+  ok('the city is flat ground by the bay', BUILDINGS.length > 120 && BUILDINGS.every((b) => b.base > 2 && b.base < 15), BUILDINGS.length);
+  ok('downtown has towers', BUILDINGS.some((b) => b.h > 120) && BUILDINGS.every((b) => b.h <= 185));
+  ok('no building stands in the bay or on the bridge', BUILDINGS.every((b) => inBay(b.x, b.z) === 0 && !(Math.abs(b.x - B.x) < 40 && b.z > B.z0 - 20 && b.z < B.z1 + 20)));
+  ok('the bridge stands over water', terrainAt(B.x, B.cz) < 0 && B.towers.every((z) => terrainAt(B.x, z) < 0));
+  ok('under the deck is open sky to fly through', !hitsSolid(B.x, 25, B.cz) && underBridge(B.x, 25, B.cz));
+  ok('the deck is solid', hitsSolid(B.x, 46, B.cz) === 'bridge');
+  ok('the towers are solid', hitsSolid(B.x + B.legOffset, 120, B.towers[0]) === 'bridge');
+  ok('between the cables over the deck is open', !hitsSolid(B.x, 80, B.cz));
+  const tall = BUILDINGS.reduce((a, b) => (b.h > a.h ? b : a));
+  ok('a building is solid, and only up to its roof', hitsSolid(tall.x, tall.base + tall.h - 5, tall.z) === 'building' && !hitsSolid(tall.x, tall.base + tall.h + 5, tall.z));
+  ok('the surface over a tower is its roof', surfaceAt(tall.x, tall.z) === tall.base + tall.h);
+  ok('the sea and the ground are told apart', hitsSolid(-600, 1, 0) === 'sea' && hitsSolid(1100, terrainAt(1100, 0) + 1, 0) === 'ground');
   const pts = Array.from({ length: 12 }, (_, n) => spawnPoint(n));
-  ok('spawns are in the air, well clear of the ground', pts.every((s) => s.y > groundAt(s.x, s.z) + 80), pts.map((s) => Math.round(s.y - groundAt(s.x, s.z))));
+  ok('spawns are in the air, well clear of anything', pts.every((s) => s.y > surfaceAt(s.x, s.z) + 100), pts.map((s) => Math.round(s.y - surfaceAt(s.x, s.z))));
   ok('spawns face the middle', pts.every((s) => { const f = forward(s.yaw, 0); return f.x * -s.x + f.z * -s.z > 0.99 * Math.hypot(s.x, s.z); }));
+  ok('the ground is the same every time', terrainAt(100, 33) === terrainAt(100, 33));
 }
 
 console.log('\nflying');

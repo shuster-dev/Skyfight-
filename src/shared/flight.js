@@ -3,7 +3,7 @@
 // afterburner burns a tank that refills. One function, run by the client for
 // its own plane every frame, by the server for the bots, and by the server
 // to judge whether what a client says it did could have been flown.
-import { ARENA, groundAt } from './arena.js';
+import { ARENA, hitsSolid } from './arena.js';
 
 const clamp = (v, a = -1, b = 1) => (v < a ? a : v > b ? b : v);
 
@@ -28,7 +28,7 @@ export function newBody(at, stats) {
 /**
  * One step. `input` is { turn, climb, boost }: turn and climb run -1..1
  * (right and up are positive). Returns what happened: 'crash' when it flew
- * into the ground or the sea, 'edge' when the arena turned it back, or ''.
+ * into something solid, 'edge' when the arena turned it back, or ''.
  */
 export function fly(b, input, stats, dt) {
   const turn = clamp(+input.turn || 0), climb = clamp(+input.climb || 0);
@@ -66,7 +66,9 @@ export function fly(b, input, stats, dt) {
   // a hard wall well past the soft one, for whatever slips through
   const r2 = Math.hypot(b.x, b.z), wall = ARENA.radius + 150;
   if (r2 > wall) { b.x *= wall / r2; b.z *= wall / r2; }
-  if (b.y < groundAt(b.x, b.z) + ARENA.clearance) return 'crash';
+  // the ground, the sea, a building, the bridge: `b.hit` says which
+  const hit = hitsSolid(b.x, b.y, b.z);
+  if (hit) { b.hit = hit; return 'crash'; }
   return edge;
 }
 const FWD = { x: 0, y: 0, z: 0 };
