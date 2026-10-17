@@ -30,6 +30,15 @@ export const MISSILE = {
  */
 export const FLARE = { decoy: 0.85 };
 
+/**
+ * Mid-air collisions: two planes closer than `r` metres have met. Each takes
+ * damage from the speed they met at — a graze flying side by side takes a
+ * bite, a head-on at full speed takes everyone down. A pair can only
+ * collide once a `cooldown` (ms).
+ */
+export const RAM = { r: 6.5, perMps: 1.2, min: 20, max: 400, cooldown: 1200 };
+export const ramDamage = (closing) => Math.max(RAM.min, Math.min(RAM.max, closing * RAM.perMps));
+
 /** Seconds of no damage before the airframe starts patching itself. */
 export const REPAIR = { after: 6, perSec: 5 };
 /** Seconds between going down and coming back, and of grace on arrival. */

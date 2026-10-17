@@ -3,7 +3,7 @@
 import { PLANES, PLANE_ORDER, UPGRADES, TIER_COST, TIER_LEVEL, statsOf, xpAt, xpStep, levelOf, levelProgress, killReward, cleanCallsign, nextTier, MAX_LEVEL } from '../src/shared/planes.js';
 import { ARENA, BRIDGE, BUILDINGS, groundAt, hitsSolid, inBay, spawnPoint, surfaceAt, terrainAt, underBridge } from '../src/shared/arena.js';
 import { fly, forward, newBody, plausibleMove, BOOST } from '../src/shared/flight.js';
-import { GUN, MISSILE, aimDir, offNose, pickTarget, segmentHit, steerMissile } from '../src/shared/combat.js';
+import { GUN, MISSILE, RAM, aimDir, offNose, pickTarget, ramDamage, segmentHit, steerMissile } from '../src/shared/combat.js';
 import { newPilot, normalize, buyPlane, buyUpgrade, choosePlane, payKill, view } from '../src/server/pilot.js';
 
 let pass = 0, fail = 0;
@@ -131,6 +131,11 @@ ok('a segment that stops short does not', segmentHit(0, 0, 0, 0, 0, -5, 0, 0, -1
   for (let i = 0; i < 90; i++) steerMissile(m, ahead, 1 / 30);
   ok('a missile turns after its target', Math.hypot(m.x - ahead.x, m.z - ahead.z) < 200, m);
 }
+
+console.log('\nmid-air collisions');
+ok('a graze side by side takes a bite', ramDamage(5) === RAM.min);
+ok('a head-on at speed brings down even the heaviest plane', ramDamage(60 + 70) >= 100 && ramDamage(120 + 120) >= statsOf('bulldog', { armor: 5 }).hp, ramDamage(240));
+ok('more speed, more damage', ramDamage(80) > ramDamage(40));
 
 console.log('\nthe hangar');
 {

@@ -42,6 +42,8 @@ room.onMessage('s', (s) => {
   }
 });
 room.onMessage('hit', () => st.hits++);
+let rams = 0, rammed = 0;
+room.onMessage('ram', (m) => { rams++; if (m.a === key || m.b === key) rammed++; });
 room.onMessage('fired', (m) => { st.missiles++; ammo = m.ammo; });
 room.onMessage('down', (m) => {
   if (m.v === key) { alive = false; st.deaths++; if (m.how === 'crash' && !m.k) st.crashes++; }
@@ -105,7 +107,7 @@ const report = {
   minutes: +mins.toFixed(1), kills: st.kills, assists: st.assists, deaths: st.deaths, crashes: st.crashes,
   killsPerMin: +(st.kills / mins).toFixed(2), deathsPerMin: +(st.deaths / mins).toFixed(2),
   firstKillSec: st.firstKillAt ? Math.round(st.firstKillAt) : null,
-  hits: st.hits, missiles: st.missiles, level: st.level, levels: st.levels, xp: st.xp, gold: st.gold, xpToLevel2: xpStep(1),
+  hits: st.hits, missiles: st.missiles, rams, rammed, level: st.level, levels: st.levels, xp: st.xp, gold: st.gold, xpToLevel2: xpStep(1),
 };
 console.log(JSON.stringify(report, null, 1));
 srv?.kill();
