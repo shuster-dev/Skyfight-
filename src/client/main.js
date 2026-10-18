@@ -234,7 +234,7 @@ function showHangar() {
   sound.seeker('off');
   clearPreview();
   viewing = S.pilot.plane;
-  paintView = S.pilot.paint;
+  paintView = '';
   renderHangar();
 }
 
@@ -261,7 +261,7 @@ function renderHangar() {
   show('#tab-admin', tab === 'admin');
   // fight mode is chosen with the plane: it only gets in the way of the panels
   show('.h-mode', tab === 'planes');
-  if (tab !== 'market') hangar.show(viewing || p.plane, paintView || p.paint, loadOf(viewing || p.plane));
+  if (tab !== 'market') hangar.show(viewing || p.plane, paintView || paintOf(viewing || p.plane), loadOf(viewing || p.plane));
   if (tab === 'planes') renderPlanes();
   if (tab === 'ups') renderUps();
   if (tab === 'board') renderBoard();
@@ -292,14 +292,18 @@ function renderPlanes() {
   else if (own) { act.textContent = 'בחר'; act.dataset.pick = k; }
   else if (open) { act.innerHTML = `קנה · <span class="num">${fmt(d.price)}</span>`; act.classList.add('buy'); act.dataset.buy = k; act.disabled = p.gold < d.price; }
   else { act.textContent = `נפתח ברמה ${d.level}`; act.disabled = true; }
+  // what this plane carries, as it was left: its own weapons and paint
+  const lo = loadOf(k);
+  $('#hp-load').innerHTML = own ? `<span>${esc(GUNS[lo.gun]?.he || '')}</span><span>${esc(MISSILES[lo.missile]?.he || '')}</span><span>${esc(PAINTS[paintOf(k)]?.he || '')}</span>` : '';
   // the paint: a row of colours, the one tried on is the one on the table
-  const pv = paintView || p.paint;
+  const worn = paintOf(k), pv = paintView || worn;
   $('#hp-paints').innerHTML = PAINT_ORDER.map((id) => `<button type="button" class="sw ${id === pv ? 'on' : ''} ${p.paints.includes(id) ? 'own' : ''}" data-paint="${id}" style="--c:${PAINTS[id].swatch}" aria-label="${PAINTS[id].he}"></button>`).join('');
   const pa = $('#hp-paint-act'), P = PAINTS[pv];
   pa.className = 'h-act small';
   pa.disabled = false;
   delete pa.dataset.wear; delete pa.dataset.buy;
-  if (pv === p.paint) { pa.textContent = `צבע: ${P.he}`; pa.disabled = true; }
+  if (pv === worn) { pa.textContent = `צבע: ${P.he}`; pa.disabled = true; }
+  else if (!own) { pa.textContent = `צבע ${P.he} · ניסיון`; pa.disabled = true; }
   else if (p.paints.includes(pv)) { pa.textContent = `צבע ${P.he} · החל`; pa.dataset.wear = pv; }
   else { pa.innerHTML = `צבע ${P.he} · <span class="num">${fmt(P.price)}</span>`; pa.classList.add('buy'); pa.dataset.buy = pv; pa.disabled = p.gold < P.price; }
 }
@@ -314,9 +318,9 @@ $('#hp-paint-act').addEventListener('click', async (e) => {
   const b = e.currentTarget, wear = b.dataset.wear, buy = b.dataset.buy;
   if (!wear && !buy) return;
   try {
-    const r = await net.api(buy ? '/api/pilot/buy-paint' : '/api/pilot/paint', { paint: wear || buy });
+    const r = await net.api(buy ? '/api/pilot/buy-paint' : '/api/pilot/paint', { paint: wear || buy, plane: viewing || S.pilot.plane });
     S.pilot = r.pilot;
-    paintView = S.pilot.paint;
+    paintView = '';
     if (buy) sound.coin(), toast(`צבע ${PAINTS[buy].he} שלך`);
     renderHangar();
   } catch (x) { toast(err(x), 'bad'); }
@@ -341,7 +345,8 @@ $('#gift-form').addEventListener('submit', async (e) => {
 const step = (dir) => {
   const row = rowOf(S.pilot), i = row.indexOf(viewing || S.pilot.plane);
   viewing = row[(i + dir + row.length) % row.length];
-  hangar.show(viewing, paintView || S.pilot.paint, loadOf(viewing));
+  paintView = '';
+  hangar.show(viewing, paintOf(viewing), loadOf(viewing));
   renderPlanes();
 };
 // in a right-to-left page the arrow on the right goes back
@@ -364,6 +369,7 @@ $('#hp-act').addEventListener('click', async (e) => {
     const r = await net.api(buy ? '/api/pilot/buy-plane' : '/api/pilot/plane', { plane: pick || buy });
     S.pilot = r.pilot;
     viewing = S.pilot.plane;
+    paintView = '';
     if (buy) sound.coin(), toast(`${PLANES[buy].he} בהאנגר שלך`);
     renderHangar();
   } catch (x) { toast(err(x), 'bad'); }
@@ -486,12 +492,17 @@ $('#tab-ups').addEventListener('click', async (e) => {
 let shelf = 'missiles';
 const mView = { missiles: '', guns: '' };
 const loadOf = (plane) => S.pilot?.loadout?.[plane] || { gun: 'g1', missile: 'm1' };
+/** The paint a plane wears (each its own; one never painted wears what the pilot had on). */
+function paintOf(plane) { return S.pilot?.paintOf?.[plane] || S.pilot?.paint || 'stock'; }
+// the market's card starts on what the plane flown carries: a new plane, a fresh look
+let mPlane = '';
 const SPEC_MAX = {
   missiles: { range: Math.max(...MISSILE_ORDER.map((k) => MISSILES[k].range)), dmg: Math.max(...MISSILE_ORDER.map((k) => MISSILES[k].dmg)), speed: Math.max(...MISSILE_ORDER.map((k) => MISSILES[k].speed)) },
   guns: { range: Math.max(...GUN_ORDER.map((k) => GUNS[k].range)) },
 };
 function renderMarket() {
   const p = S.pilot, plane = p.plane, order = shelf === 'guns' ? GUN_ORDER : MISSILE_ORDER, items = ARMS[shelf];
+  if (mPlane !== plane) mPlane = plane, mView.missiles = mView.guns = '';
   const on = loadOf(plane)[shelf === 'guns' ? 'gun' : 'missile'];
   const k = (mView[shelf] ||= on), w = items[k], own = p.arms[shelf].includes(k);
   $$('.shelves button').forEach((b) => b.classList.toggle('on', b.dataset.shelf === shelf));

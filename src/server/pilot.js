@@ -13,6 +13,8 @@ export function newPilot(id) {
     plane: START_PLANE, planes: [START_PLANE],
     upgrades: { [START_PLANE]: noTiers() }, // each plane its own
     paint: 'stock', paints: ['stock'],
+    // the paint each plane wears: switch planes and each comes back as it was left
+    paintOf: { [START_PLANE]: 'stock' },
     // the market: what is owned on each shelf, and what is carried
     arms: { guns: [START_GUN], missiles: [START_MISSILE] },
     // what each plane carries
@@ -31,6 +33,9 @@ export function normalize(p) {
   if (!p.planes.includes(p.plane)) p.plane = START_PLANE;
   p.paints = [...new Set(['stock', ...(p.paints || [])].filter((k) => PAINTS[k]))];
   if (!p.paints.includes(p.paint)) p.paint = 'stock';
+  const po = p.paintOf && typeof p.paintOf === 'object' ? p.paintOf : {};
+  p.paintOf = Object.fromEntries(p.planes.map((id) => [id, p.paints.includes(po[id]) ? po[id] : p.paint]));
+  p.paint = p.paintOf[p.plane];
   const a = p.arms || {};
   p.arms = {
     guns: [...new Set([START_GUN, ...(a.guns || [])].filter((k) => ARMS.guns[k]))],
@@ -65,7 +70,7 @@ export function normalize(p) {
 export const view = (p) => ({
   name: p.name, tag: p.tag || 0, xp: p.xp, level: p.level, gold: p.gold,
   kills: p.kills, deaths: p.deaths, best: p.best,
-  plane: p.plane, planes: p.planes, upgrades: p.upgrades, paint: p.paint, paints: p.paints,
+  plane: p.plane, planes: p.planes, upgrades: p.upgrades, paint: p.paint, paints: p.paints, paintOf: p.paintOf,
   arms: p.arms, loadout: p.loadout,
 });
 
@@ -148,24 +153,32 @@ export function choosePlane(p, id) {
   if (!PLANES[id]) return { error: 'no_such_plane' };
   if (!planeOwned(p, id)) return { error: 'not_owned' };
   p.plane = id;
+  // its own paint (and, in loadout and upgrades, its own weapons and tiers)
+  p.paint = p.paintOf?.[id] || p.paint;
   return { ok: true };
 }
 
 /** Buy a paint (and wear it), or wear one you have. */
-export function buyPaint(p, id) {
+export function buyPaint(p, id, plane = p.plane) {
   if (!PAINTS[id]) return { error: 'no_such_paint' };
   if (p.paints.includes(id)) return { error: 'owned' };
+  if (!PLANES[plane] || !planeOwned(p, plane)) return { error: 'not_owned' };
   if (p.gold < PAINTS[id].price) return { error: 'gold' };
   p.gold -= PAINTS[id].price;
   p.paints.push(id);
-  p.paint = id;
-  return { ok: true };
+  return wear(p, id, plane);
 }
-export function choosePaint(p, id) {
+/** Paint one of your planes (the one flown, unless said): that plane wears it from now on. */
+export function choosePaint(p, id, plane = p.plane) {
   if (!PAINTS[id]) return { error: 'no_such_paint' };
   if (!p.paints.includes(id)) return { error: 'not_owned' };
-  p.paint = id;
-  return { ok: true };
+  if (!PLANES[plane] || !planeOwned(p, plane)) return { error: 'not_owned' };
+  return wear(p, id, plane);
+}
+function wear(p, id, plane) {
+  (p.paintOf ||= {})[plane] = id;
+  if (plane === p.plane) p.paint = id;
+  return { ok: true, plane };
 }
 
 /**

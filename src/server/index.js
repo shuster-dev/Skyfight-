@@ -146,8 +146,8 @@ app.post('/api/pilot/name', requireAuth, async (req, res) => {
 app.post('/api/pilot/plane', requireAuth, hangar((p, b) => choosePlane(p, String(b.plane || ''))));
 app.post('/api/pilot/buy-plane', requireAuth, hangar((p, b) => buyPlane(p, String(b.plane || ''))));
 app.post('/api/pilot/upgrade', requireAuth, hangar((p, b) => buyUpgrade(p, String(b.upgrade || ''), b.plane ? String(b.plane) : p.plane)));
-app.post('/api/pilot/buy-paint', requireAuth, hangar((p, b) => buyPaint(p, String(b.paint || ''))));
-app.post('/api/pilot/paint', requireAuth, hangar((p, b) => choosePaint(p, String(b.paint || ''))));
+app.post('/api/pilot/buy-paint', requireAuth, hangar((p, b) => buyPaint(p, String(b.paint || ''), b.plane ? String(b.plane) : p.plane)));
+app.post('/api/pilot/paint', requireAuth, hangar((p, b) => choosePaint(p, String(b.paint || ''), b.plane ? String(b.plane) : p.plane)));
 app.post('/api/pilot/buy-arm', requireAuth, hangar((p, b) => buyArm(p, String(b.kind || ''), String(b.id || ''), b.plane ? String(b.plane) : p.plane)));
 // a gift code: guessed at, so knocked on slowly
 app.post('/api/pilot/gift', requireAuth, knock.mw(), hangar((p, b) => redeemGift(p, b.code)));
