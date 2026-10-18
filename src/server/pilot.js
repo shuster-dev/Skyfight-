@@ -1,7 +1,7 @@
 // A pilot's record: who they are, what they have earned, what they own.
 // Everything that changes it goes through here, so the rules (a level to
 // open, gold to pay, one of each) are in one place.
-import { ARMS, PAINTS, PLANES, START_GUN, START_MISSILE, START_PLANE, UPGRADES, UPGRADE_WAS, killReward, levelBonus, levelOf, nextTier, planeOpen, planeOwned } from '../shared/planes.js';
+import { ARMS, MAX_LEVEL, PAINTS, PLANES, START_GUN, START_MISSILE, START_PLANE, UPGRADES, UPGRADE_WAS, killReward, levelBonus, levelOf, nextTier, planeOpen, planeOwned, xpAt } from '../shared/planes.js';
 
 const noTiers = () => Object.fromEntries(Object.keys(UPGRADES).map((k) => [k, 0]));
 
@@ -80,6 +80,40 @@ export function buyPlane(p, id) {
   p.loadout[id] ||= { ...(p.loadout[p.plane] || { gun: START_GUN, missile: START_MISSILE }) };
   p.plane = id;
   return { ok: true };
+}
+
+/**
+ * The admin's hand on a pilot: set or add gold, give a plane (or all of
+ * them), set the level. Nothing is bought: no level asked, no gold paid.
+ */
+export const GOLD_MAX = 1e9;
+export function adminEdit(p, b = {}) {
+  const num = (v) => (Number.isFinite(Number(v)) ? Math.round(Number(v)) : null);
+  let did = false;
+  if (b.gold != null) {
+    const g = num(b.gold);
+    if (g == null) return { error: 'bad_gold' };
+    p.gold = Math.max(0, Math.min(GOLD_MAX, g)); did = true;
+  }
+  if (b.addGold != null) {
+    const g = num(b.addGold);
+    if (g == null) return { error: 'bad_gold' };
+    p.gold = Math.max(0, Math.min(GOLD_MAX, (p.gold || 0) + g)); did = true;
+  }
+  if (b.level != null) {
+    const l = num(b.level);
+    if (l == null || l < 1 || l > MAX_LEVEL) return { error: 'bad_level' };
+    p.xp = xpAt(l); p.level = levelOf(p.xp); did = true;
+  }
+  const give = b.plane === 'all' ? Object.keys(PLANES) : b.plane != null ? [String(b.plane)] : [];
+  for (const id of give) {
+    if (!Object.hasOwn(PLANES, id)) return { error: 'no_such_plane' };
+    if (!planeOwned(p, id)) p.planes.push(id);
+    p.upgrades[id] ||= noTiers();
+    p.loadout[id] ||= { ...(p.loadout[p.plane] || { gun: START_GUN, missile: START_MISSILE }) };
+    did = true;
+  }
+  return did ? { ok: true } : { error: 'nothing_to_do' };
 }
 
 /** Take a plane you own out of the hangar. */

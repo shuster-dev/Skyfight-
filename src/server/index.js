@@ -10,7 +10,7 @@ import crypto from 'node:crypto';
 import { openStore, tagKey } from './store.js';
 import { presence } from './presence.js';
 import { hashPassword, verifyPassword, signToken, verifyToken, validateUsername } from './auth.js';
-import { buyArm, equipArm, buyPaint, buyPlane, buyUpgrade, choosePaint, choosePlane, newPilot, normalize, view } from './pilot.js';
+import { adminEdit, buyArm, equipArm, buyPaint, buyPlane, buyUpgrade, choosePaint, choosePlane, newPilot, normalize, view } from './pilot.js';
 import { ArenaRoom } from './rooms/ArenaRoom.js';
 import { cleanCallsign, displayName, levelOf } from '../shared/planes.js';
 
@@ -71,7 +71,18 @@ async function tagPilot(user, p) {
   await store.savePilot(p);
   return p;
 }
-const me = async (user) => ({ guest: !!user.guest, username: user.username || '', pilot: view(await tagPilot(user, await pilotOf(user.id))) });
+/**
+ * Admins: saved pilots named in ADMIN_CODES (name#number, comma-separated;
+ * מאיר#1 unless set). A number is never given twice, so the code is the
+ * pilot's own: rename and it is a new code, and the admin's hand goes with
+ * the old one.
+ */
+const ADMIN_CODES = new Set(String(process.env.ADMIN_CODES ?? 'מאיר#1').split(',').map((c) => c.trim().toLowerCase()).filter(Boolean));
+const isAdmin = (user, p) => !user.guest && !!p?.registered && !!p.tag && ADMIN_CODES.has(`${tagKey(p.tagName || p.name)}#${p.tag}`);
+const me = async (user) => {
+  const p = await tagPilot(user, await pilotOf(user.id));
+  return { guest: !!user.guest, username: user.username || '', admin: isAdmin(user, p), pilot: view(p) };
+};
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 
@@ -186,6 +197,38 @@ app.post('/api/friends/remove', requireAuth, async (req, res) => {
   f.friends = (f.friends || []).filter((x) => x !== p.id);
   await store.savePilot(p); await store.savePilot(f);
   res.json({ ok: true });
+});
+
+// --- the admin's desk --------------------------------------------------------
+// Look a pilot up by code, then set or add gold, give planes, set the level.
+// Every change is logged with who made it.
+const requireAdmin = async (req, res, next) => {
+  if (!isAdmin(req.user, await pilotOf(req.user.id))) return res.status(403).json({ error: 'not_admin' });
+  next();
+};
+const adminRow = (p) => ({ code: displayName(p), level: levelOf(p.xp || 0), gold: p.gold || 0, plane: p.plane, planes: p.planes, kills: p.kills || 0 });
+app.get('/api/admin/pilot', requireAuth, requireAdmin, async (req, res) => {
+  const c = parseCode(req.query.code);
+  const p = c && await store.findPilotByCode(c.name, c.tag);
+  if (!p) return res.status(404).json({ error: 'no_such_pilot' });
+  res.json({ pilot: adminRow(normalize(p)) });
+});
+app.get('/api/admin/pilots', requireAuth, requireAdmin, async (req, res) => {
+  const rows = await store.leaderboard('level', 100);
+  res.json({ rows: rows.map((r) => ({ code: r.name, level: r.level, kills: r.kills, plane: r.plane })) });
+});
+app.post('/api/admin/edit', requireAuth, requireAdmin, async (req, res) => {
+  const c = parseCode(req.body?.code);
+  const p = c && await store.findPilotByCode(c.name, c.tag);
+  if (!p) return res.status(404).json({ error: 'no_such_pilot' });
+  normalize(p);
+  const b = req.body || {};
+  const r = adminEdit(p, { gold: b.gold, addGold: b.addGold, plane: b.plane, level: b.level });
+  if (r.error) return res.status(400).json({ error: r.error });
+  await store.savePilot(p);
+  const by = await pilotOf(req.user.id);
+  console.log(`[admin] ${displayName(by)} -> ${displayName(p)}`, JSON.stringify({ gold: b.gold, addGold: b.addGold, plane: b.plane, level: b.level }));
+  res.json({ ok: true, pilot: adminRow(p) });
 });
 
 app.get('/api/leaderboard', async (req, res) => res.json({ rows: await store.leaderboard(req.query.kind === 'kills' ? 'kills' : 'level', 20) }));
