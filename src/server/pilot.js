@@ -1,7 +1,7 @@
 // A pilot's record: who they are, what they have earned, what they own.
 // Everything that changes it goes through here, so the rules (a level to
 // open, gold to pay, one of each) are in one place.
-import { ARMS, PAINTS, PLANES, START_GUN, START_MISSILE, START_PLANE, UPGRADES, killReward, levelBonus, levelOf, nextTier, planeOpen, planeOwned } from '../shared/planes.js';
+import { ARMS, PAINTS, PLANES, START_GUN, START_MISSILE, START_PLANE, UPGRADES, UPGRADE_WAS, killReward, levelBonus, levelOf, nextTier, planeOpen, planeOwned } from '../shared/planes.js';
 
 const noTiers = () => Object.fromEntries(Object.keys(UPGRADES).map((k) => [k, 0]));
 
@@ -46,9 +46,16 @@ export function normalize(p) {
   p.friends = [...new Set((Array.isArray(p.friends) ? p.friends : []).filter((x) => typeof x === 'string'))].slice(0, 60);
   // upgrades used to be the pilot's, for every plane: an old record keeps
   // them, now on each plane it owns
+  // and there were six, now three: each of the three keeps the best of
+  // the ones folded into it
   const u = p.upgrades || {};
-  const old = Object.keys(UPGRADES).some((k) => typeof u[k] === 'number');
-  const tiers = (t) => Object.fromEntries(Object.keys(UPGRADES).map((k) => [k, Math.max(0, Math.min(5, t?.[k] | 0))]));
+  const old = Object.keys(UPGRADE_WAS).some((k) => typeof u[k] === 'number');
+  const tiers = (t) => {
+    const out = Object.fromEntries(Object.keys(UPGRADES).map((k) => [k, 0]));
+    for (const [was, now] of Object.entries(UPGRADE_WAS)) out[now] = Math.max(out[now], Math.max(0, Math.min(5, t?.[was] | 0)));
+    if (t) for (const k of Object.keys(UPGRADES)) out[k] = Math.max(out[k], Math.max(0, Math.min(5, t[k] | 0)));
+    return out;
+  };
   p.upgrades = Object.fromEntries(p.planes.map((id) => [id, tiers(old ? u : u[id])]));
   return p;
 }

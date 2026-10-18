@@ -47,7 +47,7 @@ async function run(label, viewport, mobile) {
   await page.waitForSelector('#screen-hangar:not(.hidden)');
   await wait(1200);
   await snap('2-hangar');
-  ok('the hangar is its own 3D scene, five planes in the row', await page.evaluate(() => window.__sky.mode === 'hangar') && (await page.$$('#hp-dots i')).length === 5);
+  ok('the hangar is its own 3D scene, ten planes in the row', await page.evaluate(() => window.__sky.mode === 'hangar') && (await page.$$('#hp-dots i')).length === 10);
   ok('the first plane is on the table, in use', (await page.textContent('#hp-name')) === 'סער' && (await page.textContent('#hp-act')) === 'בשימוש');
   ok('no pictures and no emoji in the hangar', await page.evaluate(() => !/[\u{1F300}-\u{1FAFF}\u2600-\u27BF]/u.test(document.querySelector('#screen-hangar').innerText)));
   ok('seven paints to choose from, the stock one worn', (await page.$$('#hp-paints .sw')).length === 7 && await page.evaluate(() => document.querySelector('#hp-paints .sw.on')?.dataset.paint === 'stock'));
@@ -58,18 +58,18 @@ async function run(label, viewport, mobile) {
   await page.click('#hp-next');
   await wait(800);
   await snap('2b-next');
-  ok('the next plane is locked to a level', (await page.textContent('#hp-name')) === 'ברק' && /נפתח ברמה 3/.test(await page.textContent('#hp-act')));
+  ok('the next plane is locked to a level', (await page.textContent('#hp-name')) === 'שחף' && /נפתח ברמה 3/.test(await page.textContent('#hp-act')));
   await page.click('#hp-prev');
   await page.click('[data-tab="ups"]');
   await wait(400);
   await snap('3-upgrades');
-  ok('six upgrades for the plane on the table, turbo and flares among them', (await page.$$('#tab-ups > .up')).length === 6 && /←/.test(await page.textContent('#tab-ups')) && /טורבו/.test(await page.textContent('#tab-ups')) && /נורים/.test(await page.textContent('#tab-ups')));
+  ok('three upgrades for the plane on the table: engine, weapons, armour', (await page.$$('#tab-ups > .up')).length === 3 && /←/.test(await page.textContent('#tab-ups')) && /מנוע/.test(await page.textContent('#tab-ups')) && /נשק/.test(await page.textContent('#tab-ups')) && /שריון/.test(await page.textContent('#tab-ups')));
   await page.click('[data-tab="market"]');
-  ok('the market: a card like the planes\', the free missile fitted', /שפריר 1/.test(await page.textContent('#hm-name')) && /מותקן/.test(await page.textContent('#hm-act')) && /טווח נעילה/.test(await page.textContent('#hm-specs')));
+  ok('the market: a card like the planes\', the free missile fitted', /שפריר/.test(await page.textContent('#hm-name')) && /מותקן/.test(await page.textContent('#hm-act')) && /טווח נעילה/.test(await page.textContent('#hm-specs')));
   await page.click('#hm-next');
-  ok('the next missile: big on the pad, compared with the one fitted', /שפריר 2/.test(await page.textContent('#hm-name')) && /←/.test(await page.textContent('#hm-specs')) && await page.evaluate(() => window.__sky.hangarShows?.() === 'missiles/m2'));
+  ok('the next missile: big on the pad, compared with the one fitted', /פיתון 3/.test(await page.textContent('#hm-name')) && /←/.test(await page.textContent('#hm-specs')) && await page.evaluate(() => window.__sky.hangarShows?.() === 'missiles/m2'));
   await page.click('[data-shelf="guns"]');
-  ok('and the guns, the same way', /מקלע 7.62/.test(await page.textContent('#hm-name')) && /250/.test(await page.textContent('#hm-specs')));
+  ok('and the guns, the same way', /נגב/.test(await page.textContent('#hm-name')) && /250/.test(await page.textContent('#hm-specs')));
   // flicking fast, then out: nothing of the market is left on the pad
   for (let i = 0; i < 3; i++) await page.click('#hm-next');
   await snap('3c-market');

@@ -267,10 +267,11 @@ function renderHangar() {
 function renderPlanes() {
   const p = S.pilot, k = viewing || p.plane, d = PLANES[k];
   const own = planeOwned(p, k), open = planeOpen(p, k), sel = p.plane === k;
-  $('#hp-era').textContent = `${d.era} · ${d.kind}`;
+  $('#hp-era').innerHTML = `${PLANE_ORDER.indexOf(k) + 1}/${PLANE_ORDER.length} · ${esc(d.era)} · ${esc(d.kind)}${d.ace ? ' <span class="ace">עלית</span>' : ''}`;
   $('#hp-name').textContent = d.he;
+  $('#hp-name').classList.toggle('ace', !!d.ace);
   $('#hp-role').textContent = d.role;
-  $('#hp-dots').innerHTML = PLANE_ORDER.map((id) => `<i class="${id === k ? 'on' : ''} ${planeOwned(p, id) ? 'own' : ''}"></i>`).join('');
+  $('#hp-dots').innerHTML = PLANE_ORDER.map((id) => `<i class="${id === k ? 'on' : ''} ${planeOwned(p, id) ? 'own' : ''} ${PLANES[id].ace ? 'ace' : ''}"></i>`).join('');
   const act = $('#hp-act');
   act.className = 'h-act';
   act.disabled = false;
@@ -366,11 +367,18 @@ const STAT = {
 };
 /** What each upgrade moves, in that order. */
 const UP_STATS = {
-  engine: ['speed', 'turn'], turbo: ['boost', 'refill'], guns: ['dps', 'gunRange'],
-  armor: ['hp'], missiles: ['reload', 'mRange', 'missiles'], flares: ['flareReload', 'flares'],
+  engine: ['speed', 'turn', 'boost'],
+  weapons: ['dps', 'gunRange', 'reload', 'missiles'],
+  armor: ['hp', 'flareReload', 'flares'],
+};
+/** An icon for each upgrade, drawn in the line of the tabs. */
+const UP_ICON = {
+  engine: '<svg viewBox="0 0 24 24"><path d="M3 12h4l2-4h6l2 4h4M7 12l-2 5h14l-2-5"/><circle cx="12" cy="12" r="2"/></svg>',
+  weapons: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></svg>',
+  armor: '<svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z"/></svg>',
 };
 /** The plane at a glance, over the upgrades. */
-const GLANCE = ['speed', 'turn', 'hp', 'dps', 'gunRange', 'mRange'];
+const GLANCE = ['speed', 'hp', 'dps', 'gunRange'];
 
 /**
  * One number, and what it becomes: "806 ← 870 קמ"ש", the new number green
@@ -400,8 +408,8 @@ function renderUps() {
     const btn = !n ? '<button disabled>מלא</button>'
       : p.level < n.level ? `<button disabled>רמה ${n.level}</button>`
         : `<button data-up="${k}" ${p.gold < n.cost ? 'disabled' : ''}><span class="num">${fmt(n.cost)}</span><span class="coin"></span></button>`;
-    return `<div class="up"><div class="t"><b>${u.he} <small class="tier">דרגה ${have}/${TIER_MAX}</small></b>${nums}<div class="segs">${segs}</div></div>${btn}</div>`;
-  }).join('') + '<div class="note" style="text-align:right">כל דרגה היא קפיצה: חמש דרגות תנועה מביאות מטוס פשוט קרוב למהירות של הטוב במשחק. זהב מרוויחים על כל הפלה.</div>';
+    return `<div class="up"><span class="up-ic">${UP_ICON[k] || ''}</span><div class="t"><b>${u.he} <small class="tier">דרגה ${have}/${TIER_MAX}</small></b><small>${u.desc}</small>${nums}<div class="segs">${segs}</div></div>${btn}</div>`;
+  }).join('') + '<div class="note" style="text-align:right">שלושה שדרוגים, חמש דרגות לכל אחד. זהב מרוויחים על כל הפלה.</div>';
 }
 
 $('#tab-ups').addEventListener('click', async (e) => {
@@ -638,8 +646,8 @@ function hook(room) {
   // a repair pad: one is spent (by anyone), and it was me who flew through
   room.onMessage('pad', (m) => pads.spend(m.i, m.s));
   room.onMessage('healed', (m) => {
-    if (S.me) S.me.hp = m.hp;
-    toast(`תוקן · +${m.gain} חיים`, 'lvl');
+    if (S.me) S.me.hp = m.hp, S.me.ammo = m.ammo ?? S.me.ammo, S.me.flares = m.flares ?? S.me.flares, S.me.reloadT = 0;
+    toast(m.gain > 0 ? `תיקון ותחמושת מלאה · +${m.gain} חיים` : 'תחמושת מלאה', 'lvl');
     sound.coin();
     $('#heal-flash').classList.remove('on'); void $('#heal-flash').offsetWidth; $('#heal-flash').classList.add('on');
   });

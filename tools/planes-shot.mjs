@@ -1,4 +1,4 @@
-// The five planes side by side over the sea, from the front quarter and from above.
+// The ten planes, one by one over the sea, from the front quarter and from above.
 //   npm run build && node tools/planes-shot.mjs [outDir]
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
@@ -18,7 +18,7 @@ page.on('pageerror', (e) => errors.push(e.message));
 await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: 'load' });
 await page.waitForSelector('#btn-go:not([disabled])', { timeout: 60000 });
 await page.addStyleTag({ content: '.screen, #corner { display: none !important }' });
-for (const id of (process.env.ONLY || 'sparrow,hornet,bulldog,viper,phantom').split(',')) {
+for (const id of (process.env.ONLY || 'sparrow,gull,hornet,shahak,skyhawk,viper,bulldog,sufa,lavi,phantom').split(',')) {
   for (const [view, cam] of [['front', [-7, 2.5, -9]], ['side', [11, 1.5, 1.5]], ['top', [2, 13, 3]]]) {
     await page.evaluate(([id, cam, paint]) => {
       const S = window.__sky;
