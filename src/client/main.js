@@ -367,6 +367,8 @@ const STAT = {
   rate: { he: 'קצב אש', val: (st) => +st.rate.toFixed(1), unit: 'לש׳' },
   mDmg: { he: 'נזק · מהחיים', val: (st) => Math.round((st.mDmg / MISSILE.ref) * 100), unit: '%' },
   mSpeed: { he: 'מהירות טיל', val: (st) => KMH(st.mSpeed), unit: 'קמ"ש' },
+  assist: { he: 'עזרת כיוון', val: (st) => +((st.gunAssist * 180) / Math.PI).toFixed(1), unit: '°' },
+  ccm: { he: 'עמידות לנורים', val: (st) => Math.round(st.mCcm * 100), unit: '%' },
 };
 /** What each upgrade moves, in that order: the first is the one its card names. */
 const UP_STATS = {
@@ -474,7 +476,7 @@ function renderMarket() {
   // what it does on the plane flown (its upgrades on), beside what is fitted now
   const t = tiersOf(p, plane), fitted = loadOf(plane);
   const was = statsOf(plane, t, fitted), will = statsOf(plane, t, { ...fitted, [shelf === 'guns' ? 'gun' : 'missile']: k });
-  const keys = shelf === 'guns' ? ['gunRange', 'dps', 'rate'] : ['mRange', 'mDmg', 'mSpeed'];
+  const keys = shelf === 'guns' ? ['gunRange', 'dps', 'assist'] : ['mRange', 'mDmg', 'ccm'];
   $('#hm-specs').innerHTML = keys.map((key) => delta(key, was, will)).join('')
     + (k === on ? '' : `<small class="vs">לעומת ה${ARMS[shelf][on].he} שמותקן עכשיו</small>`);
   $('#hm-dots').innerHTML = order.map((id) => `<i class="${id === k ? 'on' : ''} ${p.arms[shelf].includes(id) ? 'own' : ''}"></i>`).join('');
@@ -649,6 +651,8 @@ function hook(room) {
     sound.hit();
     const o = m.v === 'boss' ? S.boss : S.others.get(m.v);
     o && fx.spark(o.mesh.position);
+    // its health as the room has it now, not a snapshot later: the bar drops as the rounds land
+    if (o && m.hp != null && m.v !== 'boss') o.hp = m.hp, o.hitAt = performance.now();
   });
   room.onMessage('hurt', (m) => {
     if (!S.me) return;
@@ -747,7 +751,7 @@ function onSnapshot(s) {
     o.hp = hp; o.alive = !!(flags & 1); o.firing = !!(flags & 2); o.boost = !!(flags & 4); o.shield = !!(flags & 8);
   }
   for (const [k, o] of S.others) if (!seen.has(k)) { scene.remove(o.mesh); o.tag?.remove(); S.others.delete(k); }
-  S.missiles = s.m.map(([id, x, y, z, yaw, pitch, target]) => ({ id, x: x / 10, y: y / 10, z: z / 10, yaw: yaw / 1000, pitch: pitch / 1000, target }));
+  S.missiles = s.m.map(([id, x, y, z, yaw, pitch, target, speed]) => ({ id, x: x / 10, y: y / 10, z: z / 10, yaw: yaw / 1000, pitch: pitch / 1000, target, speed }));
   S.mAt = performance.now();
   bossSnap(s.b, now);
   if (S.missiles.some((m) => m.target === S.myKey)) S.warnUntil = Math.max(S.warnUntil, now + 300);
@@ -1020,7 +1024,7 @@ function guns(o, mesh, rate, dt, mine) {
     const m = muzzles[(holder.gun = (holder.gun || 0) + 1) % muzzles.length];
     MZ.copy(m).applyQuaternion(mesh.quaternion).add(mesh.position);
     // the room leads the guns at a target near the nose: so does the tracer
-    const target = mine ? gunTarget(o, aimables(), GUN.assistCone, S.me.stats.gunRange) : null;
+    const target = mine ? gunTarget(o, aimables(), S.me.stats.gunAssist || GUN.assistCone, S.me.stats.gunRange) : null;
     const d = aimDir(o, target);
     const f = forward(o.yaw, o.pitch);
     DIR.set(d.x * GUN.speed + f.x * (o.speed || 60), d.y * GUN.speed + f.y * (o.speed || 60), d.z * GUN.speed + f.z * (o.speed || 60));
@@ -1183,7 +1187,7 @@ function hud(dt, now) {
       if (project(P.set(L.x, L.y, L.z))) { show(lead); lead.style.left = `${P.x}px`; lead.style.top = `${P.y}px`; } else show(lead, false);
       // faint while it is out of reach; the crosshair lights once the guns will be helped onto it
       lead.classList.toggle('far', !reach);
-      cross.classList.toggle('on', reach && gunTarget({ ...b, alive: true }, [g], GUN.assistCone, me.stats.gunRange) === g);
+      cross.classList.toggle('on', reach && gunTarget({ ...b, alive: true }, [g], me.stats.gunAssist || GUN.assistCone, me.stats.gunRange) === g);
     } else { show(lead, false); cross.classList.remove('on'); }
   }
   S.hudT += dt;
@@ -1250,7 +1254,9 @@ function tags() {
       const side = S.teams ? (r?.team === S.myTeam ? ' mate' : ' foe') : '';
       if (named < 2 && d < 900) {
         named++;
-        const bar = o.hp < 100 ? `<div class="mini"><i style="width:${o.hp}%"></i></div>` : '';
+        // the plane under fire: a bigger bar, and the bit just shot off flashing white
+        const hot = o.hitAt && performance.now() - o.hitAt < 2500;
+        const bar = o.hp < 100 || hot ? `<div class="mini${hot ? ' hot' : ''}"><i style="width:${o.hp}%"></i></div>` : '';
         setTag(n++, `tagp${side}`, `${esc(r?.name || '')} · <span class="num">${Math.round(d / 10) * 10}</span>${bar}`, P.x, P.y);
       } else setTag(n++, `tagdot${side}`, '', P.x, P.y);
     }

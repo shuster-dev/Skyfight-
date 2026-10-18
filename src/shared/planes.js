@@ -132,20 +132,25 @@ export const FLARE_RELOAD = 10;
  *
  *   range  metres it is good to     dmg  per round (×) / per missile
  *   rate   rounds a second (×)      speed, turn  the missile's flight
+ *   spread how far a round strays    assist  the cone (rad) the guns are
+ *          off true (rad)                    helped onto a plane within
+ *   ccm    a missile's head against flares and breaks: the share of them
+ *          it sees through
+ * Dearer is better at all of it: further, truer, more help onto the target.
  */
 export const GUNS = {
-  g1: { id: 'g1', he: 'נגב', level: 1, price: 0, range: 250, dmg: 1, rate: 1, desc: 'מקלע קל, מהיר לטעינה. קצר טווח.' },
-  g2: { id: 'g2', he: 'מאג', level: 3, price: 900, range: 300, dmg: 1.12, rate: 1, desc: 'המקלע של צה"ל: כדור כבד יותר, טווח ארוך יותר.' },
-  g3: { id: 'g3', he: 'דפ"א 30', level: 7, price: 2800, range: 350, dmg: 1.32, rate: 0.9, desc: 'התותח של המיראז\' והכפיר: פגזים נפיצים, קצב מעט איטי.' },
-  g4: { id: 'g4', he: 'וולקן', level: 12, price: 6500, range: 370, dmg: 1.02, rate: 1.45, desc: 'רב־קני של הבז והסופה: מטר של פגזים מקרוב.' },
-  g5: { id: 'g5', he: 'סערה 30', level: 18, price: 14000, range: 430, dmg: 1.55, rate: 0.85, desc: 'תותח כבד של אדיר: כל פגיעה כואבת, ומרחוק.' },
+  g1: { id: 'g1', he: 'נגב', level: 1, price: 0, range: 250, dmg: 1, rate: 1, spread: 0.009, assist: 0.10, desc: 'מקלע קל, מהיר לטעינה. קצר טווח.' },
+  g2: { id: 'g2', he: 'מאג', level: 3, price: 900, range: 300, dmg: 1.12, rate: 1, spread: 0.007, assist: 0.12, desc: 'המקלע של צה"ל: כדור כבד יותר, טווח ארוך יותר.' },
+  g3: { id: 'g3', he: 'דפ"א 30', level: 7, price: 2800, range: 350, dmg: 1.32, rate: 0.95, spread: 0.0055, assist: 0.14, desc: 'התותח של המיראז\' והכפיר: פגזים נפיצים, קצב מעט איטי.' },
+  g4: { id: 'g4', he: 'וולקן', level: 12, price: 6500, range: 380, dmg: 1.05, rate: 1.45, spread: 0.0045, assist: 0.16, desc: 'רב־קני של הבז והסופה: מטר של פגזים מקרוב.' },
+  g5: { id: 'g5', he: 'סערה 30', level: 18, price: 14000, range: 450, dmg: 1.35, rate: 1.3, spread: 0.0025, assist: 0.20, desc: 'תותח כבד ומהיר של אדיר: מדויק, רחוק, וכל פגיעה כואבת.' },
 };
 export const MISSILES = {
-  m1: { id: 'm1', he: 'שפריר', level: 1, price: 0, range: 300, dmg: 72, speed: 145, turn: 1.8, desc: 'טיל החום הראשון של התעשייה הישראלית. קצר טווח.' },
-  m2: { id: 'm2', he: 'פיתון 3', level: 4, price: 1200, range: 380, dmg: 88, speed: 150, turn: 1.95, desc: 'של רפאל: ראש קרב גדול, טווח ארוך יותר.' },
-  m3: { id: 'm3', he: 'פיתון 5', level: 9, price: 3600, range: 460, dmg: 104, speed: 158, turn: 2.1, desc: 'נועל מכל זווית. קשה מאוד להתחמק ממנו.' },
-  m4: { id: 'm4', he: 'דרבי', level: 14, price: 8000, range: 550, dmg: 120, speed: 166, turn: 2.25, desc: 'מונחה מכ"ם: נועל מרחוק ונצמד לפניות חדות.' },
-  m5: { id: 'm5', he: 'סקיי סטינג', level: 20, price: 16000, range: 680, dmg: 144, speed: 175, turn: 2.35, desc: 'הדור הבא של רפאל: מעבר לטווח הראייה, ופגיעה קטלנית.' },
+  m1: { id: 'm1', he: 'שפריר', level: 1, price: 0, range: 300, dmg: 72, speed: 195, turn: 3.2, ccm: 0.15, desc: 'טיל החום הראשון של התעשייה הישראלית. קצר טווח.' },
+  m2: { id: 'm2', he: 'פיתון 3', level: 4, price: 1200, range: 380, dmg: 88, speed: 205, turn: 3.4, ccm: 0.25, desc: 'של רפאל: ראש קרב גדול, טווח ארוך יותר.' },
+  m3: { id: 'm3', he: 'פיתון 5', level: 9, price: 3600, range: 460, dmg: 104, speed: 215, turn: 3.7, ccm: 0.35, desc: 'נועל מכל זווית. קשה מאוד להתחמק ממנו.' },
+  m4: { id: 'm4', he: 'דרבי', level: 14, price: 8000, range: 550, dmg: 120, speed: 225, turn: 3.9, ccm: 0.45, desc: 'מונחה מכ"ם: נועל מרחוק ונצמד לפניות חדות.' },
+  m5: { id: 'm5', he: 'סקיי סטינג', level: 20, price: 16000, range: 680, dmg: 144, speed: 240, turn: 4.2, ccm: 0.55, desc: 'הדור הבא של רפאל: מעבר לטווח הראייה, ופגיעה קטלנית.' },
 };
 export const GUN_ORDER = Object.keys(GUNS);
 export const MISSILE_ORDER = Object.keys(MISSILES);
@@ -172,7 +177,10 @@ export function statsOf(planeId, tiers = {}, arms = {}) {
     boost: up('engine', 'boost', p.boost), fill: up('engine', 'fill', p.fill),
     rate: p.rate * gunK * G.rate, dmg: p.dmg * gunK * G.dmg,
     gun: G.id, gunRange: Math.round(up('weapons', 'gunRange', G.range)),
+    // the weapons tier trues the guns up too: less scatter, more help onto a target
+    gunSpread: G.spread * (1 - 0.1 * t('weapons')), gunAssist: G.assist * (1 + 0.06 * t('weapons')),
     missile: M.id, mRange: Math.round(up('weapons', 'mRange', M.range)), mDmg: M.dmg, mSpeed: M.speed, mTurn: M.turn,
+    mCcm: Math.min(0.8, M.ccm + 0.03 * t('weapons')),
     missiles: p.missiles + (t('weapons') >= 3 ? 1 : 0),
     reload: up('weapons', 'reload', p.reload),
     flares: p.flares + (t('armor') >= 3 ? 1 : 0),

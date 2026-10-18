@@ -272,11 +272,12 @@ export class ArenaRoom extends Room {
       p.fireT -= every;
       const f = forward(p.yaw, p.pitch);
       // the aim help is for people: a bot gets a sliver of it
-      const target = p.bot ? pickTarget(p, others, GUN.assistCone * 0.4, p.stats.gunRange) : gunTarget(p, others, GUN.assistCone, p.stats.gunRange);
+      // a person's gun helps them onto a target in its own cone: wider the better the gun
+      const target = p.bot ? pickTarget(p, others, GUN.assistCone * 0.4, p.stats.gunRange) : gunTarget(p, others, p.stats.gunAssist, p.stats.gunRange);
       // a bot leads its target by the way it has been flying the last half
       // second or so, not the way it is flying now: break hard, and the
       // stream goes where you were going
-      const d = scatter(aimDir(p, p.bot && target?.vel ? { ...target, vel: p.bot.seen || target.vel } : target), p.bot ? GUN.botSpread : GUN.spread);
+      const d = scatter(aimDir(p, p.bot && target?.vel ? { ...target, vel: p.bot.seen || target.vel } : target), p.bot ? GUN.botSpread : p.stats.gunSpread);
       // from the wing the barrel is on, alternating
       const side = (p.gun++ % 2 ? 1 : -1) * 2.2, rx = Math.cos(p.yaw), rz = -Math.sin(p.yaw);
       this.bullets.push({
@@ -293,7 +294,7 @@ export class ArenaRoom extends Room {
     p.flares--;
     let pulled = 0;
     for (const m of this.missiles) {
-      if (m.target !== p.key || Math.random() >= FLARE.decoy) continue;
+      if (m.target !== p.key || Math.random() >= FLARE.decoy * (1 - (m.ccm || 0))) continue;
       // it goes for the flare, falling away behind, and bursts on it
       m.target = ''; m.ignore = p.key; pulled++;
       m.decoy = { x: p.x - p.vel.x * 0.15, y: p.y - 2, z: p.z - p.vel.z * 0.15, vx: p.vel.x * 0.25, vy: -4, vz: p.vel.z * 0.25, t: 0 };
@@ -346,7 +347,10 @@ export class ArenaRoom extends Room {
     const f = forward(p.yaw, p.pitch);
     // its model's flight and punch; fuel for half again its reach
     const st = p.stats;
-    const m = { id: (++this.seq).toString(36), owner: p.key, target: target?.key || '', t: 0, speed: st.mSpeed, turn: st.mTurn, dmg: st.mDmg, life: (st.mRange * 1.5) / st.mSpeed, x: p.x + f.x * 4, y: p.y + f.y * 4 - 1, z: p.z + f.z * 4, yaw: p.yaw, pitch: p.pitch };
+    // it leaves at the plane's own speed plus its motor's: always faster than whoever it is after
+    const speed = st.mSpeed + Math.max(0, p.speed || 0);
+    // (a bot's seeker is half as hard to fool: flares and a late break work better on a bot's missile)
+    const m = { id: (++this.seq).toString(36), owner: p.key, target: target?.key || '', t: 0, speed, turn: st.mTurn, dmg: st.mDmg, ccm: (st.mCcm || 0) * (p.bot ? 0.5 : 1), life: (st.mRange * 2.5) / speed, x: p.x + f.x * 4, y: p.y + f.y * 4 - 1, z: p.z + f.z * 4, yaw: p.yaw, pitch: p.pitch };
     this.missiles.push(m);
     if (target?.sid) this.sendTo(target, 'incoming', { from: p.key });
     const me = p.sid && this.clients.find((c) => c.sessionId === p.sid);
@@ -448,7 +452,7 @@ export class ArenaRoom extends Room {
     const d = Math.hypot(p.x - m.x, p.y - m.y, p.z - m.z);
     if (d > DODGE.far || d < DODGE.near || this.broke(p) < DODGE.turn) return;
     m.tried = true;
-    if (Math.random() >= dodgeChance(d)) return;
+    if (Math.random() >= dodgeChance(d) * (1 - (m.ccm || 0))) return;
     m.target = ''; m.ignore = p.key;
     this.sendTo(p, 'dodged', { d: Math.round(d) });
     const by = this.planes.get(m.owner);
@@ -506,7 +510,7 @@ export class ArenaRoom extends Room {
     d.dmg += dmg; d.at = this.now;
     p.damagers.set(by, d);
     const shooter = this.planes.get(by);
-    shooter && this.sendTo(shooter, 'hit', { v: p.key, d: Math.round(dmg), how });
+    shooter && this.sendTo(shooter, 'hit', { v: p.key, d: Math.round(dmg), how, hp: Math.max(0, Math.round((p.hp / p.stats.hp) * 100)) });
     this.sendTo(p, 'hurt', { by, d: Math.round(dmg), hp: Math.max(0, Math.round(p.hp)), how });
     if (shooter?.bot) shooter.bot.lastHit = this.now;
     if (p.bot) p.bot.hurtAt = this.now, p.bot.attacker = by;
@@ -568,7 +572,7 @@ export class ArenaRoom extends Room {
       const a = p.q || Q.euler(p.yaw, p.pitch, p.roll);
       ps.push([p.key, q(p.x), q(p.y), q(p.z), q(p.yaw, 1000), q(p.pitch, 1000), q(p.roll, 1000), Math.round(Math.max(0, p.hp) / p.stats.hp * 100), flags, q(p.speed), q(a.x, 1000), q(a.y, 1000), q(a.z, 1000), q(a.w, 1000)]);
     }
-    const ms = this.missiles.map((m) => [m.id, q(m.x), q(m.y), q(m.z), q(m.yaw, 1000), q(m.pitch, 1000), m.target]);
+    const ms = this.missiles.map((m) => [m.id, q(m.x), q(m.y), q(m.z), q(m.yaw, 1000), q(m.pitch, 1000), m.target, Math.round(m.speed || MISSILE.speed)]);
     this.broadcast('s', { t: this.now, p: ps, m: ms, b: this.bomber.snap() });
   }
 

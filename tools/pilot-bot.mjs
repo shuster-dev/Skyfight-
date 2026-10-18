@@ -21,7 +21,7 @@ if (!BASE) {
   const PORT = 3500 + Math.floor(Math.random() * 300);
   BASE = `http://127.0.0.1:${PORT}`;
   srv = spawn(process.execPath, ['src/server/index.js'], { env: { ...process.env, PORT: String(PORT), NODE_ENV: 'test' }, stdio: 'ignore' });
-  await wait(1500);
+  await wait(3000);
 }
 const api = async (path, body, token) => (await fetch(BASE + path, { method: body ? 'POST' : 'GET', headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: body ? JSON.stringify(body) : undefined })).json();
 
@@ -43,7 +43,7 @@ room.onMessage('s', (s) => {
     others.set(k, { key: k, x: x / 10, y: y / 10, z: z / 10, yaw: yaw / 1000, pitch: pitch / 1000, hp, alive: !!(flags & 1), shield: !!(flags & 8), vel: { x: f.x * spd / 10, y: f.y * spd / 10, z: f.z * spd / 10 } });
   }
 });
-room.onMessage('hit', () => st.hits++);
+room.onMessage('hit', (m) => { st.hits++; if (m?.how === 'missile') st.mHits = (st.mHits || 0) + 1; });
 let rams = 0, rammed = 0, bossSeen = 0, bossDown = 0, bossPay = 0;
 room.onMessage('bossStart', () => bossSeen++);
 room.onMessage('bossDown', () => bossDown++);
@@ -119,7 +119,7 @@ const report = {
   minutes: +mins.toFixed(1), kills: st.kills, assists: st.assists, deaths: st.deaths, deathsBy: st.by, crashes: st.crashes,
   killsPerMin: +(st.kills / mins).toFixed(2), deathsPerMin: +(st.deaths / mins).toFixed(2),
   firstKillSec: st.firstKillAt ? Math.round(st.firstKillAt) : null,
-  hits: st.hits, missiles: st.missiles, rams, rammed, bossSeen, bossDown, bossPay, level: st.level, levels: st.levels, xp: st.xp, gold: st.gold, xpToLevel2: xpStep(1),
+  hits: st.hits, missiles: st.missiles, missileHits: st.mHits || 0, rams, rammed, bossSeen, bossDown, bossPay, level: st.level, levels: st.levels, xp: st.xp, gold: st.gold, xpToLevel2: xpStep(1),
 };
 console.log(JSON.stringify(report, null, 1));
 srv?.kill();
