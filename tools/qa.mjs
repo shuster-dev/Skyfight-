@@ -20,7 +20,7 @@ ok('prices rise with level', PLANE_ORDER.every((k, i) => !i || PLANES[k].price >
 {
   const ALL5 = { engine: 5, turbo: 5, guns: 5, armor: 5, missiles: 5, flares: 5 };
   const base = statsOf('sparrow'), up = statsOf('sparrow', ALL5), best = statsOf('phantom'), third = statsOf('bulldog');
-  ok('no upgrades: the plane as it is', base.hp === 100 && base.speed === 56 && base.missiles === 1);
+  ok('no upgrades: the plane as it is', base.hp === 250 && base.speed === 56 && base.missiles === 1);
   ok('the starter is heavy and slow to fire', base.turn < best.turn && base.speed < best.speed && base.rate * base.dmg < Math.min(...PLANE_ORDER.slice(1).map((k) => statsOf(k).rate * statsOf(k).dmg)));
   ok('movement 5: 40% faster, a third quicker to turn — about the best plane\'s pace', near(up.speed, base.speed * 1.4) && near(up.turn, base.turn * 1.35) && up.speed >= best.speed && up.turn > best.turn * 0.9);
   ok('turbo 5: half again the burner, refilled much faster', near(up.boost, base.boost * 1.5) && near(up.fill, base.fill * 1.75) && up.boost >= best.boost);
@@ -84,6 +84,21 @@ console.log('\nthe arena');
   ok('spawns are in the air, well clear of anything', pts.every((s) => s.y > surfaceAt(s.x, s.z) + 100), pts.map((s) => Math.round(s.y - surfaceAt(s.x, s.z))));
   ok('spawns face the middle', pts.every((s) => { const f = forward(s.yaw, 0); return f.x * -s.x + f.z * -s.z > 0.99 * Math.hypot(s.x, s.z); }));
   ok('the ground is the same every time', terrainAt(100, 33) === terrainAt(100, 33));
+}
+
+console.log('\nhow long a fight lasts');
+{
+  // time to bring a plane down with nothing but hits, against the strongest
+  // gun on a fully upgraded plane, and the starter's own against itself
+  const T5 = { engine: 5, turbo: 5, guns: 5, armor: 5, missiles: 5, flares: 5 };
+  const dps = (k, t, g) => { const s = statsOf(k, t, { gun: g }); return s.rate * s.dmg; };
+  const worst = Math.max(...PLANE_ORDER.map((k) => dps(k, T5, 'g5')));
+  ok('even the hardest-hitting plane in the game, maxed, needs nearly 2 s of solid hits on a fresh starter', statsOf('sparrow').hp / worst >= 1.9, statsOf('sparrow').hp / worst);
+  const T3 = { engine: 3, turbo: 3, guns: 3, armor: 3, missiles: 3, flares: 3 };
+  ok('a bot about your level (a heavy twin, 20 mm, tier 3) needs over 3 s of solid hits on a starter', statsOf('sparrow').hp / dps('bulldog', T3, 'g3') > 3, statsOf('sparrow').hp / dps('bulldog', T3, 'g3'));
+  ok('a starter on a starter: about ten seconds of hits', statsOf('sparrow').hp / dps('sparrow', {}, 'g1') > 8);
+  ok('like for like at the top, four seconds or more', statsOf('phantom', T5).hp / dps('phantom', T5, 'g5') >= 3.5, statsOf('phantom', T5).hp / dps('phantom', T5, 'g5'));
+  ok('a missile takes a good third of a starter, not all of it', MISSILES.m1.dmg / statsOf('sparrow').hp > 0.25 && MISSILES.m5.dmg < statsOf('sparrow').hp * 0.6);
 }
 
 console.log('\nthe air brake');
@@ -211,7 +226,7 @@ ok('a break at the edge of the window rarely does', near(dodgeChance(DODGE.far),
 ok('too early, or too late, it does not at all', dodgeChance(DODGE.far + 1) === 0 && dodgeChance(DODGE.near - 1) === 0);
 ok('the later, the better', dodgeChance(60) > dodgeChance(120));
 ok('a graze side by side takes a bite', ramDamage(5) === RAM.min);
-ok('a head-on at speed brings down even the heaviest plane', ramDamage(60 + 70) >= 100 && ramDamage(2 * statsOf('sparrow', { turbo: 5 }).boost) >= statsOf('bulldog', { armor: 5 }).hp, ramDamage(240));
+ok('a head-on at full burner brings a plane down; a graze only bites', ramDamage(2 * statsOf('sparrow').boost) >= statsOf('sparrow').hp && ramDamage(2 * statsOf('phantom', { turbo: 5 }).boost) >= statsOf('phantom').hp * 1.4 && ramDamage(10) < statsOf('sparrow').hp * 0.2, ramDamage(2 * statsOf('sparrow').boost));
 ok('more speed, more damage', ramDamage(80) > ramDamage(40));
 
 console.log('\nthe hangar');

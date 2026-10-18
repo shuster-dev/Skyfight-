@@ -28,6 +28,22 @@ const BOT_NAMES = ['נץ', 'עיט', 'ברק', 'סערה', 'שחף', 'רעם', '
 export const SKY_SIZE = 10;
 
 const q = (v, k = 10) => Math.round(v * k);
+/** Bots' rounds on people count for this much (bots on bots, people on anyone: in full). */
+const BOT_VS_PEOPLE = 0.85;
+/** How quickly a bot takes in a change of its target's course (1/s): about half a second. */
+const BOT_REACT = 2.2;
+/** A round's way off true: a little scatter round the aim, as a real gun has. */
+function scatter(d) {
+  const a = Math.random() * Math.PI * 2, r = GUN.spread * Math.sqrt(Math.random());
+  // two directions square to d, to push it off along
+  const ux = Math.abs(d.y) < 0.9 ? 0 : 1, uy = Math.abs(d.y) < 0.9 ? 1 : 0;
+  let px = d.y * 0 - d.z * uy, py = d.z * ux - d.x * 0, pz = d.x * uy - d.y * ux;
+  const pn = Math.hypot(px, py, pz) || 1; px /= pn; py /= pn; pz /= pn;
+  const qx = d.y * pz - d.z * py, qy = d.z * px - d.x * pz, qz = d.x * py - d.y * px;
+  const x = d.x + (px * Math.cos(a) + qx * Math.sin(a)) * r, y = d.y + (py * Math.cos(a) + qy * Math.sin(a)) * r, z = d.z + (pz * Math.cos(a) + qz * Math.sin(a)) * r;
+  const n = Math.hypot(x, y, z);
+  return { x: x / n, y: y / n, z: z / n };
+}
 
 export class ArenaRoom extends Room {
   maxClients = SKY_SIZE;
@@ -257,7 +273,10 @@ export class ArenaRoom extends Room {
       const f = forward(p.yaw, p.pitch);
       // the aim help is for people: a bot gets a sliver of it
       const target = pickTarget(p, others, p.bot ? GUN.assistCone * 0.4 : GUN.assistCone, p.stats.gunRange);
-      const d = aimDir(p, target);
+      // a bot leads its target by the way it has been flying the last half
+      // second or so, not the way it is flying now: break hard, and the
+      // stream goes where you were going
+      const d = scatter(aimDir(p, p.bot && target?.vel ? { ...target, vel: p.bot.seen || target.vel } : target));
       // from the wing the barrel is on, alternating
       const side = (p.gun++ % 2 ? 1 : -1) * 2.2, rx = Math.cos(p.yaw), rz = -Math.sin(p.yaw);
       this.bullets.push({
@@ -306,7 +325,12 @@ export class ArenaRoom extends Room {
         const t = segmentHit(b.x, b.y, b.z, nx, ny, nz, p.x, p.y, p.z, GUN.hitR);
         if (t >= 0 && t < tBest) tBest = t, hit = p;
       }
-      if (hit) { this.hurt(hit, b.owner, b.dmg, 'guns'); continue; }
+      if (hit) {
+        // bots hit people a little softer than people hit each other
+        const soft = !hit.bot && this.planes.get(b.owner)?.bot ? BOT_VS_PEOPLE : 1;
+        this.hurt(hit, b.owner, b.dmg * soft, 'guns');
+        continue;
+      }
       if (b.owner !== 'boss' && this.bomber.hitBy(b.x, b.y, b.z, nx, ny, nz)) { this.bomber.hurt(b.owner, b.dmg); continue; }
       b.x = nx; b.y = ny; b.z = nz; b.t += dt;
       // a round stops in whatever solid thing it flies into
@@ -636,7 +660,7 @@ export class ArenaRoom extends Room {
       let best = null, bestD = Infinity;
       for (const o of this.planes.values()) {
         if (o === p || !o.alive || this.now < o.shieldUntil || (this.teams && o.team === p.team)) continue;
-        const d = Math.hypot(o.x - p.x, o.y - p.y, o.z - p.z) * (1 + 0.8 * (hunted.get(o.key) || 0));
+        const d = Math.hypot(o.x - p.x, o.y - p.y, o.z - p.z) * (1 + (o.bot ? 0.8 : 1.6) * (hunted.get(o.key) || 0));
         if (d < bestD) bestD = d, best = o;
       }
       // the bomber, now and then, when it is about and not too far
@@ -644,12 +668,19 @@ export class ArenaRoom extends Room {
       if (bb && Math.random() < 0.35 && Math.hypot(bb.x - p.x, bb.z - p.z) < 1000) best = bb;
       // whoever is shooting at it, if they are close
       const att = this.planes.get(ai.attacker);
-      if (att?.alive && this.now - ai.hurtAt < 4000 && Math.random() < 0.7) best = att;
+      if (att?.alive && this.now - ai.hurtAt < 4000 && Math.random() < 0.5) best = att;
+      if ((best?.key || '') !== ai.target) ai.seen = null;
       ai.target = best?.key || '';
       t = best;
     }
     const input = { turn: 0, climb: 0, boost: false };
     let fire = false;
+    // what the bot has made of its target's flight: it catches up with a
+    // change of course over about half a second (its reaction)
+    if (t?.vel) {
+      const k = Math.min(1, dt * BOT_REACT), s0 = (ai.seen ||= { ...t.vel });
+      s0.x += (t.vel.x - s0.x) * k; s0.y += (t.vel.y - s0.y) * k; s0.z += (t.vel.z - s0.z) * k;
+    }
     if (t) {
       const d = aimDir(p, t);
       const wantYaw = Math.atan2(-d.x, -d.z), wantPitch = Math.asin(Math.max(-1, Math.min(1, d.y)));
@@ -667,6 +698,13 @@ export class ArenaRoom extends Room {
     if (p.flares > 0 && this.missiles.some((m) => m.target === p.key && m.t > 0.6) && Math.random() < dt * 1.2 * ai.skill) this.flare(p);
     // hit: break hard one way for a moment
     if (this.now - ai.hurtAt < 300 && ai.jink <= 0 && Math.random() < 0.5) ai.jink = 0.8 + Math.random(), ai.jinkDir = Math.random() < 0.5 ? -1 : 1;
+    // about to fly into it: pull up and away rather than ram (a collision
+    // hurts both, and nobody enjoys being rammed by a bot)
+    if (t && t.key !== 'boss' && ai.jink <= 0) {
+      const dx = t.x - p.x, dy = t.y - p.y, dz = t.z - p.z, dd = Math.hypot(dx, dy, dz);
+      const closing = ((p.vel?.x || 0) - (t.vel?.x || 0)) * dx + ((p.vel?.y || 0) - (t.vel?.y || 0)) * dy + ((p.vel?.z || 0) - (t.vel?.z || 0)) * dz > 0;
+      if (dd < 45 && closing) ai.jink = 0.7, ai.jinkDir = Math.random() < 0.5 ? -1 : 1;
+    }
     if (ai.jink > 0) ai.jink -= dt, input.turn = ai.jinkDir, input.climb = 0.4, fire = false;
     // the ground, two and a half seconds ahead, and right under it
     const f = forward(p.yaw, p.pitch), look = Math.max(60, p.speed * 2.5);

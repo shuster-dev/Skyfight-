@@ -10,7 +10,8 @@
  * then bought once with gold; the first is free. (The ids are the old ones:
  * pilots' hangars are stored by them.)
  *
- *   hp      how much it takes
+ *   hp      how much it takes (a fight lasts seconds, not a blink: the
+ *           best guns in the game need four or more to bring one down)
  *   speed   cruise, m/s          boost   with the afterburner lit
  *   turn    yaw rate, rad/s      climb   pitch rate, rad/s
  *   rate    rounds per second    dmg     per round
@@ -22,31 +23,31 @@ export const PLANES = {
     id: 'sparrow', he: 'סער', role: 'מאוזן', era: '1944', kind: 'מטוס בוכנה', level: 1, price: 0,
     desc: 'לוחם הבוכנה האחרון של מלחמת העולם השנייה. כבד ויורה לאט — אבל כל שדרוג מקרב אותו לגדולים.',
     guns: 'שישה מקלעים 12.7 מ"מ', missile: 'רקטות',
-    hp: 100, speed: 56, boost: 86, turn: 1.25, climb: 1.1, rate: 8, dmg: 3.2, missiles: 1, flares: 2, reload: 10, fill: 0.12,
+    hp: 250, speed: 56, boost: 86, turn: 1.25, climb: 1.1, rate: 8, dmg: 3.2, missiles: 1, flares: 2, reload: 10, fill: 0.12,
   },
   hornet: {
     id: 'hornet', he: 'ברק', role: 'מהיר', era: '1953', kind: 'סילון כנף משוכה', level: 3, price: 1500,
     desc: 'דור הסילונים הראשון: כנף משוכה ומתכת חשופה. פוגע ובורח לפני שמספיקים להסתובב.',
     guns: 'שישה מקלעים 12.7 מ"מ', missile: 'טיל מונחה חום',
-    hp: 85, speed: 70, boost: 112, turn: 1.6, climb: 1.4, rate: 13, dmg: 3.5, missiles: 1, flares: 2, reload: 9, fill: 0.15,
+    hp: 215, speed: 70, boost: 112, turn: 1.6, climb: 1.4, rate: 13, dmg: 3.5, missiles: 1, flares: 2, reload: 9, fill: 0.15,
   },
   bulldog: {
     id: 'bulldog', he: 'רעם', role: 'משוריין', era: '1976', kind: 'לוחם עליונות אווירית', level: 6, price: 4000,
     desc: 'דו־מנועי כבד עם שני זנבות ותותח רב־קני. איטי בפניות — אבל כמעט לא נופל.',
     guns: 'תותח רב־קני 20 מ"מ', missile: 'טיל מונחה חום',
-    hp: 165, speed: 54, boost: 84, turn: 1.25, climb: 1.1, rate: 16, dmg: 2.8, missiles: 1, flares: 3, reload: 8, fill: 0.13,
+    hp: 410, speed: 54, boost: 84, turn: 1.25, climb: 1.1, rate: 16, dmg: 2.8, missiles: 1, flares: 3, reload: 8, fill: 0.13,
   },
   viper: {
     id: 'viper', he: 'כפיר', role: 'זריז', era: '1975', kind: 'כנף משולשת', level: 10, price: 9000,
     desc: 'כנף משולשת עם כנפונים. מסתובב בתוך העיגול של כל אחד אחר, ושני טילים.',
     guns: 'שני תותחים 30 מ"מ', missile: 'טיל מונחה חום',
-    hp: 110, speed: 66, boost: 106, turn: 1.95, climb: 1.65, rate: 8, dmg: 6.75, missiles: 2, flares: 2, reload: 7.5, fill: 0.14,
+    hp: 275, speed: 66, boost: 106, turn: 1.95, climb: 1.65, rate: 8, dmg: 6.75, missiles: 2, flares: 2, reload: 7.5, fill: 0.14,
   },
   phantom: {
     id: 'phantom', he: 'אדיר', role: 'עליון', era: '2016', kind: 'חמקן', level: 16, price: 20000,
     desc: 'מטוס חמקן מהדור החמישי. הכל בו טוב יותר, ושלושה טילים.',
     guns: 'תותח 25 מ"מ', missile: 'טיל מונחה מכ"ם',
-    hp: 145, speed: 72, boost: 118, turn: 1.8, climb: 1.55, rate: 11, dmg: 5.45, missiles: 3, flares: 3, reload: 6.5, fill: 0.16,
+    hp: 360, speed: 72, boost: 118, turn: 1.8, climb: 1.55, rate: 11, dmg: 5.45, missiles: 3, flares: 3, reload: 6.5, fill: 0.16,
   },
 };
 /**
@@ -122,11 +123,11 @@ export const GUNS = {
   g5: { id: 'g5', he: 'תותח 30 מ"מ', level: 18, price: 14000, range: 430, dmg: 1.55, rate: 0.85, desc: 'כל פגיעה כואבת, ומרחוק.' },
 };
 export const MISSILES = {
-  m1: { id: 'm1', he: 'שפריר 1', level: 1, price: 0, range: 300, dmg: 45, speed: 145, turn: 1.8, desc: 'טיל חום ראשון. קצר טווח ועצל בפניות.' },
-  m2: { id: 'm2', he: 'שפריר 2', level: 4, price: 1200, range: 380, dmg: 55, speed: 150, turn: 1.95, desc: 'ראש קרב גדול יותר, טווח ארוך יותר.' },
-  m3: { id: 'm3', he: 'פיתון 3', level: 9, price: 3600, range: 460, dmg: 65, speed: 158, turn: 2.1, desc: 'מהיר וזריז. קשה יותר להתחמק ממנו.' },
-  m4: { id: 'm4', he: 'פיתון 5', level: 14, price: 8000, range: 550, dmg: 75, speed: 166, turn: 2.25, desc: 'נועל מרחוק ונצמד לפניות חדות.' },
-  m5: { id: 'm5', he: 'דרבי', level: 20, price: 16000, range: 680, dmg: 90, speed: 175, turn: 2.35, desc: 'מונחה מכ"ם: מעבר לטווח הראייה, ופגיעה קטלנית.' },
+  m1: { id: 'm1', he: 'שפריר 1', level: 1, price: 0, range: 300, dmg: 72, speed: 145, turn: 1.8, desc: 'טיל חום ראשון. קצר טווח ועצל בפניות.' },
+  m2: { id: 'm2', he: 'שפריר 2', level: 4, price: 1200, range: 380, dmg: 88, speed: 150, turn: 1.95, desc: 'ראש קרב גדול יותר, טווח ארוך יותר.' },
+  m3: { id: 'm3', he: 'פיתון 3', level: 9, price: 3600, range: 460, dmg: 104, speed: 158, turn: 2.1, desc: 'מהיר וזריז. קשה יותר להתחמק ממנו.' },
+  m4: { id: 'm4', he: 'פיתון 5', level: 14, price: 8000, range: 550, dmg: 120, speed: 166, turn: 2.25, desc: 'נועל מרחוק ונצמד לפניות חדות.' },
+  m5: { id: 'm5', he: 'דרבי', level: 20, price: 16000, range: 680, dmg: 144, speed: 175, turn: 2.35, desc: 'מונחה מכ"ם: מעבר לטווח הראייה, ופגיעה קטלנית.' },
 };
 export const GUN_ORDER = Object.keys(GUNS);
 export const MISSILE_ORDER = Object.keys(MISSILES);

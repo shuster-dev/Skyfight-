@@ -28,7 +28,7 @@ const api = async (path, body, token) => (await fetch(BASE + path, { method: bod
 const g = await api('/api/guest', {});
 await api('/api/pilot/name', { name: 'BotPilot' }, g.token);
 const room = await new Client(BASE.replace('http', 'ws')).joinOrCreate('arena', { token: g.token });
-const st = { kills: 0, assists: 0, deaths: 0, crashes: 0, shots: 0, hits: 0, missiles: 0, xp: 0, gold: 0, level: 1, firstKillAt: 0, levels: [] };
+const st = { by: {}, kills: 0, assists: 0, deaths: 0, crashes: 0, shots: 0, hits: 0, missiles: 0, xp: 0, gold: 0, level: 1, firstKillAt: 0, levels: [] };
 let me = null, stats = null, key = '', others = new Map(), alive = false, ammo = 1;
 const t0 = Date.now();
 room.onMessage('welcome', (m) => { key = m.key; stats = m.stats; });
@@ -53,7 +53,7 @@ room.onMessage('score', () => {});
 room.onMessage('ram', (m) => { rams++; if (m.a === key || m.b === key) rammed++; });
 room.onMessage('fired', (m) => { st.missiles++; ammo = m.ammo; });
 room.onMessage('down', (m) => {
-  if (m.v === key) { alive = false; st.deaths++; if (m.how === 'crash' && !m.k) st.crashes++; }
+  if (m.v === key) { alive = false; st.deaths++; st.by[m.how] = (st.by[m.how] || 0) + 1; if (m.how === 'crash' && !m.k) st.crashes++; }
 });
 room.onMessage('reward', (m) => {
   if (m.boss) { bossPay += m.gold; st.xp = m.pilot.xp; st.gold = m.pilot.gold; return; }
@@ -62,7 +62,7 @@ room.onMessage('reward', (m) => {
   if (m.pilot.level > st.level) st.levels.push(`${m.pilot.level}@${Math.round((Date.now() - t0) / 1000)}s`);
   st.level = m.pilot.level;
 });
-for (const t of ['roster', 'hurt', 'incoming', 'boom', 'pong', 'flare', 'flared']) room.onMessage(t, () => {});
+for (const t of ['roster', 'hurt', 'incoming', 'boom', 'pong', 'flare', 'flared', 'dodged', 'missed', 'pad', 'healed', 'friendIn']) room.onMessage(t, () => {});
 room.send('hello');
 
 // the stick, worked out the way a decent player would
@@ -96,7 +96,9 @@ while (Date.now() < end) {
     input.climb = Math.max(-1, Math.min(1, (wantPitch - me.pitch) * 2.5));
     const dist = Math.hypot(t.x - me.x, t.y - me.y, t.z - me.z);
     input.boost = dist > 400 && me.fuel > 0.4;
-    fire = dist < 450 && offNose(me, me.yaw, me.pitch, t) < 0.12;
+    fire = dist < (stats.gunRange || 450) && offNose(me, me.yaw, me.pitch, t) < 0.12;
+    // a pilot breaks off rather than fly into it
+    if (dist < 50) input.turn = 1, input.climb = 0.6, fire = false;
     if (ammo > 0 && dist < 600 && offNose(me, me.yaw, me.pitch, t) < MISSILE.lockCone * 0.6) { room.send('missile'); ammo = 0; }
   }
   const f = forward(me.yaw, me.pitch), look = Math.max(60, me.speed * 2.5);
@@ -114,7 +116,7 @@ while (Date.now() < end) {
 await room.leave();
 const mins = (Date.now() - t0) / 60000;
 const report = {
-  minutes: +mins.toFixed(1), kills: st.kills, assists: st.assists, deaths: st.deaths, crashes: st.crashes,
+  minutes: +mins.toFixed(1), kills: st.kills, assists: st.assists, deaths: st.deaths, deathsBy: st.by, crashes: st.crashes,
   killsPerMin: +(st.kills / mins).toFixed(2), deathsPerMin: +(st.deaths / mins).toFixed(2),
   firstKillSec: st.firstKillAt ? Math.round(st.firstKillAt) : null,
   hits: st.hits, missiles: st.missiles, rams, rammed, bossSeen, bossDown, bossPay, level: st.level, levels: st.levels, xp: st.xp, gold: st.gold, xpToLevel2: xpStep(1),

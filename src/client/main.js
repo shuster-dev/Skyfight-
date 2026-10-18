@@ -1075,6 +1075,34 @@ function threat(dt) {
   if (S.beepT <= 0) { sound.beep(inWindow); S.beepT = Math.max(0.07, Math.min(0.8, d / 700)); }
 }
 
+/**
+ * Someone on my tail: an enemy behind me (more than 110° off my nose),
+ * inside the reach of its guns, with its nose on me. A red mark over the
+ * crosshair says so — how far, and which side — with a low tone now and then:
+ * time to break, or to brake and let it overshoot.
+ */
+function tail(dt) {
+  const el = $('#tail'), b = S.me?.alive && S.me.body;
+  let worst = null;
+  if (b) {
+    const f = forward(b.yaw, b.pitch);
+    for (const o of foes()) {
+      if (!o.alive || o.x === undefined || o.yaw === undefined) continue;
+      const dx = o.x - b.x, dy = o.y - b.y, dz = o.z - b.z, d = Math.hypot(dx, dy, dz);
+      const reach = ((GUNS[S.roster.get(o.key)?.gun] || GUNS.g1).range) * 1.15;
+      if (d > reach || d < 1) continue;
+      const behind = (f.x * dx + f.y * dy + f.z * dz) / d < -0.34;
+      if (behind && offNose(o, o.yaw, o.pitch, b) < 0.22 && (!worst || d < worst.d)) worst = { d, side: f.x * dz - f.z * dx };
+    }
+  }
+  show(el, !!worst);
+  if (!worst) { S.tailT = 0; return; }
+  $('#tail-d').textContent = `${Math.round(worst.d / 10) * 10}m`;
+  el.dataset.side = worst.side > 4 ? 'r' : worst.side < -4 ? 'l' : '';
+  S.tailT = (S.tailT || 0) - dt;
+  if (S.tailT <= 0) sound.tail(), S.tailT = 1.4;
+}
+
 function hud(dt, now) {
   const me = S.me;
   // the crosshair kicks when a round lands
@@ -1083,6 +1111,7 @@ function hud(dt, now) {
   show('#cross', !!me?.alive);
   show('#warn', now < S.warnUntil && !!me?.alive);
   threat(dt);
+  tail(dt);
   tags();
   compass();
   if (me?.body) {

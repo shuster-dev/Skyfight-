@@ -246,6 +246,11 @@
   #heal-flash { position: absolute; inset: 0; pointer-events: none; opacity: 0; box-shadow: inset 0 0 90px rgba(77,255,154,0.75); }
   #heal-flash.on { animation: healglow 1s ease-out; }
   @keyframes healglow { 0% { opacity: 1; } 100% { opacity: 0; } }
+  /* an enemy on my tail: a red pill above the crosshair, the side it sits on lit */
+  #tail { direction: ltr; position: absolute; left: 50%; top: 24%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 999px; background: rgba(140, 12, 24, 0.82); border: 1px solid rgba(255, 80, 90, 0.9); box-shadow: 0 0 16px rgba(255, 60, 70, 0.45); color: #ffe3e5; font-size: 13px; font-weight: 800; letter-spacing: 0.5px; animation: blink 0.45s infinite alternate; pointer-events: none; }
+  #tail i { font-style: normal; font-family: Orbitron, Rubik, sans-serif; font-size: 12px; color: #ffb3b8; }
+  #tail .ar { opacity: 0.25; font-size: 11px; }
+  #tail[data-side="l"] .ar.l, #tail[data-side="r"] .ar.r { opacity: 1; color: #ff5a64; }
   /* a missile coming for you: a red ring round it, or an arrow at the edge */
   #threat { position: absolute; width: 0; height: 0; pointer-events: none; }
   #threat i { position: absolute; left: -23px; top: -23px; width: 46px; height: 46px; border: 3px solid #ff3b3b; border-radius: 50%; box-shadow: 0 0 10px rgba(255,59,59,0.8); animation: blink 0.25s infinite alternate; }
@@ -451,6 +456,7 @@
   <div class="tags" id="tags"></div>
   <div id="cross"></div>
   <div id="heal-flash"></div>
+  <div id="tail" class="hidden"><span class="ar l">◀</span><b>אויב על הזנב</b><i id="tail-d"></i><span class="ar r">▶</span></div>
   <div id="threat" class="hidden"><i></i><b id="threat-d"></b></div>
   <div id="lock" class="hidden"></div>
   <div id="lead" class="hidden"></div>

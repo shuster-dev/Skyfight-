@@ -8,15 +8,18 @@ export const GUN = {
   speed: 480,
   /** Seconds a round flies before it is spent: the guns' reach. */
   life: 1.0,
-  /** How fat a plane is to a round. Generous: lag eats the rest. */
-  hitR: 7.5,
+  /** How fat a plane is to a round: enough for lag, small enough that a
+   *  plane breaking hard slips out of a stream of rounds aimed where it was going. */
+  hitR: 5,
+  /** The guns' scatter: each round leaves up to this far off true (radians). */
+  spread: 0.011,
   /** Aim help: a target this close to the nose (radians) and in reach is led. */
   assistCone: 0.13,
   assistRange: 520,
 };
 
 export const MISSILE = {
-  speed: 155, life: 6, turn: 2.0, dmg: 40, hitR: 8,
+  speed: 155, life: 6, turn: 2.0, dmg: 64, hitR: 8,
   /** What can be locked: in front within this cone and range. */
   lockCone: 0.38, lockRange: 650,
   /** It arms after this long, so it cannot hit the plane that fired it. */
@@ -64,13 +67,13 @@ export const FLARE = { decoy: 0.85 };
  * bite, a head-on at full speed takes everyone down. A pair can only
  * collide once a `cooldown` (ms).
  */
-export const RAM = { r: 6.5, perMps: 1.2, min: 20, max: 400, cooldown: 1200 };
+export const RAM = { r: 6.5, perMps: 2.2, min: 40, max: 800, cooldown: 1200 };
 export const ramDamage = (closing) => Math.max(RAM.min, Math.min(RAM.max, closing * RAM.perMps));
 
 /** Seconds of no damage before the airframe starts patching itself. */
-export const REPAIR = { after: 6, perSec: 5 };
+export const REPAIR = { after: 4, perSec: 12 };
 /** Seconds between going down and coming back, and of grace on arrival. */
-export const RESPAWN = { delay: 3, shield: 3 };
+export const RESPAWN = { delay: 3, shield: 4 };
 /** Damage counts toward a kill (or an assist) for this long. */
 export const CREDIT_MS = 15000;
 /** Share of a victim's health dealt that earns an assist. */
