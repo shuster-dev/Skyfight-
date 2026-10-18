@@ -115,21 +115,58 @@ function toward(base, mark, least, t, less = false) {
   return base + (end - base) * (t / TIER_MAX);
 }
 
-/** A plane as this pilot flies it: the plane's numbers with its upgrades on. */
-export function statsOf(planeId, tiers = {}) {
+/**
+ * The market: guns and missiles, bought once with gold (each opens at a
+ * level) and carried to whatever plane is flown. A gun sets how far its
+ * rounds go before they are spent — its reach — and how hard and fast it
+ * hits, on top of the plane's own guns. A missile sets how far off it can
+ * lock and still get there, how hard it hits, and how fast and how hard it
+ * turns. The first of each is free.
+ *
+ *   range  metres it is good to     dmg  per round (×) / per missile
+ *   rate   rounds a second (×)      speed, turn  the missile's flight
+ */
+export const GUNS = {
+  g1: { id: 'g1', he: 'מקלע 7.62', level: 1, price: 0, range: 300, dmg: 1, rate: 1, desc: 'קל ומהיר לטעינה. קצר טווח.' },
+  g2: { id: 'g2', he: 'מקלע 12.7', level: 3, price: 900, range: 360, dmg: 1.12, rate: 1, desc: 'כדור כבד יותר, טווח ארוך יותר.' },
+  g3: { id: 'g3', he: 'תותח 20 מ"מ', level: 7, price: 2800, range: 420, dmg: 1.32, rate: 0.9, desc: 'פגזים נפיצים. קצב מעט איטי.' },
+  g4: { id: 'g4', he: 'וולקן 20 מ"מ', level: 12, price: 6500, range: 440, dmg: 1.02, rate: 1.45, desc: 'רב־קני: מטר של פגזים מקרוב.' },
+  g5: { id: 'g5', he: 'תותח 30 מ"מ', level: 18, price: 14000, range: 540, dmg: 1.55, rate: 0.85, desc: 'כל פגיעה כואבת, ומרחוק.' },
+};
+export const MISSILES = {
+  m1: { id: 'm1', he: 'שפריר 1', level: 1, price: 0, range: 350, dmg: 45, speed: 145, turn: 1.8, desc: 'טיל חום ראשון. קצר טווח ועצל בפניות.' },
+  m2: { id: 'm2', he: 'שפריר 2', level: 4, price: 1200, range: 450, dmg: 55, speed: 150, turn: 1.95, desc: 'ראש קרב גדול יותר, טווח ארוך יותר.' },
+  m3: { id: 'm3', he: 'פיתון 3', level: 9, price: 3600, range: 550, dmg: 65, speed: 158, turn: 2.1, desc: 'מהיר וזריז. קשה יותר להתחמק ממנו.' },
+  m4: { id: 'm4', he: 'פיתון 5', level: 14, price: 8000, range: 650, dmg: 75, speed: 166, turn: 2.25, desc: 'נועל מרחוק ונצמד לפניות חדות.' },
+  m5: { id: 'm5', he: 'דרבי', level: 20, price: 16000, range: 800, dmg: 90, speed: 175, turn: 2.35, desc: 'מונחה מכ"ם: מעבר לטווח הראייה, ופגיעה קטלנית.' },
+};
+export const GUN_ORDER = Object.keys(GUNS);
+export const MISSILE_ORDER = Object.keys(MISSILES);
+export const START_GUN = 'g1', START_MISSILE = 'm1';
+/** The market's two shelves, by the name the pilot's record keeps them under. */
+export const ARMS = { guns: GUNS, missiles: MISSILES };
+
+/**
+ * A plane as this pilot flies it: the plane's numbers with its upgrades on,
+ * and the gun and missile it carries.
+ */
+export function statsOf(planeId, tiers = {}, arms = {}) {
   const p = PLANES[planeId] || PLANES[START_PLANE];
   const t = (k) => Math.max(0, Math.min(TIER_MAX, tiers[k] | 0));
   const U = UPGRADES, m = (k) => PLANES[MARK[U[k].mark]];
   const go = (k, field, less) => toward(p[field], m(k)[field], U[k].least, t(k), less);
   // the guns: rounds a second and damage a round rise together, by what it
   // takes to bring the damage a second to the mark
+  const G = GUNS[arms.gun] || GUNS[START_GUN], M = MISSILES[arms.missile] || MISSILES[START_MISSILE];
   const dps = p.rate * p.dmg, gunK = Math.sqrt(toward(dps, m('guns').rate * m('guns').dmg, U.guns.least, t('guns')) / dps);
   return {
     plane: p.id,
     hp: Math.round(go('armor', 'hp')),
     speed: go('engine', 'speed'), turn: go('engine', 'turn'), climb: go('engine', 'climb'),
     boost: go('turbo', 'boost'), fill: go('turbo', 'fill'),
-    rate: p.rate * gunK, dmg: p.dmg * gunK,
+    rate: p.rate * gunK * G.rate, dmg: p.dmg * gunK * G.dmg,
+    gun: G.id, gunRange: G.range,
+    missile: M.id, mRange: M.range, mDmg: M.dmg, mSpeed: M.speed, mTurn: M.turn,
     missiles: p.missiles + (t('missiles') >= 3 ? 1 : 0),
     reload: go('missiles', 'reload', true),
     flares: p.flares + (t('flares') >= 3 ? 1 : 0),

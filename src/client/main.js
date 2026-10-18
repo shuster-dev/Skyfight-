@@ -7,7 +7,7 @@ import { makeRenderer, makeWorld, inCloud, makePads } from './gfx/scene.js';
 import { buildPlane, buildBomber, animatePlane } from './gfx/planes.js';
 import { Fx } from './gfx/fx.js';
 import { Hangar } from './gfx/hangar.js';
-import { PAINTS, PAINT_ORDER, PLANES, PLANE_ORDER, UPGRADES, UPGRADE_ORDER, TIER_MAX, nextTier, statsOf, tiersOf, levelProgress, planeOpen, planeOwned, cleanCallsign, displayName } from '../shared/planes.js';
+import { ARMS, GUNS, GUN_ORDER, MISSILES, MISSILE_ORDER, PAINTS, PAINT_ORDER, PLANES, PLANE_ORDER, UPGRADES, UPGRADE_ORDER, TIER_MAX, nextTier, statsOf, tiersOf, levelProgress, planeOpen, planeOwned, cleanCallsign, displayName } from '../shared/planes.js';
 import { ARENA, BRIDGE, HEAL, HEALS, groundAt, underBridge } from '../shared/arena.js';
 import { flyQ, forward, newBodyQ, drawnQ, Q as QQ } from '../shared/flight.js';
 import { DODGE, FLARE, GUN, MISSILE, RESPAWN, aimDir, offNose, pickTarget } from '../shared/combat.js';
@@ -246,11 +246,13 @@ function renderHangar() {
   show('#tab-planes', tab === 'planes');
   show('#tab-ups', tab === 'ups');
   show('#tab-board', tab === 'board');
+  show('#tab-market', tab === 'market');
   show('#tab-friends', tab === 'friends');
   hangar.show(viewing || p.plane, paintView || p.paint);
   if (tab === 'planes') renderPlanes();
   if (tab === 'ups') renderUps();
   if (tab === 'board') renderBoard();
+  if (tab === 'market') renderMarket();
   if (tab === 'friends') renderFriends();
   $('#btn-launch').textContent = `המראה · ${PLANES[p.plane].he}`;
 }
@@ -373,6 +375,41 @@ $('#tab-ups').addEventListener('click', async (e) => {
     S.pilot = r.pilot;
     sound.coin();
     toast(`${PLANES[plane].he} · ${UPGRADES[k].he} · דרגה ${r.tier}`);
+    renderHangar();
+  } catch (x) { toast(err(x)); }
+});
+
+// ---- the market ------------------------------------------------------------------
+// Guns and missiles: each with its reach and its punch, opened by level and
+// bought once with gold, carried to every plane. What it does is shown on
+// the plane now flown, upgrades and all.
+let shelf = 'missiles';
+const REACH_MAX = { guns: Math.max(...GUN_ORDER.map((k) => GUNS[k].range)), missiles: Math.max(...MISSILE_ORDER.map((k) => MISSILES[k].range)) };
+function renderMarket() {
+  const p = S.pilot, list = shelf === 'guns' ? GUN_ORDER : MISSILE_ORDER, items = ARMS[shelf];
+  const using = shelf === 'guns' ? p.gun : p.missile, tiers = tiersOf(p, p.plane);
+  $$('.shelves button').forEach((b) => b.classList.toggle('on', b.dataset.shelf === shelf));
+  $('#market-list').innerHTML = list.map((k) => {
+    const w = items[k], own = p.arms[shelf].includes(k), on = using === k;
+    const st = statsOf(p.plane, tiers, shelf === 'guns' ? { gun: k, missile: p.missile } : { gun: p.gun, missile: k });
+    const nums = shelf === 'guns'
+      ? `טווח יעיל ${w.range} מ' · ${Math.round(st.rate * st.dmg)} נזק לשנייה`
+      : `טווח יעיל ${w.range} מ' · ${w.dmg} נזק · מהירות ${Math.round(w.speed * 3.6 * 4)} קמ"ש`;
+    const btn = on ? '<button disabled>בשימוש</button>'
+      : own ? `<button class="pick" data-arm="${k}">בחר</button>`
+        : p.level < w.level ? `<button disabled>רמה ${w.level}</button>`
+          : `<button data-buy="${k}" ${p.gold < w.price ? 'disabled' : ''}><span class="num">${fmt(w.price)}</span><span class="coin"></span></button>`;
+    return `<div class="arm ${on ? 'on' : ''}"><div class="t"><b>${w.he}</b><small>${w.desc}</small><small class="nums">${nums}</small><div class="reach"><i style="width:${(w.range / REACH_MAX[shelf]) * 100}%"></i></div></div>${btn}</div>`;
+  }).join('') + `<div class="note" style="text-align:right">${shelf === 'guns' ? 'כדורים עפים עד הטווח היעיל שלהם ונעלמים.' : 'טיל ננעל רק על מטרה בתוך הטווח היעיל שלו.'} הנשק עובר איתך לכל מטוס.</div>`;
+}
+$$('.shelves button').forEach((b) => b.addEventListener('click', () => { shelf = b.dataset.shelf; renderMarket(); }));
+$('#tab-market').addEventListener('click', async (e) => {
+  const buy = e.target.closest('[data-buy]')?.dataset.buy, pick = e.target.closest('[data-arm]')?.dataset.arm;
+  if (!buy && !pick) return;
+  try {
+    const r = await net.api(buy ? '/api/pilot/buy-arm' : '/api/pilot/arm', { kind: shelf, id: buy || pick });
+    S.pilot = r.pilot;
+    if (buy) sound.coin(), toast(`${ARMS[shelf][buy].he} נקנה`);
     renderHangar();
   } catch (x) { toast(err(x)); }
 });
@@ -883,14 +920,16 @@ function guns(o, mesh, rate, dt, mine) {
     const m = muzzles[(holder.gun = (holder.gun || 0) + 1) % muzzles.length];
     MZ.copy(m).applyQuaternion(mesh.quaternion).add(mesh.position);
     // the room leads the guns at a target near the nose: so does the tracer
-    const target = mine ? pickTarget(o, aimables(), GUN.assistCone, GUN.assistRange) : null;
+    const target = mine ? pickTarget(o, aimables(), GUN.assistCone, S.me.stats.gunRange) : null;
     const d = aimDir(o, target);
     const f = forward(o.yaw, o.pitch);
     DIR.set(d.x * GUN.speed + f.x * (o.speed || 60), d.y * GUN.speed + f.y * (o.speed || 60), d.z * GUN.speed + f.z * (o.speed || 60));
     const sp = DIR.length();
     // one round in two of someone else's is a tracer, as on a real belt:
     // enough to see where they shoot, not a screen full of streaks
-    if (mine || (holder.gun >> 1) % 2) fx.tracer(MZ, DIR.normalize(), sp), fx.muzzle(MZ);
+    // a round goes only as far as its gun reaches
+    const reach = mine ? S.me.stats.gunRange : (GUNS[S.roster.get(o.key)?.gun] || GUNS.g1).range;
+    if (mine || (holder.gun >> 1) % 2) fx.tracer(MZ, DIR.normalize(), sp, reach / GUN.speed), fx.muzzle(MZ);
     if (mine) sound.shot(HEAVY.has(S.pilot.plane));
   }
 }
@@ -981,7 +1020,7 @@ function hud(dt, now) {
     const c = inCloud(world.clouds, b.x, b.y, b.z);
     $('#white').style.opacity = me.alive ? Math.min(0.5, c * 1.2) : 0;
     // the lock: what a missile would go after now
-    const t = me.alive ? pickTarget({ ...b, alive: true }, aimables().filter((o) => o.alive && !o.shield), MISSILE.lockCone, MISSILE.lockRange) : null;
+    const t = me.alive ? pickTarget({ ...b, alive: true }, aimables().filter((o) => o.alive && !o.shield), MISSILE.lockCone, me.stats.mRange) : null;
     // shown only with a missile on the rail, gliding rather than jumping
     // from one plane to the next
     const lock = $('#lock');
@@ -1000,12 +1039,12 @@ function hud(dt, now) {
     if (project(P.set(b.x + f.x * 300, b.y + f.y * 300, b.z + f.z * 300))) cross.style.left = `${P.x}px`, cross.style.top = `${P.y}px`;
     // the aim pip: where the nearest plane ahead will be when the rounds get
     // there. Crosshair on it and the guns are helped onto it (shared/combat.js)
-    const g = me.alive ? pickTarget({ ...b, alive: true }, aimables().filter((o) => o.alive), 0.35, GUN.assistRange + 100) : null;
+    const g = me.alive ? pickTarget({ ...b, alive: true }, aimables().filter((o) => o.alive), 0.35, me.stats.gunRange + 100) : null;
     const lead = $('#lead');
     if (g) {
       const d = Math.hypot(g.x - b.x, g.y - b.y, g.z - b.z), tt = d / (GUN.speed + b.speed), v = g.vel || { x: 0, y: 0, z: 0 };
       if (project(P.set(g.x + v.x * tt, g.y + v.y * tt, g.z + v.z * tt))) { show(lead); lead.style.left = `${P.x}px`; lead.style.top = `${P.y}px`; } else show(lead, false);
-      cross.classList.toggle('on', offNose(b, b.yaw, b.pitch, g) < GUN.assistCone && d < GUN.assistRange);
+      cross.classList.toggle('on', offNose(b, b.yaw, b.pitch, g) < GUN.assistCone && d < me.stats.gunRange);
     } else { show(lead, false); cross.classList.remove('on'); }
   }
   S.hudT += dt;

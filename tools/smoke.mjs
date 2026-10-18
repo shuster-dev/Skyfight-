@@ -64,6 +64,11 @@ async function run(label, viewport, mobile) {
   await wait(400);
   await snap('3-upgrades');
   ok('six upgrades for the plane on the table, turbo and flares among them', (await page.$$('.up')).length === 6 && /טורבו/.test(await page.textContent('#tab-ups')) && /נורים/.test(await page.textContent('#tab-ups')));
+  await page.click('[data-tab="market"]');
+  ok('the market: five missiles, each with its reach', (await page.$$('#market-list .arm')).length === 5 && /טווח יעיל 350/.test(await page.textContent('#market-list')));
+  await page.click('[data-shelf="guns"]');
+  ok('and five guns', (await page.$$('#market-list .arm')).length === 5 && /טווח יעיל 300/.test(await page.textContent('#market-list')));
+  await snap('3c-market');
   await page.click('[data-tab="planes"]');
   ok('a guest is offered to save', await page.isVisible('#btn-save'));
   await page.click('#btn-launch');

@@ -59,9 +59,9 @@ export class Fx {
   }
 
   /** A round from a muzzle, along a direction, at a speed (m/s). */
-  tracer(from, dir, speed) {
+  tracer(from, dir, speed, life = GUN.life) {
     if (this.tracers.length >= 600) this.tracers.shift();
-    this.tracers.push({ p: from.clone(), v: dir.clone().multiplyScalar(speed), t: 0, life: GUN.life });
+    this.tracers.push({ p: from.clone(), v: dir.clone().multiplyScalar(speed), t: 0, life });
   }
 
   puff(p, { color = 0xffffff, size = 2, grow = 4, life = 1.2, rise = 2, drift = null } = {}) {
