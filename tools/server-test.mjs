@@ -4,7 +4,7 @@
 import { spawn } from 'node:child_process';
 import { Client } from 'colyseus.js';
 import { forward } from '../src/shared/flight.js';
-import { ARENA, HEAL, HEALS } from '../src/shared/arena.js';
+import { ARENA, BUILDINGS, HEAL, HEALS } from '../src/shared/arena.js';
 
 const PORT = 2700 + Math.floor(Math.random() * 200);
 const BASE = `http://127.0.0.1:${PORT}`;
@@ -163,8 +163,33 @@ try {
     send(b);
     await wait(50);
   }
-  const crash = got(b, 'down').at(-1)?.m;
+  const crash = got(b, 'down').at(-1)?.m, spawnsAtCrash = got(b, 'spawn').length;
   ok('flying into the sea is a crash', crash?.v === b.key && crash?.how === 'crash', { crash, downs: got(b, 'down').map((e) => e.m), hurt: got(b, 'hurt').slice(-3).map((e) => e.m), spawns: got(b, 'spawn').map((e) => e.m) });
+
+  console.log('\na roof');
+  {
+    // back in the air, then flown (at a speed the room believes) onto the
+    // roof of the tallest tower, stopping a metre above it, as a client does
+    await until(() => got(b, 'spawn').length > spawnsAtCrash, 9000);
+    await wait(500);
+    const t = BUILDINGS.reduce((a, o) => (o.h > a.h ? o : a)), top = t.base + t.h;
+    const downs = got(b, 'down').length;
+    b.room.send('crash');
+    await wait(300);
+    ok('a plane in open air that says it crashed does not', got(b, 'down').length === downs);
+    for (let i = 0; i < 600; i++) {
+      const dx = t.x - b.pose.x, dy = top + 1.2 - b.pose.y, dz = t.z - b.pose.z, d = Math.hypot(dx, dy, dz);
+      if (d < 0.5) break;
+      const k = Math.min(1, 3.5 / d);
+      b.pose.x += dx * k; b.pose.y += dy * k; b.pose.z += dz * k;
+      b.pose.yaw = Math.atan2(-dx, -dz);
+      send(b);
+      await wait(50);
+    }
+    for (let i = 0; i < 10 && got(b, 'down').length === downs; i++) { send(b); b.room.send('crash'); await wait(100); }
+    const roof = got(b, 'down').at(-1)?.m;
+    ok('stopped on a roof: a crash, not stuck there', got(b, 'down').length > downs && roof?.how === 'crash' && roof?.v === b.key, { roof, at: [b.pose.x, b.pose.y, b.pose.z], top });
+  }
 
   console.log('\nsaving');
   ok('guests are not on the board', ((await api('/api/leaderboard')).rows || []).length === 0);

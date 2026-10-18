@@ -392,7 +392,27 @@
   .tbtn { position: absolute; pointer-events: auto; touch-action: none; border-radius: 50%; display: grid; place-items: center; color: #fff; border: 1.5px solid rgba(255, 255, 255, 0.35); background: rgba(8, 12, 18, 0.35); backdrop-filter: blur(4px); }
   .tbtn svg { width: 46%; height: 46%; stroke: #fff; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
   .tbtn.on { background: rgba(255, 255, 255, 0.35); }
-  #btn-fire { right: max(18px, env(safe-area-inset-right)); bottom: max(80px, calc(env(safe-area-inset-bottom) + 70px)); width: 96px; height: 96px; background: rgba(255, 77, 94, 0.32); border-color: rgba(255, 120, 130, 0.7); }
+  /* each button says what it does, in its own colour: guns red, missile orange, flares gold, turbo blue, brake violet */
+  .tbtn { --k: 255, 255, 255; border-color: rgba(var(--k), 0.75); background: rgba(var(--k), 0.16); box-shadow: 0 0 12px rgba(var(--k), 0.25); box-sizing: border-box; padding: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+  .tbtn svg { width: 38%; height: 38%; flex: none; stroke: rgb(var(--k)); filter: drop-shadow(0 0 3px rgba(var(--k), 0.6)); }
+  .tbtn .lbl { font-size: 10.5px; font-weight: 800; letter-spacing: 0.3px; line-height: 1; color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8); white-space: nowrap; pointer-events: none; }
+  #btn-fire { --k: 255, 77, 94; }
+  #btn-fire .lbl { font-size: 13px; }
+  #btn-missile { --k: 255, 154, 60; }
+  #btn-flare { --k: 255, 210, 94; }
+  #btn-boost { --k: 111, 230, 255; }
+  #btn-brake { --k: 178, 140, 255; }
+  .tbtn.on { background: rgba(var(--k), 0.5); }
+  /* the first flights: a legend of the buttons, each in its own colour */
+  #coach { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 6; display: grid; gap: 6px; padding: 12px 16px; border-radius: 14px; pointer-events: none;
+    background: rgba(8, 12, 18, 0.82); border: 1px solid rgba(255, 255, 255, 0.2); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5); animation: coach 0.4s ease both; }
+  #coach b { display: block; text-align: center; font-size: 13px; letter-spacing: 1px; color: var(--teal); margin-bottom: 2px; }
+  #coach div { display: flex; align-items: center; gap: 8px; font-size: 12.5px; white-space: nowrap; }
+  #coach i { width: 12px; height: 12px; border-radius: 50%; flex: none; background: rgb(var(--k)); box-shadow: 0 0 8px rgb(var(--k)); }
+  #coach span { font-weight: 800; min-width: 44px; }
+  #coach small { color: rgba(255, 255, 255, 0.75); font-size: 12px; }
+  @keyframes coach { from { opacity: 0; transform: translate(-50%, -46%); } }
+  #btn-fire { right: max(18px, env(safe-area-inset-right)); bottom: max(80px, calc(env(safe-area-inset-bottom) + 70px)); width: 96px; height: 96px; }
   #btn-missile { right: max(124px, calc(env(safe-area-inset-right) + 110px)); bottom: max(140px, calc(env(safe-area-inset-bottom) + 130px)); width: 64px; height: 64px; font-size: 24px; }
   #btn-flare { right: max(132px, calc(env(safe-area-inset-right) + 118px)); bottom: max(220px, calc(env(safe-area-inset-bottom) + 210px)); width: 54px; height: 54px; font-size: 22px; }
   .pcard .era { font-size: 12px; color: var(--teal); margin-top: 2px; }
@@ -400,7 +420,6 @@
   .msl.flr i.on { background: #ffd25e; }
   #btn-boost { right: max(30px, env(safe-area-inset-right)); bottom: max(190px, calc(env(safe-area-inset-bottom) + 180px)); width: 64px; height: 64px; font-size: 24px; }
   #btn-brake { right: max(34px, calc(env(safe-area-inset-right) + 4px)); bottom: max(268px, calc(env(safe-area-inset-bottom) + 258px)); width: 56px; height: 56px; }
-  #btn-brake.on { background: rgba(255, 196, 77, 0.35); border-color: rgba(255, 210, 120, 0.8); }
   .keys-help { position: absolute; bottom: max(60px, env(safe-area-inset-bottom)); right: 12px; font-size: 12px; color: rgba(255, 255, 255, 0.7); text-shadow: 0 1px 2px #000; line-height: 1.6; }
   #death { z-index: 12; }
   #death h2 { margin: 0; font-size: clamp(26px, 6vw, 38px); font-weight: 900; text-shadow: 0 3px 16px rgba(0, 0, 0, 0.6); text-align: center; }
@@ -567,11 +586,18 @@
     <div id="touch-pad"></div>
     <div id="look-pad"></div>
     <div id="stick" class="hidden"><div id="stick-knob"></div></div>
-    <button class="tbtn" id="btn-fire" type="button" aria-label="ירי"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/><circle cx="12" cy="12" r="1.2" fill="#fff"/></svg></button>
-    <button class="tbtn" id="btn-missile" type="button" aria-label="טיל"><svg viewBox="0 0 24 24"><path d="M5 19l3-3M12 4l6 2 2 6-9 9-4-4 5-13z"/><path d="M7 13l-3 1 2 2M11 17l-1 3-2-2"/></svg></button>
-    <button class="tbtn" id="btn-flare" type="button" aria-label="נורים"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.2" fill="#fff"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8"/></svg></button>
-    <button class="tbtn" id="btn-brake" type="button" aria-label="בלם אוויר"><svg viewBox="0 0 24 24"><path d="M4 12h5M15 12h5"/><path d="M9 6v12M15 6v12"/></svg></button>
-    <button class="tbtn" id="btn-boost" type="button" aria-label="מבער"><svg viewBox="0 0 24 24"><path d="M5 6l6 6-6 6M12 6l6 6-6 6"/></svg></button>
+    <div id="coach" class="hidden"><b>הכפתורים</b>
+      <div style="--k:255,77,94"><i></i><span>מקלע</span><small>החזק — יורה</small></div>
+      <div style="--k:255,154,60"><i></i><span>טיל</span><small>משגר על המטרה הנעולה</small></div>
+      <div style="--k:255,210,94"><i></i><span>נורים</span><small>מטעה טיל שרודף אחריך</small></div>
+      <div style="--k:111,230,255"><i></i><span>טורבו</span><small>החזק — מהירות מקסימלית</small></div>
+      <div style="--k:178,140,255"><i></i><span>בלימה</span><small>החזק — האטה ופנייה חדה</small></div>
+    </div>
+    <button class="tbtn" id="btn-fire" type="button" aria-label="ירי מקלע"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/><circle cx="12" cy="12" r="1.2" fill="#fff"/></svg><span class="lbl">מקלע</span></button>
+    <button class="tbtn" id="btn-missile" type="button" aria-label="שיגור טיל"><svg viewBox="0 0 24 24"><path d="M5 19l3-3M12 4l6 2 2 6-9 9-4-4 5-13z"/><path d="M7 13l-3 1 2 2M11 17l-1 3-2-2"/></svg><span class="lbl">טיל</span></button>
+    <button class="tbtn" id="btn-flare" type="button" aria-label="נורים נגד טילים"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.2" fill="#fff"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8"/></svg><span class="lbl">נורים</span></button>
+    <button class="tbtn" id="btn-brake" type="button" aria-label="בלימה — פנייה חדה"><svg viewBox="0 0 24 24"><path d="M19 6l-6 6 6 6M12 6l-6 6 6 6"/></svg><span class="lbl">בלימה</span></button>
+    <button class="tbtn" id="btn-boost" type="button" aria-label="טורבו"><svg viewBox="0 0 24 24"><path d="M5 6l6 6-6 6M12 6l6 6-6 6"/></svg><span class="lbl">טורבו</span></button>
   </div>
   <button class="icon-btn" id="invite-btn" type="button" aria-label="הזמן חבר"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5M18 7v6M15 10h6"/></svg></button>
   <button class="icon-btn" id="menu-btn" type="button" aria-label="האנגר"><svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7M6 10v10h12V10"/></svg></button>
