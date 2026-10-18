@@ -276,7 +276,7 @@
      where they are from the nose */
   #compass-box { position: absolute; top: max(8px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); width: min(460px, 44vw); pointer-events: none; }
   #compass { width: 100%; height: 54px; display: block; }
-  @media (max-width: 700px) and (orientation: portrait) { #compass-box { top: calc(max(8px, env(safe-area-inset-top)) + 64px); width: 92vw; } #notes { top: calc(max(10px, env(safe-area-inset-top)) + 184px); } #menu-btn, #invite-btn { top: calc(max(10px, env(safe-area-inset-top)) + 146px); } }
+  @media (max-width: 700px) and (orientation: portrait) { #compass-box { top: calc(max(8px, env(safe-area-inset-top)) + 64px); width: 92vw; } #menu-btn, #invite-btn { top: calc(max(10px, env(safe-area-inset-top)) + 146px); } }
   .tagdot { position: absolute; left: 0; top: 0; will-change: transform; width: 5px; height: 5px; margin: -2.5px; border-radius: 50%; background: rgba(255, 120, 130, 0.9); box-shadow: 0 0 3px #000; }
   .tagdot.mate { background: #8fc0ff; }
   #hud .tr { position: absolute; top: max(10px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left)); width: min(150px, 34vw); background: rgba(8, 12, 18, 0.45); border-radius: 8px; padding: 4px 8px; font-size: 11px; line-height: 1.35; }
@@ -284,8 +284,8 @@
   #hud .tr .r .n { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #hud .tr .r.me { color: var(--accent); font-weight: 800; }
   #hud .tr .r .bot { opacity: 0.5; font-size: 11px; }
-  #feed { position: absolute; top: max(48px, calc(env(safe-area-inset-top) + 40px)); left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 4px; align-items: center; width: min(420px, 70vw); }
-  #feed div { background: rgba(8, 12, 18, 0.5); padding: 3px 10px; border-radius: 4px; font-size: 12px; animation: fade 4.5s forwards; white-space: nowrap; }
+  #feed { position: absolute; top: calc(max(10px, env(safe-area-inset-top)) + 64px); right: max(12px, env(safe-area-inset-right)); display: flex; flex-direction: column; gap: 3px; align-items: flex-end; width: min(260px, 40vw); pointer-events: none; }
+  #feed div { background: rgba(8, 12, 18, 0.5); padding: 2px 8px; border-radius: 4px; font-size: 11px; animation: fade 4.5s forwards; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
   #feed div.mine { background: rgba(47, 211, 189, 0.85); color: #04110f; font-weight: 800; }
   #feed .w { font-size: 10px; letter-spacing: 1px; opacity: 0.7; margin: 0 4px; }
   #btn-sound.muted svg path:last-child { opacity: 0; }
@@ -318,17 +318,26 @@
   #heal-flash.on { animation: healglow 1s ease-out; }
   @keyframes healglow { 0% { opacity: 1; } 100% { opacity: 0; } }
   /* an enemy on my tail: a red pill above the crosshair, the side it sits on lit */
-  #tail { direction: ltr; position: absolute; left: 50%; top: 24%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 999px; background: rgba(140, 12, 24, 0.82); border: 1px solid rgba(255, 80, 90, 0.9); box-shadow: 0 0 16px rgba(255, 60, 70, 0.45); color: #ffe3e5; font-size: 13px; font-weight: 800; letter-spacing: 0.5px; animation: blink 0.45s infinite alternate; pointer-events: none; }
-  #tail i { font-style: normal; font-family: Orbitron, Rubik, sans-serif; font-size: 12px; color: #ffb3b8; }
-  #tail .ar { opacity: 0.25; font-size: 11px; }
-  #tail[data-side="l"] .ar.l, #tail[data-side="r"] .ar.r { opacity: 1; color: #ff5a64; }
+  /* emergencies: small red badges under the compass, never a sentence across the screen */
+  #alerts { position: absolute; top: calc(max(8px, env(safe-area-inset-top)) + 58px); left: 50%; transform: translateX(-50%); display: flex; gap: 8px; pointer-events: none; direction: ltr; }
+  .al { display: flex; align-items: center; gap: 5px; padding: 4px 10px 4px 7px; border-radius: 8px; background: rgba(120, 10, 20, 0.78); border: 1.5px solid #ff4b55;
+    box-shadow: 0 0 14px rgba(255, 60, 70, 0.55); color: #ffe3e5; font-size: 11px; font-weight: 800; letter-spacing: 0.5px; animation: blink 0.45s infinite alternate; }
+  .al svg { width: 18px; height: 18px; fill: #ff5a64; stroke: #ffe3e5; stroke-width: 1; stroke-linejoin: round; }
+  .al svg .x { stroke: #ffe3e5; stroke-width: 1.6; fill: none; display: none; }
+  .al i { font-style: normal; font-family: Orbitron, Rubik, sans-serif; font-size: 11px; color: #ffb3b8; }
+  .al.now { background: #ff2a2a; border-color: #fff; color: #fff; animation-duration: 0.18s; transform: scale(1.12); }
+  .al.now i { color: #fff; }
+  #tail .ar { opacity: 0.25; font-size: 9px; }
+  #tail[data-side="l"] .ar.l, #tail[data-side="r"] .ar.r { opacity: 1; color: #fff; }
+  /* a missile locked on: the edges of the screen pulse red */
+  #alarm { position: fixed; inset: 0; pointer-events: none; z-index: 4; box-shadow: inset 0 0 60px 6px rgba(255, 30, 40, 0.55); animation: alarm 0.7s ease-in-out infinite alternate; }
+  #alarm.now { box-shadow: inset 0 0 90px 14px rgba(255, 30, 40, 0.75); animation-duration: 0.22s; }
+  @keyframes alarm { from { opacity: 0.35; } to { opacity: 1; } }
   /* a missile coming for you: a red ring round it, or an arrow at the edge */
   #threat { position: absolute; width: 0; height: 0; pointer-events: none; }
   #threat i { position: absolute; left: -23px; top: -23px; width: 46px; height: 46px; border: 3px solid #ff3b3b; border-radius: 50%; box-shadow: 0 0 10px rgba(255,59,59,0.8); animation: blink 0.25s infinite alternate; }
   #threat b { position: absolute; left: -30px; top: 26px; width: 60px; text-align: center; font-size: 12px; font-weight: 800; color: #ff6b6b; text-shadow: 0 1px 3px #000; }
   #threat.edge i { border-radius: 0; border: 0; width: 0; height: 0; left: -16px; top: -16px; box-shadow: none; border-left: 32px solid #ff3b3b; border-top: 16px solid transparent; border-bottom: 16px solid transparent; transform: rotate(var(--a)); transform-origin: 16px 16px; filter: drop-shadow(0 0 4px rgba(255,59,59,0.9)); }
-  #warn.now { background: #ff2a2a; font-size: 20px; padding: 9px 22px; }
-  #warn { position: absolute; top: 30%; left: 50%; transform: translateX(-50%); padding: 7px 18px; border-radius: 4px; background: rgba(200, 30, 45, 0.85); font-weight: 800; font-size: 16px; letter-spacing: 1px; animation: blink 0.5s infinite alternate; }
   #edge { position: absolute; top: 38%; left: 50%; transform: translateX(-50%); padding: 6px 14px; border-radius: 12px; background: rgba(255, 176, 46, 0.85); color: #241200; font-weight: 800; }
   @keyframes blink { to { opacity: 0.45; } }
   #vig { position: absolute; inset: 0; box-shadow: inset 0 0 140px 40px rgba(255, 30, 50, 0.65); opacity: 0; transition: opacity 0.35s; }
@@ -336,18 +345,19 @@
   /* game events: a stack of glass cards with a neon edge, high in the middle.
      Each glides in, holds about three seconds, and fades up and away; the
      rest close up smoothly behind it. */
-  #notes { position: fixed; top: calc(max(10px, env(safe-area-inset-top)) + 64px); left: 50%; transform: translateX(-50%); width: min(420px, 86vw); display: flex; flex-direction: column; align-items: center; gap: 0; pointer-events: none; z-index: 60; }
-  .note-c { display: grid; grid-template-rows: 1fr; transition: grid-template-rows 0.35s ease, margin 0.35s ease; margin-top: 8px; }
+  #notes { position: fixed; top: calc(max(10px, env(safe-area-inset-top)) + 96px); left: 50%; transform: translateX(-50%); width: min(300px, 46vw); display: flex; flex-direction: column; align-items: center; gap: 0; pointer-events: none; z-index: 60; }
+  .note-x { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .note-c { display: grid; grid-template-rows: 1fr; transition: grid-template-rows 0.35s ease, margin 0.35s ease; margin-top: 4px; }
   .note-c.gone { grid-template-rows: 0fr; margin-top: 0; }
   .note-c > div { overflow: hidden; display: flex; justify-content: center; }
-  .note-x { position: relative; display: flex; align-items: center; gap: 10px; padding: 9px 18px 9px 16px; border-radius: 6px;
+  .note-x { position: relative; display: flex; align-items: center; gap: 7px; padding: 4px 12px 4px 10px; border-radius: 6px;
     background: linear-gradient(180deg, rgba(10, 22, 32, 0.72), rgba(6, 14, 22, 0.62)); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
     border: 1px solid rgba(111, 230, 255, 0.4); box-shadow: 0 0 18px rgba(47, 211, 189, 0.22), inset 0 0 12px rgba(111, 230, 255, 0.08);
-    color: #e8fbff; font-size: 15px; font-weight: 700; letter-spacing: 0.4px; text-shadow: 0 0 8px rgba(111, 230, 255, 0.35); white-space: nowrap;
+    color: #e8fbff; font-size: 12.5px; font-weight: 700; letter-spacing: 0.3px; text-shadow: 0 0 8px rgba(111, 230, 255, 0.35); white-space: nowrap;
     animation: note-in 0.42s cubic-bezier(.2, .9, .3, 1.2) both; }
   .note-x::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--c, #6fe6ff); box-shadow: 0 0 8px var(--c, #6fe6ff); flex: none; }
   .note-x::after { content: ''; position: absolute; left: 12%; right: 12%; bottom: -1px; height: 1px; background: linear-gradient(90deg, transparent, var(--c, #6fe6ff), transparent); }
-  .note-x.lvl { --c: #2fd3bd; font-size: 17px; border-color: rgba(47, 211, 189, 0.7); }
+  .note-x.lvl { --c: #2fd3bd; font-size: 13.5px; border-color: rgba(47, 211, 189, 0.7); }
   .note-x.bad { --c: #ff5a64; border-color: rgba(255, 90, 100, 0.6); box-shadow: 0 0 18px rgba(255, 90, 100, 0.25); }
   .note-x.out { animation: note-out 0.45s ease-in both; }
   @keyframes note-in { from { opacity: 0; transform: translateY(-10px) scale(0.96); filter: blur(4px); } to { opacity: 1; transform: none; filter: none; } }
@@ -425,6 +435,13 @@
     #btn-boost { bottom: max(130px, env(safe-area-inset-bottom)); }
     #btn-brake { bottom: max(206px, env(safe-area-inset-bottom)); }
     .pcard p { display: none; }
+  }
+  /* a phone upright: the compass sits lower, and the badges, the feed and the notes under it */
+  @media (max-width: 700px) and (orientation: portrait) {
+    #alerts { top: calc(max(8px, env(safe-area-inset-top)) + 168px); }
+    #notes { top: calc(max(10px, env(safe-area-inset-top)) + 200px); width: 76vw; }
+    /* the feed out of the way: low on the left, above the gauges */
+    #feed { top: auto; bottom: calc(max(14px, env(safe-area-inset-bottom)) + 44px); right: auto; left: 12px; align-items: flex-start; width: 52vw; }
   }
 </style>
 </head>
@@ -535,7 +552,11 @@
   <div class="tags" id="tags"></div>
   <div id="cross"></div>
   <div id="heal-flash"></div>
-  <div id="tail" class="hidden"><span class="ar l">◀</span><b>אויב על הזנב</b><i id="tail-d"></i><span class="ar r">▶</span></div>
+  <div id="alarm" class="hidden"></div>
+  <div id="alerts">
+    <div id="al-missile" class="al hidden" title="טיל ננעל עליך"><svg viewBox="0 0 24 24"><path d="M12 2l4 4v9l-2 2v4l-2-2-2 2v-4l-2-2V6z"/><path d="M3 21L21 3" class="x"/></svg><b id="al-m-t">טיל</b><i id="al-m-d"></i></div>
+    <div id="tail" class="al hidden" title="אויב על הזנב"><span class="ar l">◀</span><svg viewBox="0 0 24 24"><path d="M12 22l2-7 7-3v-2l-7 1-1-5 3-2V2l-4 1-4-1v2l3 2-1 5-7-1v2l7 3z"/></svg><b>זנב</b><i id="tail-d"></i><span class="ar r">▶</span></div>
+  </div>
   <div id="threat" class="hidden"><i></i><b id="threat-d"></b></div>
   <div id="lock" class="hidden"></div>
   <div id="lead" class="hidden"></div>
@@ -552,7 +573,7 @@
   <div id="bossbar" class="hidden"><div class="bb-t"><span>מפציץ</span><span class="num" id="bb-left"></span></div><div class="bb-hp"><i id="bb-hp"></i></div></div>
   <div id="teamscore" class="hidden"><span class="b"><span class="num" id="ts-b">0</span> כחול</span><span class="sep">:</span><span class="r">אדום <span class="num" id="ts-r">0</span></span></div>
   <div id="feed"></div>
-  <div id="warn" class="hidden">טיל ננעל עליך — נורים!</div>
+
   <div id="edge" class="hidden">קצה הזירה — חוזרים פנימה</div>
   <div id="vig"></div>
   <div id="white"></div>
