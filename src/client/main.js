@@ -22,7 +22,7 @@ const ERR = {
   username_taken: 'השם הזה כבר תפוס', invalid_username: 'שם משתמש: 3–16 אותיות אנגלית קטנות ומספרים', invalid_password: 'סיסמה: לפחות 4 תווים',
   bad_code: 'כותבים שם#מספר, כמו מאיר#1', no_such_pilot: 'אין טייס כזה — בדקו את השם והמספר', self: 'אי אפשר להוסיף את עצמכם',
   already_friends: 'כבר חברים', friends_full: 'רשימת החברים מלאה',
-  no_such_gift: 'אין קוד כזה', gift_used: 'כבר מימשת את הקוד הזה', gift_only: 'המטוס הזה רק בקוד מתנה',
+  no_neon: 'צריך את קוד הניאון', no_such_gift: 'אין קוד כזה', gift_used: 'כבר מימשת את הקוד הזה', gift_only: 'המטוס הזה רק בקוד מתנה',
   not_admin: 'רק לאדמין', bad_gold: 'כמות זהב לא תקינה', bad_level: 'רמה בין 1 ל־30', no_such_plane: 'אין מטוס כזה', nothing_to_do: 'לא נבחר שינוי',
   gold: 'אין מספיק זהב', level: 'צריך רמה גבוהה יותר', too_many_requests: 'יותר מדי ניסיונות — חכו רגע', no_pilot: 'קודם בוחרים שם',
 };
@@ -262,7 +262,7 @@ function renderHangar() {
   show('#tab-admin', tab === 'admin');
   // fight mode is chosen with the plane: it only gets in the way of the panels
   show('.h-mode', tab === 'planes');
-  if (tab !== 'market') hangar.show(viewing || p.plane, paintView || paintOf(viewing || p.plane), loadOf(viewing || p.plane));
+  if (tab !== 'market') hangar.show(viewing || p.plane, paintView || paintOf(viewing || p.plane), lookOf(viewing || p.plane));
   if (tab === 'planes') renderPlanes();
   if (tab === 'ups') renderUps();
   if (tab === 'board') renderBoard();
@@ -298,7 +298,9 @@ function renderPlanes() {
   $('#hp-load').innerHTML = own ? `<span>${esc(GUNS[lo.gun]?.he || '')}</span><span>${esc(MISSILES[lo.missile]?.he || '')}</span><span>${esc(PAINTS[paintOf(k)]?.he || '')}</span>` : '';
   // the paint: a row of colours, the one tried on is the one on the table
   const worn = paintOf(k), pv = paintView || worn;
-  $('#hp-paints').innerHTML = PAINT_ORDER.map((id) => `<button type="button" class="sw ${id === pv ? 'on' : ''} ${p.paints.includes(id) ? 'own' : ''}" data-paint="${id}" style="--c:${PAINTS[id].swatch}" aria-label="${PAINTS[id].he}"></button>`).join('');
+  $('#hp-paints').innerHTML = PAINT_ORDER.map((id) => `<button type="button" class="sw ${id === pv ? 'on' : ''} ${p.paints.includes(id) ? 'own' : ''}" data-paint="${id}" style="--c:${PAINTS[id].swatch}" aria-label="${PAINTS[id].he}"></button>`).join('')
+    // neon (the NEON code): on this plane, every colour glows
+    + (p.neon && own ? `<button type="button" class="sw neon ${p.neonOf?.[k] ? 'on' : ''}" data-neon="${p.neonOf?.[k] ? 0 : 1}" aria-label="ניאון">ניאון</button>` : '');
   const pa = $('#hp-paint-act'), P = PAINTS[pv];
   pa.className = 'h-act small';
   pa.disabled = false;
@@ -308,11 +310,21 @@ function renderPlanes() {
   else if (p.paints.includes(pv)) { pa.textContent = `צבע ${P.he} · החל`; pa.dataset.wear = pv; }
   else { pa.innerHTML = `צבע ${P.he} · <span class="num">${fmt(P.price)}</span>`; pa.classList.add('buy'); pa.dataset.buy = pv; pa.disabled = p.gold < P.price; }
 }
-$('#hp-paints').addEventListener('click', (e) => {
+$('#hp-paints').addEventListener('click', async (e) => {
+  const nb = e.target.closest('[data-neon]');
+  if (nb) {
+    try {
+      const r = await net.api('/api/pilot/neon', { on: nb.dataset.neon === '1', plane: viewing || S.pilot.plane });
+      S.pilot = r.pilot;
+      toast(nb.dataset.neon === '1' ? 'ניאון דולק' : 'ניאון כבוי', 'lvl');
+      renderHangar();
+    } catch (x) { toast(err(x), 'bad'); }
+    return;
+  }
   const id = e.target.closest('[data-paint]')?.dataset.paint;
   if (!id) return;
   paintView = id;
-  hangar.show(viewing || S.pilot.plane, id, loadOf(viewing || S.pilot.plane));
+  hangar.show(viewing || S.pilot.plane, id, lookOf(viewing || S.pilot.plane));
   renderPlanes();
 });
 $('#hp-paint-act').addEventListener('click', async (e) => {
@@ -347,7 +359,7 @@ const step = (dir) => {
   const row = rowOf(S.pilot), i = row.indexOf(viewing || S.pilot.plane);
   viewing = row[(i + dir + row.length) % row.length];
   paintView = '';
-  hangar.show(viewing, paintOf(viewing), loadOf(viewing));
+  hangar.show(viewing, paintOf(viewing), lookOf(viewing));
   renderPlanes();
 };
 // in a right-to-left page the arrow on the right goes back
@@ -493,6 +505,8 @@ $('#tab-ups').addEventListener('click', async (e) => {
 let shelf = 'missiles';
 const mView = { missiles: '', guns: '' };
 const loadOf = (plane) => S.pilot?.loadout?.[plane] || { gun: 'g1', missile: 'm1' };
+/** How a plane looks on the table: its load, and its neon if it has it on. */
+const lookOf = (plane) => ({ ...loadOf(plane), neon: !!S.pilot?.neonOf?.[plane] });
 /** The paint a plane wears (each its own; one never painted wears what the pilot had on). */
 function paintOf(plane) { return S.pilot?.paintOf?.[plane] || S.pilot?.paint || 'stock'; }
 // the market's card starts on what the plane flown carries: a new plane, a fresh look
@@ -714,7 +728,7 @@ function hook(room) {
     S.pilot = m.pilot;
     sound.setPlane(S.pilot.plane);
     for (const r of m.roster) S.roster.set(r.key, r);
-    const mesh = buildPlane(S.pilot.plane, S.pilot.paint, { gun: m.stats.gun, missile: m.stats.missile });
+    const mesh = buildPlane(S.pilot.plane, S.pilot.paint, { gun: m.stats.gun, missile: m.stats.missile, neon: !!S.pilot.neonOf?.[S.pilot.plane] });
     scene.add(mesh);
     S.me = { stats: m.stats, alive: false, hp: m.stats.hp, ammo: m.stats.missiles, shieldUntil: 0, gunT: 0, gun: 0, mesh, body: null, reloadT: 0 };
     $('#hud-name').textContent = displayName(S.pilot);
@@ -840,13 +854,13 @@ function onSnapshot(s) {
     let o = S.others.get(key);
     const r = S.roster.get(key);
     if (!o) {
-      o = { key, kind: r?.plane || 'sparrow', paint: r?.paint || 'stock', mesh: buildPlane(r?.plane || 'sparrow', r?.paint, { gun: r?.gun, missile: r?.missile }), buf: [], fireT: 0, gun: 0, smokeT: 0, tag: null };
+      o = { key, kind: r?.plane || 'sparrow', paint: r?.paint || 'stock', neon: !!r?.neon, mesh: buildPlane(r?.plane || 'sparrow', r?.paint, { gun: r?.gun, missile: r?.missile, neon: r?.neon }), buf: [], fireT: 0, gun: 0, smokeT: 0, tag: null };
       scene.add(o.mesh);
       S.others.set(key, o);
     }
-    if (r && (r.plane !== o.kind || (r.paint || 'stock') !== o.paint)) {
+    if (r && (r.plane !== o.kind || (r.paint || 'stock') !== o.paint || !!r.neon !== o.neon)) {
       // a different plane under the same key (it changed in the hangar)
-      scene.remove(o.mesh); o.mesh = buildPlane(r.plane, r.paint, { gun: r.gun, missile: r.missile }); o.kind = r.plane; o.paint = r.paint || 'stock'; scene.add(o.mesh);
+      scene.remove(o.mesh); o.mesh = buildPlane(r.plane, r.paint, { gun: r.gun, missile: r.missile, neon: r.neon }); o.kind = r.plane; o.paint = r.paint || 'stock'; o.neon = !!r.neon; scene.add(o.mesh);
     }
     // the attitude as a quaternion when the room sends one (any way up), else from the angles
     const qa = qw !== undefined ? new Quaternion(qx / 1000, qy / 1000, qz / 1000, qw / 1000).normalize() : new Quaternion().setFromEuler(new Euler(pitch / 1000, yaw / 1000, roll / 1000, 'YXZ'));

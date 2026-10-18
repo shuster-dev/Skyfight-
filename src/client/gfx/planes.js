@@ -11,7 +11,7 @@
 // carried gun's muzzles), load ({ missile, gun }).
 import {
   AdditiveBlending, BufferAttribute, BufferGeometry, CanvasTexture, ConeGeometry, CylinderGeometry, Group, Mesh,
-  MeshBasicMaterial, MeshStandardMaterial, SphereGeometry, SRGBColorSpace, Vector3, BoxGeometry, TorusGeometry, Color, PlaneGeometry,
+  MeshBasicMaterial, MeshStandardMaterial, SphereGeometry, SRGBColorSpace, Vector3, BoxGeometry, TorusGeometry, Color, PlaneGeometry, MeshPhysicalMaterial, EdgesGeometry, InstancedMesh, Matrix4, Quaternion,
 } from 'three';
 import { PAINTS, PLANES } from '../../shared/planes.js';
 import { buildMissile } from './arms.js';
@@ -168,6 +168,8 @@ const canvas = (w, h) => { const c = document.createElement('canvas'); c.width =
  * 0), top half the upper surface, bottom half the lower.
  */
 const SCHEMES = {
+  // the strongest in the game: a deep sweep of cyan to violet to magenta, a white belly, the flag on both tails
+  shuster: { top: '#3a3fd6', grad: ['#00e1ff', '#5b4bff', '#ff2fa8'], blot: [], under: '#eef1f6', metal: 0.55, rough: 0.22, band: '#ffd25e', low: false, num: '1', ace: '#ff4fd8', hi: true },
   // the king's attack helicopter: dark olive, a gold band, the flag on both flanks
   alfasi: { top: '#3f4a2c', blot: ['#343d24', '#4a5634'], under: '#4b5636', metal: 0.25, rough: 0.55, band: '#e8c04a', low: false, num: '1', ace: '#f2c230' },
   // olive drab over neutral grey, yellow nose band — late war
@@ -192,12 +194,26 @@ const SCHEMES = {
   phantom: { top: '#62686f', blot: [], under: '#5c6268', metal: 0.25, rough: 0.5, low: true, num: '901', stealth: true },
 };
 
+/** A canvas for a paint: twice as fine for a plane that asks for it (S.hi), drawn on the same 512 grid. */
+function paintCanvas(S, n) {
+  const k = S.hi ? 4 : 1, [c, g] = canvas(n * k, n * k);
+  g.scale(k, k);
+  return [c, g];
+}
+/** The top colour: flat, or a sweep across it (S.grad). */
+function topFill(S, g, x0, y0, x1, y1) {
+  if (!S.grad) return S.top;
+  const gr = g.createLinearGradient(x0, y0, x1, y1);
+  S.grad.forEach((col, i) => gr.addColorStop(i / (S.grad.length - 1), col));
+  return gr;
+}
+
 function paintBody(S) {
-  const [c, g] = canvas(512, 512), W = 512, H = 512;
+  const [c, g] = paintCanvas(S, 512), W = 512, H = 512;
   g.fillStyle = S.under; g.fillRect(0, 0, W, H);
   // the upper half of the section: u from 0.25 to 0.75
   const t0 = W * 0.22, t1 = W * 0.78;
-  g.fillStyle = S.top; g.fillRect(t0, 0, t1 - t0, H);
+  g.fillStyle = topFill(S, g, 0, 0, 0, H); g.fillRect(t0, 0, t1 - t0, H);
   if (S.blot.length) {
     g.save(); g.beginPath(); g.rect(t0, 0, t1 - t0, H); g.clip();
     S.splinter ? splinters(g, t0, t1, H, S.blot, 7) : camo(g, W, H, S.blot, 7, 1.4);
@@ -215,8 +231,8 @@ function paintBody(S) {
 }
 
 function paintWing(S) {
-  const [c, g] = canvas(512, 512), W = 512, H = 512;
-  g.fillStyle = S.top; g.fillRect(0, 0, W, H / 2);
+  const [c, g] = paintCanvas(S, 512), W = 512, H = 512;
+  g.fillStyle = topFill(S, g, 0, 0, W, 0); g.fillRect(0, 0, W, H / 2);
   g.fillStyle = S.under; g.fillRect(0, H / 2, W, H / 2);
   if (S.blot.length) {
     g.save(); g.beginPath(); g.rect(0, 0, W, H / 2); g.clip();
@@ -233,8 +249,8 @@ function paintWing(S) {
 }
 
 function paintFin(S) {
-  const [c, g] = canvas(256, 256), W = 256, H = 256;
-  g.fillStyle = S.top; g.fillRect(0, 0, W, H);
+  const [c, g] = paintCanvas(S, 256), W = 256, H = 256;
+  g.fillStyle = topFill(S, g, 0, 0, W, H); g.fillRect(0, 0, W, H);
   if (S.blot.length) S.splinter ? splinters(g, 0, W, H, S.blot, 5) : camo(g, W, H, S.blot, 5, 2);
   if (S.band) { g.fillStyle = S.band; g.fillRect(W * 0.7, 0, W * 0.12, H); }
   panels(g, W, H, 13, 0.2, 0.4);
@@ -397,7 +413,7 @@ function mats(id) {
   if (MATS.has(key)) return MATS.get(key);
   const p = PAINTS[PAINT];
   // a paint replaces the colours and the finish; markings stay the plane's
-  const S = p && p.top ? { ...SCHEMES[id], top: p.top, blot: p.blot, under: p.under, metal: p.metal, rough: p.rough, splinter: !!p.splinter, stealth: false, nose: p.nose ?? SCHEMES[id].nose, band: p.band ?? SCHEMES[id].band } : SCHEMES[id];
+  const S = p && p.top ? { ...SCHEMES[id], grad: null, top: p.top, blot: p.blot, under: p.under, metal: p.metal, rough: p.rough, splinter: !!p.splinter, stealth: false, nose: p.nose ?? SCHEMES[id].nose, band: p.band ?? SCHEMES[id].band } : SCHEMES[id];
   const base = { roughness: S.rough, metalness: S.metal };
   const m = {
     body: new MeshStandardMaterial({ map: paintBody(S), ...base }),
@@ -429,7 +445,88 @@ function flagDecal(w, h) {
   return new Mesh(new PlaneGeometry(w, h), FLAG);
 }
 
+/** Stations in between the given ones, eased: a body with no facets. */
+function smooth(st, per = 4) {
+  const out = [];
+  const ease = (t) => t * t * (3 - 2 * t);
+  for (let i = 0; i < st.length - 1; i++) {
+    const a = st[i], b = st[i + 1];
+    for (let k = 0; k < per; k++) {
+      const t = k / per, e = ease(t), mix = (u, v, d = 0) => (u ?? d) + ((v ?? d) - (u ?? d)) * e;
+      out.push({ z: a.z + (b.z - a.z) * t, w: mix(a.w, b.w), h: mix(a.h, b.h), y: mix(a.y, b.y), p: mix(a.p, b.p, 2) });
+    }
+  }
+  out.push(st[st.length - 1]);
+  return out;
+}
+/** A line of light: a thin glowing rod from a to b. */
+function neonLine(a, b, color, r = 0.035) {
+  const d = new Vector3().subVectors(b, a), len = d.length();
+  const m = new Mesh(new CylinderGeometry(r, r, len, 6), new MeshBasicMaterial({ color, toneMapped: false }));
+  m.position.copy(a).addScaledVector(d, 0.5);
+  m.quaternion.setFromUnitVectors(new Vector3(0, 1, 0), d.normalize());
+  return m;
+}
+
 const BUILD = {
+  // the strongest plane (gift code only): a long smooth body with chined
+  // nose and canards, a cranked delta, twin canted tails with the flag of
+  // Israel, twin engines burning blue, a gradient paint under a glossy
+  // clear coat, and lines of light along its edges
+  shuster() {
+    const M0 = mats('shuster'), g = new Group();
+    const gloss = (m) => new MeshPhysicalMaterial({ map: m.map, metalness: 0.45, roughness: 0.18, clearcoat: 1, clearcoatRoughness: 0.04, iridescence: 0.55, iridescenceIOR: 1.6 });
+    const M = { body: gloss(M0.body), wing: gloss(M0.wing), fin: gloss(M0.fin) };
+    g.add(new Mesh(loft(smooth([
+      { z: -8.4, w: 0.04, h: 0.03, p: 2 }, { z: -7.4, w: 0.6, h: 0.42, p: 2.4 }, { z: -5.6, w: 1.4, h: 0.95, y: 0.05, p: 3 }, { z: -3.6, w: 2.1, h: 1.3, y: 0.1, p: 3.6 },
+      { z: -1.0, w: 2.7, h: 1.4, y: 0.06, p: 4 }, { z: 2.2, w: 2.9, h: 1.3, p: 4 }, { z: 4.8, w: 2.4, h: 1.15, p: 3.4 }, { z: 6.4, w: 2.0, h: 1.0, p: 3 },
+    ], 5), 48), M.body));
+    // the intakes, smooth and set into the sides
+    for (const sx of [-1, 1]) {
+      const it = new Mesh(loft(smooth([{ z: -3.2, w: 0.1, h: 0.75, p: 1.4 }, { z: -2.6, w: 0.8, h: 0.95, p: 1.8 }, { z: 1.2, w: 0.8, h: 0.95, p: 2.2 }, { z: 2.4, w: 0.2, h: 0.5 }], 4), 24), M.body);
+      it.position.set(sx * 1.45, -0.12, 0);
+      g.add(it);
+    }
+    // a cranked delta, canards, twin tails canted out
+    for (const w of wings({ x0: 1.2, span: 5.0, chord: (t) => (t < 0.35 ? 7.2 - 6 * t : 5.1 - 3.4 * (t - 0.35)), le: (t) => (t < 0.35 ? -1.6 + 5.2 * t : 0.22 + 2.2 * (t - 0.35)), y0: -0.05, thick: 0.045, n: 18 })) g.add(new Mesh(w, M.wing));
+    for (const w of wings({ x0: 0.9, span: 1.6, chord: (t) => 1.6 - 0.9 * t, le: (t) => -4.4 + 0.9 * t, y0: 0.18, dihedral: 0.08, thick: 0.05, n: 10 })) g.add(new Mesh(w, M.wing));
+    for (const sx of [-1, 1]) g.add(new Mesh(fin({ x0: sx * 1.05, y0: 0.5, height: 2.6, chord: (t) => 2.8 - 1.5 * t, le: (t) => 3.0 + 1.8 * t, cant: sx * 0.36, n: 10 }), M.fin));
+    // the flag on both faces of each tail
+    for (const sx of [-1, 1]) for (const face of [-1, 1]) {
+      const f = flagDecal(1.15, 0.8);
+      f.position.set(sx * 1.05 + sx * Math.sin(0.36) * 1.4 + face * 0.08 * Math.cos(0.36), 0.5 + Math.cos(0.36) * 1.4, 4.7);
+      f.rotation.set(0, face * Math.PI / 2, 0);
+      f.rotateX(sx * -0.36 * face);
+      g.add(f);
+    }
+    // a long bubble canopy, gold-tinted
+    const cnp = canopy(-4.6, 0.6, 1.9, 0.58, 0.6, false);
+    cnp.children[0].material = new MeshPhysicalMaterial({ color: 0x8a6a20, roughness: 0.02, metalness: 1, clearcoat: 1, transparent: true, opacity: 0.9 });
+    g.add(cnp);
+    // twin engines burning blue
+    const flames = [];
+    for (const sx of [-1, 1]) {
+      g.add(nozzle(sx * 0.62, -0.05, 6.6, 0.5, 0.9));
+      const f = flame(sx * 0.62, -0.05, 7.0, 0.46, 0x5fd8ff);
+      g.add(f); flames.push(f);
+    }
+    // lines of light: the leading edges, the spine, the chines
+    const c1 = 0x00e1ff, c2 = 0xff2fa8;
+    for (const sx of [-1, 1]) {
+      g.add(neonLine(new Vector3(sx * 1.2, -0.02, -1.6), new Vector3(sx * 2.95, -0.02, 0.22), c1));
+      g.add(neonLine(new Vector3(sx * 2.95, -0.02, 0.22), new Vector3(sx * 6.2, -0.02, 3.1), c1));
+      g.add(neonLine(new Vector3(sx * 0.3, 0.02, -7.3), new Vector3(sx * 1.04, 0.1, -3.6), c2, 0.03));
+      g.add(neonLine(new Vector3(sx * 1.25, 0.5, 3.0), new Vector3(sx * (1.25 + Math.sin(0.36) * 2.6), 0.5 + Math.cos(0.36) * 2.6, 4.8), c2, 0.03));
+    }
+    g.add(neonLine(new Vector3(0, 0.78, -2.6), new Vector3(0, 0.72, 5.6), c2, 0.03));
+    const missiles = [store(4.2, -0.3, 1.8, LOAD.missile), store(-4.2, -0.3, 1.8, LOAD.missile), store(2.6, -0.38, 1.0, LOAD.missile), store(-2.6, -0.38, 1.0, LOAD.missile)];
+    missiles.forEach((m) => g.add(m));
+    // two guns, one in each wing root
+    const guns = [new Vector3(-1.5, 0.05, -2.2), new Vector3(1.5, 0.05, -2.2)];
+    g.userData = { props: [], flames, guns, tips: [new Vector3(-6.2, -0.02, 3.1), new Vector3(6.2, -0.02, 3.1)], missiles, len: 15.4, ace: true };
+    return g;
+  },
+
   // the king's attack helicopter (gift code only): a narrow armoured body, a
   // stepped two-seat canopy, a four-blade rotor, stub wings with a heavy gun
   // and missiles on each, the flag on both flanks
@@ -829,6 +926,41 @@ export function buildPlane(kind, paint = 'stock', load = {}) {
   g.userData.barrels = g.userData.guns.map((v) => barrel(v, LOAD.gun));
   g.userData.barrels.forEach((b) => g.add(b));
   g.userData.load = { ...LOAD };
+  // neon (the NEON code): whatever it wears glows, in its own colours
+  if (load.neon) {
+    // the paint's own colour, as bright as it goes: tubes of light along every edge, and a halo round them
+    const S = SCHEMES[id], P = PAINTS[PAINT];
+    const tube = new Color(P?.top || S.grad?.[0] || S.top);
+    const hsl = {}; tube.getHSL(hsl); tube.setHSL(hsl.h, 1, 0.62);
+    const mats = [], segs = [];
+    const painted = [];
+    g.updateMatrixWorld(true);
+    g.traverse((o) => { if (o.isMesh && o.material?.map && o.material.isMeshStandardMaterial) painted.push(o); });
+    const a = new Vector3(), b = new Vector3();
+    for (const o of painted) {
+      const m = o.material.clone();
+      m.emissive = new Color(0xffffff); m.emissiveMap = m.map; m.emissiveIntensity = 1.4;
+      m.toneMapped = false;
+      o.material = m;
+      mats.push(m);
+      const e = new EdgesGeometry(o.geometry, 28).attributes.position;
+      for (let i = 0; i < e.count; i += 2) {
+        a.fromBufferAttribute(e, i).applyMatrix4(o.matrixWorld); b.fromBufferAttribute(e, i + 1).applyMatrix4(o.matrixWorld);
+        if (a.distanceTo(b) > 0.02) segs.push([a.clone(), b.clone()]);
+      }
+    }
+    const up = new Vector3(0, 1, 0), M = new Matrix4(), q = new Quaternion(), sc = new Vector3(), mid = new Vector3(), dir = new Vector3();
+    for (const [r, op] of [[0.045, 1], [0.16, 0.22]]) {
+      const im = new InstancedMesh(new CylinderGeometry(r, r, 1, 6, 1, true), new MeshBasicMaterial({ color: tube, transparent: true, opacity: op, blending: AdditiveBlending, depthWrite: false, toneMapped: false }), segs.length);
+      segs.forEach(([p0, p1], i) => {
+        dir.subVectors(p1, p0); const len = dir.length();
+        q.setFromUnitVectors(up, dir.normalize()); mid.addVectors(p0, p1).multiplyScalar(0.5); sc.set(1, len, 1);
+        im.setMatrixAt(i, M.compose(mid, q, sc));
+      });
+      g.add(im);
+    }
+    g.userData.neon = mats;
+  }
   // an elite plane shows it: steady wingtip lights in its own colour
   if (g.userData.ace) {
     const c = new Color(SCHEMES[id].ace || '#6fe6ff');
@@ -846,6 +978,8 @@ export function buildPlane(kind, paint = 'stock', load = {}) {
 export function animatePlane(g, dt, { boost = false, speed = 60, time = 0, ammo = null, ammoMax = 1 } = {}) {
   const u = g.userData;
   for (const p of u.props || []) p.rotation.z += dt * (40 + speed * 0.4);
+  // neon breathes
+  if (u.neon) { const k = 1.3 + Math.sin(time * 3) * 0.35; for (const m of u.neon) m.emissiveIntensity = k; }
   for (const f of u.flames || []) {
     const k = (boost ? 3.4 : 0.9) * (0.9 + Math.sin(time * 40 + f.position.x) * 0.1);
     f.scale.z += (k - f.scale.z) * Math.min(1, dt * 10);

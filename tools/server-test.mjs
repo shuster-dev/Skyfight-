@@ -228,7 +228,7 @@ try {
     ok('sets gold', g1.pilot?.gold === 50000 && (await api('/api/me', null, back.token)).pilot.gold === 50000, g1);
     ok('adds gold, never below nothing', (await api('/api/admin/edit', { code: 'צייד#1', addGold: 2500 }, adm.token)).pilot?.gold === 52500 && (await api('/api/admin/edit', { code: 'צייד#1', addGold: -1e9 }, adm.token)).pilot?.gold === 0);
     ok('gives a plane, whatever the level', (await api('/api/admin/edit', { code: 'צייד#1', plane: 'phantom' }, adm.token)).pilot?.planes.includes('phantom') && (await api('/api/pilot/plane', { plane: 'phantom' }, back.token)).pilot?.plane === 'phantom');
-    ok('or all of them, the gift helicopter too', (await api('/api/admin/edit', { code: 'צייד#1', plane: 'all' }, adm.token)).pilot?.planes.length === 11);
+    ok('or all of them, the gift planes too', (await api('/api/admin/edit', { code: 'צייד#1', plane: 'all' }, adm.token)).pilot?.planes.length === 12);
     ok('sets the level', (await api('/api/admin/edit', { code: 'צייד#1', level: 12 }, adm.token)).pilot?.level === 12);
     ok('nonsense is refused', (await api('/api/admin/edit', { code: 'צייד#1', plane: '__proto__' }, adm.token)).error === 'no_such_plane' && (await api('/api/admin/edit', { code: 'צייד#1', level: 99 }, adm.token)).error === 'bad_level' && (await api('/api/admin/edit', { code: 'nobody#9', gold: 1 }, adm.token)).status === 404);
     await api('/api/admin/edit', { code: 'צייד#1', level: 1, plane: 'sparrow' }, adm.token);
@@ -252,6 +252,31 @@ try {
     ok('the king joins: the whole sky is told', said?.text === 'אלפסי המלך הצטרף לקרב', said);
     ok('and his guns reach a kilometre', st?.gunRange === 1000 && st?.mRange === 5000, st);
     await king.room.leave(); await watcher.room.leave();
+  }
+  {
+    // SHUSTER: the strongest, its banner, a missile every half second at most
+    const s2 = await api('/api/guest', {});
+    await api('/api/pilot/name', { name: 'שוסטר' }, s2.token);
+    ok('SHUSTER gives the fighter', (await api('/api/pilot/gift', { code: 'SHUSTER' }, s2.token)).pilot?.plane === 'shuster');
+    const n = await api('/api/pilot/gift', { code: 'neon' }, s2.token);
+    ok('NEON lights the plane flown', n.pilot?.neon === true && n.pilot.neonOf?.shuster === true);
+    const watcher = await pilot(back.token, 'arena_gift_test');
+    const ace = await pilot(s2.token, 'arena_gift_test');
+    await until(() => got(watcher, 'royal').length && got(ace, 'spawn').length, 4000);
+    ok('it takes off: the sky is told שוסטר הצטרף לקרב', got(watcher, 'royal').some((e) => e.m.text === 'שוסטר הצטרף לקרב'));
+    const st = got(ace, 'welcome')[0]?.m.stats;
+    ok('its guns reach 2 km and its missiles 5 km', st?.gunRange === 2000 && st?.mRange === 5000, st);
+    const glow = () => [...got(watcher, 'roster').map((e) => e.m), ...got(watcher, 'welcome').map((e) => e.m.roster)].some((l) => l?.some((r) => r.plane === 'shuster' && r.neon));
+    ok('the others see it glowing', await until(glow, 3000));
+    await wait(4500); // past the shield, so the rack is armed
+    ace.room.send('missile'); ace.room.send('missile'); ace.room.send('missile');
+    await wait(250);
+    const first = got(ace, 'fired').length;
+    await wait(600);
+    ace.room.send('missile');
+    await wait(250);
+    ok('three at once: one goes; half a second later, the next', first === 1 && got(ace, 'fired').length === 2, { first, then: got(ace, 'fired').length });
+    await ace.room.leave(); await watcher.room.leave();
   }
 
   console.log('\npaint');

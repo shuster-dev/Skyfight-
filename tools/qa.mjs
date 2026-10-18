@@ -4,7 +4,7 @@ import { GUNS, MISSILES, GUN_ORDER, MISSILE_ORDER, PLANES, PLANE_ORDER, UPGRADES
 import { ARENA, BRIDGE, BUILDINGS, HEAL, HEALS, groundAt, healAt, hitsSolid, inBay, spawnPoint, surfaceAt, terrainAt, underBridge } from '../src/shared/arena.js';
 import { fly, flyQ, forward, newBody, newBodyQ, plausibleMove, BOOST, BRAKE, Q } from '../src/shared/flight.js';
 import { GUN, MISSILE, RAM, aimDir, blastDamage, closestOn, missileHurt, DODGE, dodgeChance, gunTarget, leadPoint, offNose, pickTarget, ramDamage, segmentHit, steerMissile } from '../src/shared/combat.js';
-import { buyArm, buyPaint, choosePaint, equipArm, newPilot, normalize, buyPlane, buyUpgrade, choosePlane, payKill, redeemGift, view } from '../src/server/pilot.js';
+import { buyArm, buyPaint, choosePaint, equipArm, newPilot, normalize, buyPlane, buyUpgrade, choosePlane, payKill, redeemGift, setNeon, view } from '../src/server/pilot.js';
 
 let pass = 0, fail = 0;
 const ok = (name, cond, info) => {
@@ -65,6 +65,25 @@ console.log('\nthe gift helicopter');
   ok('once only', redeemGift(g, 'ALFASI').error === 'gift_used');
   ok('a made-up code gives nothing', redeemGift(g, 'NOPE').error === 'no_such_gift' && redeemGift(g, '__proto__').error === 'no_such_gift');
   ok('it stays after the record is read back', normalize(JSON.parse(JSON.stringify(g))).planes.includes('alfasi') && normalize(JSON.parse(JSON.stringify(g))).gifts.includes('ALFASI'));
+}
+
+console.log('\nthe gift fighter, and neon');
+{
+  const st = statsOf('shuster');
+  ok('SHUSTER: not on the ladder, not in the shop', !PLANE_ORDER.includes('shuster') && PLANES.shuster.gift && buyPlane(normalize({ id: 'q2', xp: 1e9, gold: 1e9 }), 'shuster').error === 'gift_only');
+  ok('the strongest: more health, speed, fire and flares than any plane', PLANE_ORDER.every((k) => { const o = statsOf(k); return st.hp > o.hp && st.speed > o.speed && st.rate * st.dmg > o.rate * o.dmg && st.flares > o.flares; }));
+  ok('two guns to 2 km, missiles to 5 km that bring a plane down in one', st.gunRange === 2000 && st.mRange === 5000 && st.oneShot);
+  ok('a missile every half second, the rack back as fast', st.launchGap === 0.5 && st.reload === 0.5);
+  ok('two flares may fool a missile of its, three always do', st.shake === 2 && st.shakeSure === 3);
+  const g = newPilot('sh');
+  ok('SHUSTER gives it and puts it on the table', redeemGift(g, 'shuster').ok && g.plane === 'shuster' && g.planes.includes('shuster'));
+  ok('neon needs its code', setNeon(g, true).error === 'no_neon');
+  const r = redeemGift(g, 'NEON');
+  ok('NEON gives the glow, on the plane flown at once', r.ok && r.gift.neon && g.neon && g.neonOf.shuster === true);
+  ok('neon is each plane\'s: off on one, on on another', setNeon(g, false, 'shuster').ok && !g.neonOf.shuster && setNeon(g, true, 'sparrow').ok && g.neonOf.sparrow);
+  ok('not on a plane you do not own', setNeon(g, true, 'phantom').error === 'not_owned');
+  const back = normalize(JSON.parse(JSON.stringify(g)));
+  ok('kept through a save and a load', back.neon && back.neonOf.sparrow && !back.neonOf.shuster);
 }
 
 console.log('\nlevels');

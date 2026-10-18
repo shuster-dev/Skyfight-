@@ -77,6 +77,21 @@ export const PLANES = {
     gunRange: 1000, mRange: 5000,
     // flares a missile of its needs before it is fooled (and a break does not shake it)
     shake: 2,
+    // everyone in the sky is told when it takes off
+    banner: 'אלפסי המלך הצטרף לקרב',
+  },
+  shuster: {
+    id: 'shuster', he: 'שוסטר', role: 'מטוס הקרב החזק במשחק · מתנה', era: 'מתנה', kind: 'לוחם עתידני', level: 1, price: 0, ace: true, gift: true,
+    desc: 'הכי חזק שיש: שני מקלעים לטווח 2,000 מטר, טילים לטווח 5,000 מטר שמפילים בפגיעה אחת — בלי הגבלה, חצי שנייה בין טיל לטיל.',
+    hp: 900, speed: 100, boost: 165, turn: 2.6, climb: 2.3, rate: 30, dmg: 10, missiles: 3, flares: 6, reload: 0.5, fill: 0.26,
+    gunRange: 2000, mRange: 5000,
+    // two flares may fool a missile of its (one time in two); three always do; a break never
+    shake: 2, shakeSure: 3,
+    // one missile, one plane
+    oneShot: true,
+    // a missile every half second, the rack refilled as fast
+    launchGap: 0.5,
+    banner: 'שוסטר הצטרף לקרב',
   },
 };
 /** Planes that come only with a gift code: not on the ladder, not in the shop. */
@@ -193,7 +208,7 @@ export function statsOf(planeId, tiers = {}, arms = {}) {
     gunSpread: G.spread * (1 - 0.1 * t('weapons')), gunAssist: G.assist * (1 + 0.06 * t('weapons')),
     missile: M.id, mRange: Math.round(up('weapons', 'mRange', p.mRange || M.range)), mDmg: M.dmg, mSpeed: M.speed, mTurn: M.turn,
     mCcm: Math.min(0.8, M.ccm + 0.03 * t('weapons')),
-    shake: p.shake || 1, heli: !!p.heli,
+    shake: p.shake || 1, shakeSure: p.shakeSure || 0, oneShot: !!p.oneShot, launchGap: p.launchGap || 0, heli: !!p.heli,
     missiles: p.missiles + (t('weapons') >= 3 ? 1 : 0),
     reload: up('weapons', 'reload', p.reload),
     flares: p.flares + (t('armor') >= 3 ? 1 : 0),

@@ -36,6 +36,10 @@ export function normalize(p) {
   const po = p.paintOf && typeof p.paintOf === 'object' ? p.paintOf : {};
   p.paintOf = Object.fromEntries(p.planes.map((id) => [id, p.paints.includes(po[id]) ? po[id] : p.paint]));
   p.paint = p.paintOf[p.plane];
+  // neon (from the NEON code): on or off for each plane
+  p.neon = !!p.neon;
+  const no = p.neonOf && typeof p.neonOf === 'object' ? p.neonOf : {};
+  p.neonOf = p.neon ? Object.fromEntries(p.planes.filter((id) => no[id]).map((id) => [id, true])) : {};
   const a = p.arms || {};
   p.arms = {
     guns: [...new Set([START_GUN, ...(a.guns || [])].filter((k) => ARMS.guns[k]))],
@@ -70,7 +74,7 @@ export function normalize(p) {
 export const view = (p) => ({
   name: p.name, tag: p.tag || 0, xp: p.xp, level: p.level, gold: p.gold,
   kills: p.kills, deaths: p.deaths, best: p.best,
-  plane: p.plane, planes: p.planes, upgrades: p.upgrades, paint: p.paint, paints: p.paints, paintOf: p.paintOf,
+  plane: p.plane, planes: p.planes, upgrades: p.upgrades, paint: p.paint, paints: p.paints, paintOf: p.paintOf, neon: p.neon, neonOf: p.neonOf,
   arms: p.arms, loadout: p.loadout,
 });
 
@@ -129,6 +133,9 @@ export function adminEdit(p, b = {}) {
  */
 export const GIFTS = {
   ALFASI: { plane: 'alfasi', he: 'מסוק הקרב של אלפסי' },
+  SHUSTER: { plane: 'shuster', he: 'מטוס הקרב של שוסטר' },
+  // not a plane: a glow for every paint, on any plane you choose
+  NEON: { neon: true, he: 'ניאון — כל צבע זוהר' },
 };
 export const giftKey = (code) => String(code || '').trim().toUpperCase().replace(/\s+/g, '');
 export function redeemGift(p, code) {
@@ -145,7 +152,8 @@ export function redeemGift(p, code) {
     p.plane = g.plane;
   }
   if (g.gold) p.gold = (p.gold || 0) + g.gold;
-  return { ok: true, gift: { he: g.he, plane: g.plane || '', gold: g.gold || 0 } };
+  if (g.neon) p.neon = true, (p.neonOf ||= {})[p.plane] = true;
+  return { ok: true, gift: { he: g.he, plane: g.plane || '', gold: g.gold || 0, neon: !!g.neon } };
 }
 
 /** Take a plane you own out of the hangar. */
@@ -174,6 +182,13 @@ export function choosePaint(p, id, plane = p.plane) {
   if (!p.paints.includes(id)) return { error: 'not_owned' };
   if (!PLANES[plane] || !planeOwned(p, plane)) return { error: 'not_owned' };
   return wear(p, id, plane);
+}
+/** Neon on (or off) for one of your planes: every colour it wears glows. */
+export function setNeon(p, on, plane = p.plane) {
+  if (!p.neon) return { error: 'no_neon' };
+  if (!PLANES[plane] || !planeOwned(p, plane)) return { error: 'not_owned' };
+  if (on) (p.neonOf ||= {})[plane] = true; else delete p.neonOf?.[plane];
+  return { ok: true, plane };
 }
 function wear(p, id, plane) {
   (p.paintOf ||= {})[plane] = id;
