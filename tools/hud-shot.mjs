@@ -33,7 +33,11 @@ for (const [name, vp] of [['landscape', { width: 844, height: 390 }], ['portrait
   });
   await wait(1500);
   // the notes last a few seconds: in just before the picture
-  await page.evaluate(() => { const S = window.__sky; S.note('הטיל שלך הוטעה בתמרון'); S.note('הפלה +222 זהב +180 XP', 'lvl'); S.note('רצף של 3'); });
+  // three kills in a row, fast: one card that counts them, not three
+  await page.evaluate(() => { const S = window.__sky; for (const st of [5, 6, 7]) S.reward({ pilot: S.pilot, gold: 255, xp: 207, streak: st }); });
+  // (software rendering is slow: hold the cards on screen for the picture)
+  await page.evaluate(() => { for (const c of document.querySelectorAll('#notes .note-c')) clearTimeout(c._t); });
+  console.log('notes:', await page.evaluate(() => [...document.querySelectorAll('#notes .note-c:not(.gone)')].map((c) => c.textContent)));
   await page.screenshot({ path: `${OUT}/${name}.png` });
   // the boxes, to check by number that none sits on another
   const boxes = await page.evaluate(() => Object.fromEntries(['#compass-box', '#alerts', '#notes', '#feed', '#score', '#menu-btn'].map((s) => { const r = document.querySelector(s)?.getBoundingClientRect(); return [s, r && [Math.round(r.left), Math.round(r.top), Math.round(r.right), Math.round(r.bottom)]]; })));

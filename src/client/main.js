@@ -53,6 +53,7 @@ S.renderHangar = () => renderHangar();
 // how many weapons stand on the pad (for the tests: none, out of the market)
 S.hangarArms = () => hangar.scene.children.filter((c) => c.children[0]?.userData?.model).length;
 S.note = (t, c) => toast(t, c);
+S.reward = (m) => onReward(m); // the screenshot tools play a run of kills through it
 S.world = world; S.camera = camera; S.buildPlane = buildPlane; S.buildBomber = buildBomber; S.scene = scene;
 S.look = controls.look;
 
@@ -772,7 +773,7 @@ function hook(room) {
   room.onMessage('fired', (m) => { if (S.me) S.me.ammo = m.ammo; sound.launch(); });
   room.onMessage('flared', (m) => {
     if (S.me) S.me.flares = m.flares;
-    if (m.pulled) S.warnUntil = 0, toast('הטיל הוטעה');
+    if (m.pulled) S.warnUntil = 0;
   });
   room.onMessage('flare', (m) => {
     const p = m.k === S.myKey ? S.me?.mesh : S.others.get(m.k)?.mesh;
@@ -788,15 +789,13 @@ function hook(room) {
   });
   room.onMessage('incoming', () => { S.warnUntil = performance.now() + 3500; sound.warn(); });
   // out-flown: it goes on past, blind
-  room.onMessage('dodged', () => { S.warnUntil = 0; toast('התחמקת מהטיל!', 'lvl'); sound.whoosh(); });
-  room.onMessage('missed', () => toast('הטיל שלך הוטעה בתמרון'));
+  room.onMessage('dodged', () => { S.warnUntil = 0; toast('התחמקת!', 'lvl'); sound.whoosh(); });
   // two planes met: sparks, a burst, and a jolt if one of them was us
   room.onMessage('ram', (m) => {
     const p = new Vector3(m.at[0] / 10, m.at[1] / 10, m.at[2] / 10);
     fx.pop(p, 1.2);
     for (let i = 0; i < 6; i++) fx.spark(p.clone().add(new Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(6)));
     sound.boom(near(p) * 0.7);
-    if (m.a === S.myKey || m.b === S.myKey) toast('התנגשות', 'bad');
   });
   // the bomber: it comes, its gunners fire, it goes down (or away)
   room.onMessage('bossStart', () => { toast('מפציץ מעל העיר — הפילו אותו יחד', 'lvl'); sound.warn(); });
@@ -929,12 +928,18 @@ function onDown(m) {
 function onReward(m) {
   const before = S.pilot.level;
   S.pilot = m.pilot;
-  toast(m.boss ? `המפציץ · ${m.share}% מהנזק  +${m.xp} XP  +${m.gold} זהב` : `${m.assist ? 'סיוע' : 'הפלה'}  +${m.xp} XP  +${m.gold} זהב`);
-  if (m.boss && m.top) setTimeout(() => toast('הכי הרבה נזק למפציץ', 'lvl'), 900);
   sound.coin();
-  if (m.streak >= 3 && !m.assist) toast(`רצף של ${m.streak}`);
+  if (m.boss) toast(`המפציץ · ${m.share}% מהנזק · +${m.gold} זהב`, m.top ? 'lvl' : '');
+  else {
+    // one card for the kills in a run: a quick second kill adds to it rather
+    // than stacking another (and the streak rides on it, not on its own card)
+    const now = performance.now(), k = S.kills && now - S.kills.at < NOTE.hold ? S.kills : (S.kills = { n: 0, gold: 0 });
+    k.at = now; k.n += m.assist ? 0 : 1; k.gold += m.gold;
+    const what = k.n > 1 ? `${k.n} הפלות` : k.n ? 'הפלה' : 'סיוע';
+    toast(`${what} · +${fmt(k.gold)} זהב${m.streak >= 3 && !m.assist ? ` · רצף ${m.streak}` : ''}`, '', 'kill');
+  }
   if (m.up || S.pilot.level > before) {
-    setTimeout(() => toast(`רמה ${S.pilot.level}`, 'lvl'), 500);
+    setTimeout(() => toast(`רמה ${S.pilot.level}!`, 'lvl', 'level'), 500);
     sound.level();
   }
 }
@@ -1045,7 +1050,6 @@ function air(dt, time) {
     }
     // under the bridge: a cheer (once per pass)
     const under = underBridge(b.x, b.y, b.z);
-    if (under && !me.under) toast('מתחת לגשר');
     me.under = under;
     S.sendT += dt;
     if (S.sendT >= 0.05) {
@@ -1530,13 +1534,23 @@ function feed(html, mine) {
  * three seconds. The same words again only keep their card up longer; four
  * at most, the oldest leaving first. `cls`: 'lvl' good news, 'bad' bad.
  */
-const NOTE = { hold: 2800, max: 3 };
-function toast(text, cls = '') {
+const NOTE = { hold: 2800, max: 3, maxAir: 2 };
+function toast(text, cls = '', key = '') {
   const box = $('#notes');
-  for (const c of box.children) if (c.dataset.text === text && !c.classList.contains('gone')) return void keep(c);
+  box.classList.toggle('air', S.mode === 'air');
+  for (const c of box.children) {
+    if (c.classList.contains('gone')) continue;
+    // the same words, or a card of the same kind: that card says it now, and stays up longer
+    if (c.dataset.text === text || (key && c.dataset.key === key)) {
+      c.dataset.text = text;
+      c.querySelector('.note-x').textContent = text;
+      return void keep(c);
+    }
+  }
   const c = document.createElement('div');
   c.className = 'note-c';
   c.dataset.text = text;
+  c.dataset.key = key;
   const x = document.createElement('div');
   x.className = `note-x ${cls === 'lvl' ? 'lvl' : cls === 'bad' ? 'bad' : ''}`;
   x.textContent = text;
@@ -1544,7 +1558,8 @@ function toast(text, cls = '') {
   c.firstChild.append(x);
   box.append(c);
   const live = [...box.children].filter((n) => !n.classList.contains('gone'));
-  if (live.length > NOTE.max) drop(live[0]);
+  // in the air, two at most: the fight comes first
+  while (live.length > (S.mode === 'air' ? NOTE.maxAir : NOTE.max)) drop(live.shift());
   keep(c);
   sound.note(cls === 'lvl');
 }
