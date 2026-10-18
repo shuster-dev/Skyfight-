@@ -26,6 +26,7 @@ export function normalize(p) {
   p.level = levelOf(p.xp);
   p.gold = Math.max(0, p.gold | 0);
   p.kills |= 0; p.deaths |= 0; p.best |= 0;
+  p.gifts = Array.isArray(p.gifts) ? p.gifts.filter((x) => typeof x === 'string').slice(0, 200) : [];
   p.planes = [...new Set([START_PLANE, ...(p.planes || [])].filter((k) => PLANES[k]))];
   if (!p.planes.includes(p.plane)) p.plane = START_PLANE;
   p.paints = [...new Set(['stock', ...(p.paints || [])].filter((k) => PAINTS[k]))];
@@ -71,6 +72,7 @@ export const view = (p) => ({
 /** Buy a plane: open at this level, not owned, and the gold to pay. */
 export function buyPlane(p, id) {
   if (!PLANES[id]) return { error: 'no_such_plane' };
+  if (PLANES[id].gift) return { error: 'gift_only' };
   if (planeOwned(p, id)) return { error: 'owned' };
   if (!planeOpen(p, id)) return { error: 'level' };
   if (p.gold < PLANES[id].price) return { error: 'gold' };
@@ -114,6 +116,31 @@ export function adminEdit(p, b = {}) {
     did = true;
   }
   return did ? { ok: true } : { error: 'nothing_to_do' };
+}
+
+/**
+ * Gift codes: a word handed out (ALFASI), typed in the hangar, good once
+ * for each pilot. Each gives a plane (and whatever else is added here).
+ */
+export const GIFTS = {
+  ALFASI: { plane: 'alfasi', he: 'מסוק הקרב של אלפסי' },
+};
+export const giftKey = (code) => String(code || '').trim().toUpperCase().replace(/\s+/g, '');
+export function redeemGift(p, code) {
+  const k = giftKey(code);
+  const g = Object.hasOwn(GIFTS, k) ? GIFTS[k] : null;
+  if (!g) return { error: 'no_such_gift' };
+  p.gifts ||= [];
+  if (p.gifts.includes(k)) return { error: 'gift_used' };
+  p.gifts.push(k);
+  if (g.plane) {
+    if (!planeOwned(p, g.plane)) p.planes.push(g.plane);
+    p.upgrades[g.plane] ||= noTiers();
+    p.loadout[g.plane] ||= { ...(p.loadout[p.plane] || { gun: START_GUN, missile: START_MISSILE }) };
+    p.plane = g.plane;
+  }
+  if (g.gold) p.gold = (p.gold || 0) + g.gold;
+  return { ok: true, gift: { he: g.he, plane: g.plane || '', gold: g.gold || 0 } };
 }
 
 /** Take a plane you own out of the hangar. */

@@ -7,7 +7,7 @@ import { makeRenderer, makeWorld, inCloud, makePads } from './gfx/scene.js';
 import { buildPlane, buildBomber, animatePlane } from './gfx/planes.js';
 import { Fx } from './gfx/fx.js';
 import { Hangar } from './gfx/hangar.js';
-import { ARMS, GUNS, GUN_ORDER, MISSILES, MISSILE_ORDER, PAINTS, PAINT_ORDER, PLANES, PLANE_ORDER, UPGRADES, UPGRADE_ORDER, TIER_MAX, nextTier, statsOf, tiersOf, levelProgress, planeOpen, planeOwned, cleanCallsign, displayName } from '../shared/planes.js';
+import { ARMS, GUNS, GUN_ORDER, MISSILES, MISSILE_ORDER, PAINTS, PAINT_ORDER, PLANES, PLANE_ORDER, GIFT_PLANES, UPGRADES, UPGRADE_ORDER, TIER_MAX, nextTier, statsOf, tiersOf, levelProgress, planeOpen, planeOwned, cleanCallsign, displayName } from '../shared/planes.js';
 import { ARENA, BRIDGE, HEAL, HEALS, groundAt, underBridge } from '../shared/arena.js';
 import { flyQ, forward, newBodyQ, drawnQ, Q as QQ } from '../shared/flight.js';
 import { DODGE, FLARE, GUN, MISSILE, RESPAWN, aimDir, gunTarget, leadPoint, offNose, pickTarget } from '../shared/combat.js';
@@ -22,6 +22,7 @@ const ERR = {
   username_taken: 'השם הזה כבר תפוס', invalid_username: 'שם משתמש: 3–16 אותיות אנגלית קטנות ומספרים', invalid_password: 'סיסמה: לפחות 4 תווים',
   bad_code: 'כותבים שם#מספר, כמו מאיר#1', no_such_pilot: 'אין טייס כזה — בדקו את השם והמספר', self: 'אי אפשר להוסיף את עצמכם',
   already_friends: 'כבר חברים', friends_full: 'רשימת החברים מלאה',
+  no_such_gift: 'אין קוד כזה', gift_used: 'כבר מימשת את הקוד הזה', gift_only: 'המטוס הזה רק בקוד מתנה',
   not_admin: 'רק לאדמין', bad_gold: 'כמות זהב לא תקינה', bad_level: 'רמה בין 1 ל־30', no_such_plane: 'אין מטוס כזה', nothing_to_do: 'לא נבחר שינוי',
   gold: 'אין מספיק זהב', level: 'צריך רמה גבוהה יותר', too_many_requests: 'יותר מדי ניסיונות — חכו רגע', no_pilot: 'קודם בוחרים שם',
 };
@@ -270,15 +271,19 @@ function renderHangar() {
   $('#btn-launch').textContent = `המראה · ${PLANES[p.plane].he}`;
 }
 
+/** The planes on the table, in order: the ladder, then any gift ones the pilot has. */
+const rowOf = (p) => [...PLANE_ORDER, ...GIFT_PLANES.filter((k) => planeOwned(p, k))];
+
 /** The plane on the table: its name, its era, and what can be done with it. */
 function renderPlanes() {
   const p = S.pilot, k = viewing || p.plane, d = PLANES[k];
   const own = planeOwned(p, k), open = planeOpen(p, k), sel = p.plane === k;
-  $('#hp-era').innerHTML = `${PLANE_ORDER.indexOf(k) + 1}/${PLANE_ORDER.length} · ${esc(d.era)} · ${esc(d.kind)}${d.ace ? ' <span class="ace">עלית</span>' : ''}`;
+  const row = rowOf(p);
+  $('#hp-era').innerHTML = `${d.gift ? '' : `${PLANE_ORDER.indexOf(k) + 1}/${PLANE_ORDER.length} · `}${esc(d.era)} · ${esc(d.kind)}${d.gift ? ' <span class="ace">מתנה</span>' : d.ace ? ' <span class="ace">עלית</span>' : ''}`;
   $('#hp-name').textContent = d.he;
   $('#hp-name').classList.toggle('ace', !!d.ace);
   $('#hp-role').textContent = d.role;
-  $('#hp-dots').innerHTML = PLANE_ORDER.map((id) => `<i class="${id === k ? 'on' : ''} ${planeOwned(p, id) ? 'own' : ''} ${PLANES[id].ace ? 'ace' : ''}"></i>`).join('');
+  $('#hp-dots').innerHTML = row.map((id) => `<i class="${id === k ? 'on' : ''} ${planeOwned(p, id) ? 'own' : ''} ${PLANES[id].gift ? 'gift' : PLANES[id].ace ? 'ace' : ''}"></i>`).join('');
   const act = $('#hp-act');
   act.className = 'h-act';
   act.disabled = false;
@@ -317,9 +322,25 @@ $('#hp-paint-act').addEventListener('click', async (e) => {
   } catch (x) { toast(err(x), 'bad'); }
 });
 
+// a gift code: typed in, and whatever it gives is on the table at once
+$('#gift-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const code = $('#gift-code').value.trim();
+  if (!code) return;
+  try {
+    const r = await net.api('/api/pilot/gift', { code });
+    S.pilot = r.pilot;
+    $('#gift-code').value = '';
+    sound.coin();
+    toast(`מתנה! ${r.gift.he}`, 'lvl');
+    if (r.gift.plane) viewing = r.gift.plane;
+    renderHangar();
+  } catch (x) { toast(err(x), 'bad'); }
+});
+
 const step = (dir) => {
-  const i = PLANE_ORDER.indexOf(viewing || S.pilot.plane);
-  viewing = PLANE_ORDER[(i + dir + PLANE_ORDER.length) % PLANE_ORDER.length];
+  const row = rowOf(S.pilot), i = row.indexOf(viewing || S.pilot.plane);
+  viewing = row[(i + dir + row.length) % row.length];
   hangar.show(viewing, paintView || S.pilot.paint, loadOf(viewing));
   renderPlanes();
 };
@@ -552,7 +573,7 @@ async function adminLoad(code) {
   } catch (x) { card.innerHTML = `<div class="note">${err(x)}</div>`; }
 }
 function paintAdmin(a) {
-  const missing = PLANE_ORDER.filter((k) => !a.planes.includes(k));
+  const missing = [...PLANE_ORDER, ...GIFT_PLANES].filter((k) => !a.planes.includes(k));
   $('#ad-card').innerHTML = `<div class="ad-card">
     <div class="ad-who"><b dir="auto">${esc(a.code)}</b><span>רמה ${a.level} · <span class="num">${fmt(a.gold)}</span> זהב · ${a.planes.length}/${PLANE_ORDER.length} מטוסים</span></div>
     <div class="ad-row"><span class="k">זהב</span><input id="ad-gold" type="number" inputmode="numeric" min="0" placeholder="${a.gold}">
@@ -704,6 +725,15 @@ function hook(room) {
   room.onMessage('fix', (m) => { if (S.me?.body) Object.assign(S.me.body, m), (S.me.body.q = QQ.euler(m.yaw, m.pitch, 0)); });
   room.onMessage('s', onSnapshot);
   room.onMessage('score', (sc) => paintTeams(sc));
+  room.onMessage('royal', (m) => {
+    $('#royal')?.remove();
+    const el = document.createElement('div');
+    el.id = 'royal';
+    el.innerHTML = `<b>${esc(m.text)}</b><small dir="auto">${esc(m.name)}</small>`;
+    document.body.appendChild(el);
+    sound.coin();
+    setTimeout(() => el.remove(), 4600);
+  });
   room.onMessage('friendIn', (m) => toast(`${m.name} הצטרף אליך`, 'lvl'));
   room.onMessage('roster', (list) => {
     S.roster = new Map(list.map((r) => [r.key, r]));

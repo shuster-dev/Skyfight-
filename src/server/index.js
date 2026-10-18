@@ -10,7 +10,7 @@ import crypto from 'node:crypto';
 import { openStore, tagKey } from './store.js';
 import { presence } from './presence.js';
 import { hashPassword, verifyPassword, signToken, verifyToken, validateUsername } from './auth.js';
-import { adminEdit, buyArm, equipArm, buyPaint, buyPlane, buyUpgrade, choosePaint, choosePlane, newPilot, normalize, view } from './pilot.js';
+import { adminEdit, redeemGift, buyArm, equipArm, buyPaint, buyPlane, buyUpgrade, choosePaint, choosePlane, newPilot, normalize, view } from './pilot.js';
 import { ArenaRoom } from './rooms/ArenaRoom.js';
 import { cleanCallsign, displayName, levelOf } from '../shared/planes.js';
 
@@ -149,6 +149,8 @@ app.post('/api/pilot/upgrade', requireAuth, hangar((p, b) => buyUpgrade(p, Strin
 app.post('/api/pilot/buy-paint', requireAuth, hangar((p, b) => buyPaint(p, String(b.paint || ''))));
 app.post('/api/pilot/paint', requireAuth, hangar((p, b) => choosePaint(p, String(b.paint || ''))));
 app.post('/api/pilot/buy-arm', requireAuth, hangar((p, b) => buyArm(p, String(b.kind || ''), String(b.id || ''), b.plane ? String(b.plane) : p.plane)));
+// a gift code: guessed at, so knocked on slowly
+app.post('/api/pilot/gift', requireAuth, knock.mw(), hangar((p, b) => redeemGift(p, b.code)));
 app.post('/api/pilot/arm', requireAuth, hangar((p, b) => equipArm(p, String(b.kind || ''), String(b.id || ''), b.plane ? String(b.plane) : p.plane)));
 
 // --- friends ----------------------------------------------------------------
@@ -255,6 +257,7 @@ gameServer.define('arena_teams', ArenaRoom, { store, mode: 'teams', noBots: proc
 if (TESTING) {
   gameServer.define('arena_duel', ArenaRoom, { store, noBots: true, boss: false });
   gameServer.define('arena_teams_test', ArenaRoom, { store, mode: 'teams', noBots: true, boss: false });
+  gameServer.define('arena_gift_test', ArenaRoom, { store, noBots: true, boss: false });
   gameServer.define('arena_pad_test', ArenaRoom, { store, noBots: true, boss: false, startHp: 0.4 });
   gameServer.define('arena_boss_test', ArenaRoom, { store, noBots: true, bossFirst: 300, bossHp: 60 });
 }

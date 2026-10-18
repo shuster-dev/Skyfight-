@@ -11,7 +11,7 @@
 // carried gun's muzzles), load ({ missile, gun }).
 import {
   AdditiveBlending, BufferAttribute, BufferGeometry, CanvasTexture, ConeGeometry, CylinderGeometry, Group, Mesh,
-  MeshBasicMaterial, MeshStandardMaterial, SphereGeometry, SRGBColorSpace, Vector3, BoxGeometry, TorusGeometry, Color,
+  MeshBasicMaterial, MeshStandardMaterial, SphereGeometry, SRGBColorSpace, Vector3, BoxGeometry, TorusGeometry, Color, PlaneGeometry,
 } from 'three';
 import { PAINTS, PLANES } from '../../shared/planes.js';
 import { buildMissile } from './arms.js';
@@ -168,6 +168,8 @@ const canvas = (w, h) => { const c = document.createElement('canvas'); c.width =
  * 0), top half the upper surface, bottom half the lower.
  */
 const SCHEMES = {
+  // the king's attack helicopter: dark olive, a gold band, the flag on both flanks
+  alfasi: { top: '#3f4a2c', blot: ['#343d24', '#4a5634'], under: '#4b5636', metal: 0.25, rough: 0.55, band: '#e8c04a', low: false, num: '1', ace: '#f2c230' },
   // olive drab over neutral grey, yellow nose band — late war
   sparrow: { top: '#4d5730', blot: ['#3d4526', '#5b6438'], under: '#9fa197', metal: 0.15, rough: 0.6, nose: '#e2b52c', low: false, num: '17' },
   // bare polished aluminium, black glare panel, a yellow band
@@ -406,7 +408,101 @@ function mats(id) {
   return m;
 }
 
+/** The flag of Israel, as a decal: white, two blue stripes, the Star of David. */
+let FLAG = null;
+function flagDecal(w, h) {
+  if (!FLAG) {
+    const [c, g] = canvas(330, 240), W = 330, H = 240, blue = '#1d3f9e';
+    g.fillStyle = '#fafafa'; g.fillRect(0, 0, W, H);
+    g.fillStyle = blue; g.fillRect(0, H * 0.1, W, H * 0.15); g.fillRect(0, H * 0.75, W, H * 0.15);
+    g.strokeStyle = blue; g.lineWidth = 9;
+    for (const flip of [1, -1]) {
+      g.beginPath();
+      for (let i = 0; i < 3; i++) {
+        const a = -Math.PI / 2 * flip + (i * 2 * Math.PI) / 3, x = W / 2 + Math.cos(a) * 46, y = H / 2 + Math.sin(a) * 46;
+        i ? g.lineTo(x, y) : g.moveTo(x, y);
+      }
+      g.closePath(); g.stroke();
+    }
+    FLAG = new MeshStandardMaterial({ map: tex(c), roughness: 0.5, metalness: 0.1, polygonOffset: true, polygonOffsetFactor: -2 });
+  }
+  return new Mesh(new PlaneGeometry(w, h), FLAG);
+}
+
 const BUILD = {
+  // the king's attack helicopter (gift code only): a narrow armoured body, a
+  // stepped two-seat canopy, a four-blade rotor, stub wings with a heavy gun
+  // and missiles on each, the flag on both flanks
+  alfasi() {
+    const M = mats('alfasi'), g = new Group();
+    g.add(new Mesh(loft([
+      { z: -5.4, w: 0.45, h: 0.55, y: -0.15 }, { z: -4.9, w: 0.95, h: 1.05, y: -0.1 }, { z: -3.4, w: 1.2, h: 1.55 }, { z: -1.2, w: 1.45, h: 1.95, y: 0.12 },
+      { z: 0.9, w: 1.45, h: 1.85, y: 0.12 }, { z: 2.3, w: 0.95, h: 1.15, y: 0.3 }, { z: 4.4, w: 0.5, h: 0.6, y: 0.48 }, { z: 7.3, w: 0.32, h: 0.42, y: 0.58 }, { z: 7.9, w: 0.2, h: 0.3, y: 0.62 },
+    ]), M.body));
+    // the sensor ball on the nose, and the chin gun under it
+    const ball = new Mesh(new SphereGeometry(0.5, 16, 12), DARK());
+    ball.position.set(0, -0.15, -5.3);
+    const eye = new Mesh(new SphereGeometry(0.2, 12, 8), GLASS());
+    eye.position.set(0, -0.1, -5.72);
+    const chin = new Mesh(new CylinderGeometry(0.07, 0.07, 1.3, 8).rotateX(Math.PI / 2), STEEL());
+    chin.position.set(0, -0.75, -4.6);
+    g.add(ball, eye, chin);
+    // the stepped canopy: the gunner low in front, the pilot behind and above
+    g.add(canopy(-3.5, 0.5, 0.95, 0.55, 0.45, true), canopy(-1.9, 0.85, 1.0, 0.6, 0.52, true));
+    // the engines either side of the mast, with their exhausts turned out
+    for (const sx of [-1, 1]) {
+      const e = new Mesh(new CylinderGeometry(0.4, 0.44, 2.4, 14).rotateX(Math.PI / 2), M.body);
+      e.position.set(sx * 0.9, 0.95, 0.5);
+      const ex = new Mesh(new CylinderGeometry(0.26, 0.3, 0.5, 10).rotateX(Math.PI / 2), STEEL());
+      ex.position.set(sx * 1.05, 0.95, 1.85);
+      g.add(e, ex);
+    }
+    // the mast and the main rotor, flat over the top
+    const mast = new Mesh(new CylinderGeometry(0.16, 0.22, 0.9, 10), STEEL());
+    mast.position.set(0, 1.55, -0.2);
+    g.add(mast);
+    const rotor = propeller(0, 0, 4, 6.4, 0x2b2d31);
+    const head = new Group();
+    head.rotation.x = -Math.PI / 2; head.position.set(0, 2.05, -0.2);
+    head.add(rotor);
+    g.add(head);
+    // the tail: a fin, a small tailplane, the tail rotor on the right
+    g.add(new Mesh(fin({ y0: 0.5, height: 1.7, chord: (t) => 1.3 - 0.45 * t, le: (t) => 6.5 + 0.6 * t }), M.fin));
+    for (const w of wings({ x0: 0.15, span: 1.3, chord: () => 0.75, le: () => 6.6, y0: 0.5, thick: 0.08 })) g.add(new Mesh(w, M.wing));
+    const tailRotor = propeller(0, 0, 4, 0.9, 0x2b2d31);
+    const th = new Group();
+    th.rotation.y = Math.PI / 2; th.position.set(0.35, 1.25, 7.6);
+    th.add(tailRotor);
+    g.add(th);
+    // stub wings, a heavy gun pod at each tip, two missiles under each
+    for (const w of wings({ x0: 0.7, span: 1.8, chord: (t) => 1.1 - 0.25 * t, le: () => -0.7, y0: -0.15, dihedral: -0.04, thick: 0.14 })) g.add(new Mesh(w, M.wing));
+    for (const sx of [-1, 1]) {
+      const pod = new Mesh(new CylinderGeometry(0.22, 0.26, 1.6, 12).rotateX(Math.PI / 2), DARK());
+      pod.position.set(sx * 2.55, -0.25, -0.5);
+      g.add(pod);
+    }
+    const missiles = [store(1.55, -0.55, -0.1, LOAD.missile), store(-1.55, -0.55, -0.1, LOAD.missile), store(2.05, -0.55, -0.1, LOAD.missile), store(-2.05, -0.55, -0.1, LOAD.missile)];
+    missiles.forEach((m) => g.add(m));
+    const guns = [new Vector3(-2.55, -0.25, -1.35), new Vector3(2.55, -0.25, -1.35)];
+    // the skids
+    for (const sx of [-1, 1]) {
+      const sk = new Mesh(new CylinderGeometry(0.07, 0.07, 4.6, 8).rotateX(Math.PI / 2), DARK());
+      sk.position.set(sx * 0.85, -1.25, -0.6);
+      const st1 = new Mesh(new CylinderGeometry(0.05, 0.05, 0.6, 6), DARK()), st2 = st1.clone();
+      st1.position.set(sx * 0.8, -0.98, -1.8); st2.position.set(sx * 0.8, -0.98, 0.6);
+      g.add(sk, st1, st2);
+    }
+    // the flag of Israel on both flanks of the cabin
+    for (const sx of [-1, 1]) {
+      const f = flagDecal(1.25, 0.9);
+      f.position.set(sx * 0.74, 0.25, 0.1);
+      f.rotation.y = sx * Math.PI / 2;
+      g.add(f);
+    }
+    g.userData = { props: [rotor, tailRotor], flames: [], guns, tips: [new Vector3(-2.6, -0.25, 0.3), new Vector3(2.6, -0.25, 0.3)], missiles, len: 13.3, ace: true, heli: true };
+    return g;
+  },
+
   // the last of the piston fighters: round nose, four blades, straight tapered wing
   sparrow() {
     const M = mats('sparrow'), g = new Group();
