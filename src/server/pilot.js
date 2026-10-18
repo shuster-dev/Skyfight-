@@ -14,7 +14,9 @@ export function newPilot(id) {
     upgrades: { [START_PLANE]: noTiers() }, // each plane its own
     paint: 'stock', paints: ['stock'],
     // the market: what is owned on each shelf, and what is carried
-    arms: { guns: [START_GUN], missiles: [START_MISSILE] }, gun: START_GUN, missile: START_MISSILE,
+    arms: { guns: [START_GUN], missiles: [START_MISSILE] },
+    // what each plane carries
+    loadout: { [START_PLANE]: { gun: START_GUN, missile: START_MISSILE } },
   };
 }
 
@@ -33,8 +35,14 @@ export function normalize(p) {
     guns: [...new Set([START_GUN, ...(a.guns || [])].filter((k) => ARMS.guns[k]))],
     missiles: [...new Set([START_MISSILE, ...(a.missiles || [])].filter((k) => ARMS.missiles[k]))],
   };
-  if (!p.arms.guns.includes(p.gun)) p.gun = START_GUN;
-  if (!p.arms.missiles.includes(p.missile)) p.missile = START_MISSILE;
+  // what each plane carries (once one choice for every plane: that becomes
+  // each plane's), only what is owned
+  const lo = p.loadout || {};
+  p.loadout = Object.fromEntries(p.planes.map((id) => {
+    const l = lo[id] || { gun: p.gun, missile: p.missile };
+    return [id, { gun: p.arms.guns.includes(l.gun) ? l.gun : START_GUN, missile: p.arms.missiles.includes(l.missile) ? l.missile : START_MISSILE }];
+  }));
+  delete p.gun; delete p.missile;
   p.friends = [...new Set((Array.isArray(p.friends) ? p.friends : []).filter((x) => typeof x === 'string'))].slice(0, 60);
   // upgrades used to be the pilot's, for every plane: an old record keeps
   // them, now on each plane it owns
@@ -50,7 +58,7 @@ export const view = (p) => ({
   name: p.name, tag: p.tag || 0, xp: p.xp, level: p.level, gold: p.gold,
   kills: p.kills, deaths: p.deaths, best: p.best,
   plane: p.plane, planes: p.planes, upgrades: p.upgrades, paint: p.paint, paints: p.paints,
-  arms: p.arms, gun: p.gun, missile: p.missile,
+  arms: p.arms, loadout: p.loadout,
 });
 
 /** Buy a plane: open at this level, not owned, and the gold to pay. */
@@ -62,6 +70,7 @@ export function buyPlane(p, id) {
   p.gold -= PLANES[id].price;
   p.planes.push(id);
   p.upgrades[id] ||= noTiers();
+  p.loadout[id] ||= { ...(p.loadout[p.plane] || { gun: START_GUN, missile: START_MISSILE }) };
   p.plane = id;
   return { ok: true };
 }
@@ -97,7 +106,7 @@ export function choosePaint(p, id) {
  */
 // own keys only: a name off the wire is not to reach Object.prototype
 const armOf = (kind, id) => (Object.hasOwn(ARMS, kind) && Object.hasOwn(ARMS[kind], id) ? ARMS[kind][id] : null);
-export function buyArm(p, kind, id) {
+export function buyArm(p, kind, id, plane = p.plane) {
   const w = armOf(kind, id);
   if (!w) return { error: 'no_such_weapon' };
   if (p.arms[kind].includes(id)) return { error: 'owned' };
@@ -105,13 +114,17 @@ export function buyArm(p, kind, id) {
   if (p.gold < w.price) return { error: 'gold' };
   p.gold -= w.price;
   p.arms[kind].push(id);
-  return equipArm(p, kind, id);
+  // bought for a plane: it goes straight on it (if that plane is yours)
+  return planeOwned(p, plane) ? equipArm(p, kind, id, plane) : { ok: true };
 }
-export function equipArm(p, kind, id) {
+/** Put a gun or missile you own on one of your planes: that plane carries it from now on. */
+export function equipArm(p, kind, id, plane = p.plane) {
   if (!armOf(kind, id)) return { error: 'no_such_weapon' };
   if (!p.arms[kind].includes(id)) return { error: 'not_owned' };
-  if (kind === 'guns') p.gun = id; else p.missile = id;
-  return { ok: true };
+  if (!PLANES[plane] || !planeOwned(p, plane)) return { error: 'not_owned' };
+  const l = (p.loadout[plane] ||= { gun: START_GUN, missile: START_MISSILE });
+  if (kind === 'guns') l.gun = id; else l.missile = id;
+  return { ok: true, plane };
 }
 
 /** Buy the next tier of an upgrade, for one plane (the one flown, unless said). */

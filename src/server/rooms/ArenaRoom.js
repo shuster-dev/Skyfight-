@@ -83,7 +83,7 @@ export class ArenaRoom extends Room {
       this.drop(p.key);
     }
     const pilot = auth.pilot;
-    const p = this.addPlane({ uid: auth.id, sid: client.sessionId, name: displayName(pilot), plane: pilot.plane, paint: pilot.paint, level: pilot.level, upgrades: tiersOf(pilot, pilot.plane), arms: { gun: pilot.gun, missile: pilot.missile }, pilot, team: this.pickTeam(true) });
+    const p = this.addPlane({ uid: auth.id, sid: client.sessionId, name: displayName(pilot), plane: pilot.plane, paint: pilot.paint, level: pilot.level, upgrades: tiersOf(pilot, pilot.plane), arms: pilot.loadout?.[pilot.plane] || {}, pilot, team: this.pickTeam(true) });
     this.bySession.set(client.sessionId, p.key);
     presence.enter(auth.id, this.roomId, this.teams ? 'teams' : 'ffa');
     this.fillBots();
@@ -566,7 +566,7 @@ export class ArenaRoom extends Room {
   }
 
   roster() {
-    return [...this.planes.values()].map((p) => ({ key: p.key, name: p.name, plane: p.plane, paint: p.paint, gun: p.stats.gun, team: p.team, level: p.level, bot: !!p.bot, kills: p.kills, deaths: p.deaths, streak: p.streak }));
+    return [...this.planes.values()].map((p) => ({ key: p.key, name: p.name, plane: p.plane, paint: p.paint, gun: p.stats.gun, missile: p.stats.missile, team: p.team, level: p.level, bot: !!p.bot, kills: p.kills, deaths: p.deaths, streak: p.streak }));
   }
 
   // ---- bots ---------------------------------------------------------------

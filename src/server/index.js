@@ -137,8 +137,8 @@ app.post('/api/pilot/buy-plane', requireAuth, hangar((p, b) => buyPlane(p, Strin
 app.post('/api/pilot/upgrade', requireAuth, hangar((p, b) => buyUpgrade(p, String(b.upgrade || ''), b.plane ? String(b.plane) : p.plane)));
 app.post('/api/pilot/buy-paint', requireAuth, hangar((p, b) => buyPaint(p, String(b.paint || ''))));
 app.post('/api/pilot/paint', requireAuth, hangar((p, b) => choosePaint(p, String(b.paint || ''))));
-app.post('/api/pilot/buy-arm', requireAuth, hangar((p, b) => buyArm(p, String(b.kind || ''), String(b.id || ''))));
-app.post('/api/pilot/arm', requireAuth, hangar((p, b) => equipArm(p, String(b.kind || ''), String(b.id || ''))));
+app.post('/api/pilot/buy-arm', requireAuth, hangar((p, b) => buyArm(p, String(b.kind || ''), String(b.id || ''), b.plane ? String(b.plane) : p.plane)));
+app.post('/api/pilot/arm', requireAuth, hangar((p, b) => equipArm(p, String(b.kind || ''), String(b.id || ''), b.plane ? String(b.plane) : p.plane)));
 
 // --- friends ----------------------------------------------------------------
 // Added by name and number (מאיר#1), both ways at once: if I have you, you

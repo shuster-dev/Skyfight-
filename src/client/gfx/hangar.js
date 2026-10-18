@@ -179,25 +179,40 @@ export class Hangar {
 
     this.holder = new Group();
     scene.add(this.holder);
-    this.plane = null; this.kind = ''; this.t = 0; this.swapT = 1;
+    this.plane = null; this.kind = ''; this.t = 0; this.swapT = 1; this.fitT = 1; this.lk = '';
     this.leaving = [];
     this.drag = 0; this.spin = 0;
   }
 
-  /** Bring this plane onto the pad (the last one lifts away). */
-  show(kind, paint = 'stock') {
-    if (kind === this.kind && paint === this.paint) return;
-    this.paint = paint;
-    if (this.plane) this.leaving.push({ m: this.plane, t: 0 });
-    // flicking through fast: only the last one is still on its way out
-    while (this.leaving.length > 1) this.holder.remove(this.leaving.shift().m);
+  /**
+   * Bring this plane onto the pad (the last one lifts away). With the same
+   * plane and only its load changed, it stays where it is and the new
+   * missiles and guns are fitted on it there and then: they grow onto the
+   * pylons with a flash.
+   */
+  show(kind, paint = 'stock', load = {}) {
+    const lk = `${load.missile || ''}/${load.gun || ''}`;
+    if (kind === this.kind && paint === this.paint && lk === this.lk) return;
+    const refit = this.plane && kind === this.kind && paint === this.paint;
+    this.paint = paint; this.lk = lk;
+    const old = this.plane;
     this.kind = kind;
-    this.plane = buildPlane(kind, paint);
+    this.plane = buildPlane(kind, paint, load);
     // scaled to the pad, whatever its size
     const len = this.plane.userData.len || 10;
     this.plane.scale.setScalar(Math.min(1.25, 15 / len));
+    if (refit) {
+      this.plane.position.copy(old.position); this.plane.rotation.copy(old.rotation);
+      this.holder.remove(old);
+      this.fitT = 0;
+    } else {
+      if (old) this.leaving.push({ m: old, t: 0 });
+      // flicking through fast: only the last one is still on its way out
+      while (this.leaving.length > 1) this.holder.remove(this.leaving.shift().m);
+      this.swapT = 0;
+      this.fitT = 1;
+    }
     this.holder.add(this.plane);
-    this.swapT = 0;
   }
 
   resize(aspect) {
@@ -237,6 +252,22 @@ export class Hangar {
       this.plane.position.z = 0;
       this.plane.rotation.z = Math.sin(t * 0.6) * 0.02;
       animatePlane(this.plane, dt, { speed: 20, time: t, ammo: 9, ammoMax: 9 });
+      // a fresh fit: the stores and barrels grow on, glowing, and settle
+      if (this.fitT < 1) {
+        this.fitT = Math.min(1, this.fitT + dt * 2.2);
+        const k = 1 - (1 - this.fitT) ** 3, glow = (1 - this.fitT) * 2.5;
+        for (const m of [...this.plane.userData.missiles, ...this.plane.userData.barrels]) {
+          m.scale.setScalar(0.2 + 0.8 * k);
+          m.traverse((o) => {
+            const mt = o.material;
+            if (!mt?.emissive) return;
+            if (o.userData.e0 === undefined) o.userData.e0 = mt.emissive.getHex(), o.userData.ei0 = mt.emissiveIntensity;
+            // the teal flash, then each part's own glow back (a missile's band keeps its colour)
+            if (this.fitT < 1) mt.emissive.setHex(0x2fd3bd), mt.emissiveIntensity = glow;
+            else mt.emissive.setHex(o.userData.e0), mt.emissiveIntensity = o.userData.ei0;
+          });
+        }
+      }
     }
     for (let i = this.leaving.length - 1; i >= 0; i--) {
       const l = this.leaving[i];

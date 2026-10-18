@@ -19,7 +19,7 @@
 <meta name="twitter:card" content="summary_large_image">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;600;800;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800&family=Rubik:wght@400;600;800;900&display=swap" rel="stylesheet">
 <style>
   :root {
     --ink: #eef4ff; --dim: #9fb3cf; --panel: rgba(12, 22, 40, 0.78); --panel2: rgba(20, 34, 60, 0.92);
@@ -106,20 +106,15 @@
   .up .t { flex: 1; min-width: 0; }
   .up .t b { font-size: 16px; letter-spacing: 0.5px; }
   .up .t small { display: block; color: var(--dim); font-size: 12px; margin-top: 3px; }
-  .shelves { display: flex; gap: 8px; padding: 12px 0 6px; }
-  .shelves button { flex: 1; padding: 9px 0; font-size: 14px; font-weight: 800; color: rgba(255,255,255,0.55); background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); border-radius: 6px; }
-  .shelves button.on { color: #04201c; background: var(--teal); border-color: var(--teal); }
-  .arm { display: flex; align-items: center; gap: 14px; padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.08); }
-  .arm.on .t b { color: var(--teal); }
-  .arm .t { flex: 1; min-width: 0; }
-  .arm .t b { font-size: 16px; }
-  .arm .t small { display: block; color: var(--dim); font-size: 12px; margin-top: 2px; }
-  .arm .t .nums { color: #bfe9e2; }
-  .arm .reach { position: relative; height: 4px; margin-top: 7px; background: rgba(255,255,255,0.1); }
-  .arm .reach i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, #2fd3bd, #6fe6ff); }
-  .arm button { min-width: 96px; padding: 10px 12px; font-weight: 800; font-size: 14px; background: #f1d27a; color: #1d1405; border-radius: 999px; display: flex; gap: 6px; align-items: center; justify-content: center; }
-  .arm button.pick { background: rgba(47,211,189,0.18); color: #bff5ec; border: 1px solid rgba(47,211,189,0.6); }
-  .arm button:disabled { background: rgba(255,255,255,0.08); color: var(--dim); border: 0; }
+  .shelves { align-self: flex-start; display: inline-flex; gap: 0; margin-bottom: 14px; border: 1px solid rgba(255,255,255,0.18); border-radius: 999px; overflow: hidden; }
+  .shelves button { padding: 7px 16px; font-size: 12px; font-weight: 800; letter-spacing: 1.5px; color: rgba(255,255,255,0.55); background: rgba(8,12,18,0.4); }
+  .shelves button.on { color: #04201c; background: var(--teal); }
+  .h-plane.market .pname { font-size: clamp(40px, 11vw, 72px); }
+  .specs { display: grid; gap: 7px; margin-top: 12px; width: 100%; max-width: 360px; align-self: flex-end; }
+  .spec { display: grid; grid-template-columns: 74px 1fr 64px; align-items: center; gap: 10px; font-size: 12px; color: rgba(255,255,255,0.65); }
+  .spec .bar { position: relative; height: 4px; background: rgba(255,255,255,0.12); }
+  .spec .bar i { position: absolute; inset: 0 0 0 auto; background: linear-gradient(270deg, #2fd3bd, #6fe6ff); box-shadow: 0 0 8px rgba(47,211,189,0.6); transition: width 0.35s; }
+  .spec b { font-size: 13px; color: #fff; text-align: left; font-variant-numeric: tabular-nums; }
   .up-head { padding: 12px 0 4px; display: flex; align-items: baseline; gap: 10px; }
   .up-head b { font-size: 20px; letter-spacing: 1px; }
   .up-head small { color: var(--dim); font-size: 12px; }
@@ -159,6 +154,18 @@
     .h-tabs { top: 50px; }
     .h-plane .pname { font-size: 56px; }
     .h-panel { top: 92px; bottom: 116px; }
+    /* the market card on a short screen: the essentials only */
+    .h-plane.market { top: 88px; bottom: 112px; }
+    .h-plane.market > * { flex-shrink: 0; }
+    .h-plane.market .pname { font-size: 34px; margin: 0; }
+    .h-plane.market .era, .h-plane.market .role { display: none; }
+    .h-plane.market .shelves { margin-bottom: 6px; }
+    .h-plane.market .shelves button { padding: 5px 12px; }
+    .h-plane.market .specs { gap: 3px; margin-top: 6px; }
+    .h-plane.market .spec { font-size: 11px; }
+    .h-plane.market .row { margin-top: 8px; }
+    .h-plane.market .chev { width: 36px; height: 36px; }
+    .h-plane.market .h-act { padding: 8px 16px; font-size: 13px; }
     .up { padding: 8px 0; }
     .up .t small { margin-top: 1px; }
     .up-head { padding: 6px 0 0; }
@@ -173,14 +180,14 @@
   .hp > i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #47e08a, #b6f56b); transition: width 0.15s; }
   .hp.low > i { background: linear-gradient(90deg, #ff4d5e, #ff9a3c); }
   /* the board in the air: small, the top three and you, out of the way */
-  /* the radar, top left; the short board under it */
-  #radar-box { position: absolute; top: max(10px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left)); width: 112px; text-align: center; }
-  #radar { width: 112px; height: 112px; display: block; border-radius: 50%; border: 1px solid rgba(120, 220, 200, 0.35); }
-  #radar-near { font-size: 11px; font-weight: 700; color: #ff9a9a; margin-top: 2px; text-shadow: 0 1px 2px #000; min-height: 14px; }
+  /* the compass: a heading tape across the top middle, everyone on it by
+     where they are from the nose */
+  #compass-box { position: absolute; top: max(8px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); width: min(460px, 44vw); pointer-events: none; }
+  #compass { width: 100%; height: 54px; display: block; }
+  @media (max-width: 700px) and (orientation: portrait) { #compass-box { top: calc(max(8px, env(safe-area-inset-top)) + 64px); width: 92vw; } #notes { top: calc(max(10px, env(safe-area-inset-top)) + 128px); } }
   .tagdot { position: absolute; left: 0; top: 0; will-change: transform; width: 5px; height: 5px; margin: -2.5px; border-radius: 50%; background: rgba(255, 120, 130, 0.9); box-shadow: 0 0 3px #000; }
   .tagdot.mate { background: #8fc0ff; }
-  @media (orientation: landscape) and (max-height: 500px) { #radar-box { width: 92px; } #radar { width: 92px; height: 92px; } #hud .tr { top: 120px !important; } }
-  #hud .tr { position: absolute; top: calc(max(10px, env(safe-area-inset-top)) + 134px); left: max(12px, env(safe-area-inset-left)); width: min(150px, 34vw); background: rgba(8, 12, 18, 0.45); border-radius: 8px; padding: 4px 8px; font-size: 11px; line-height: 1.35; }
+  #hud .tr { position: absolute; top: max(10px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left)); width: min(150px, 34vw); background: rgba(8, 12, 18, 0.45); border-radius: 8px; padding: 4px 8px; font-size: 11px; line-height: 1.35; }
   #hud .tr .r { display: flex; gap: 6px; padding: 2px 0; }
   #hud .tr .r .n { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #hud .tr .r.me { color: var(--accent); font-weight: 800; }
@@ -227,9 +234,25 @@
   @keyframes blink { to { opacity: 0.45; } }
   #vig { position: absolute; inset: 0; box-shadow: inset 0 0 140px 40px rgba(255, 30, 50, 0.65); opacity: 0; transition: opacity 0.35s; }
   #white { position: absolute; inset: 0; background: #fff; opacity: 0; }
-  #toast { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); text-align: center; pointer-events: none; }
-  #toast div { font-size: 22px; font-weight: 900; color: #ffd25e; text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7); animation: rise 1.6s forwards; }
-  #toast div.lvl { font-size: 32px; color: var(--teal); }
+  /* game events: a stack of glass cards with a neon edge, high in the middle.
+     Each glides in, holds about three seconds, and fades up and away; the
+     rest close up smoothly behind it. */
+  #notes { position: fixed; top: calc(max(10px, env(safe-area-inset-top)) + 64px); left: 50%; transform: translateX(-50%); width: min(420px, 86vw); display: flex; flex-direction: column; align-items: center; gap: 0; pointer-events: none; z-index: 60; }
+  .note-c { display: grid; grid-template-rows: 1fr; transition: grid-template-rows 0.35s ease, margin 0.35s ease; margin-top: 8px; }
+  .note-c.gone { grid-template-rows: 0fr; margin-top: 0; }
+  .note-c > div { overflow: hidden; display: flex; justify-content: center; }
+  .note-x { position: relative; display: flex; align-items: center; gap: 10px; padding: 9px 18px 9px 16px; border-radius: 6px;
+    background: linear-gradient(180deg, rgba(10, 22, 32, 0.72), rgba(6, 14, 22, 0.62)); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+    border: 1px solid rgba(111, 230, 255, 0.4); box-shadow: 0 0 18px rgba(47, 211, 189, 0.22), inset 0 0 12px rgba(111, 230, 255, 0.08);
+    color: #e8fbff; font-size: 15px; font-weight: 700; letter-spacing: 0.4px; text-shadow: 0 0 8px rgba(111, 230, 255, 0.35); white-space: nowrap;
+    animation: note-in 0.42s cubic-bezier(.2, .9, .3, 1.2) both; }
+  .note-x::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--c, #6fe6ff); box-shadow: 0 0 8px var(--c, #6fe6ff); flex: none; }
+  .note-x::after { content: ''; position: absolute; left: 12%; right: 12%; bottom: -1px; height: 1px; background: linear-gradient(90deg, transparent, var(--c, #6fe6ff), transparent); }
+  .note-x.lvl { --c: #2fd3bd; font-size: 17px; border-color: rgba(47, 211, 189, 0.7); }
+  .note-x.bad { --c: #ff5a64; border-color: rgba(255, 90, 100, 0.6); box-shadow: 0 0 18px rgba(255, 90, 100, 0.25); }
+  .note-x.out { animation: note-out 0.45s ease-in both; }
+  @keyframes note-in { from { opacity: 0; transform: translateY(-10px) scale(0.96); filter: blur(4px); } to { opacity: 1; transform: none; filter: none; } }
+  @keyframes note-out { to { opacity: 0; transform: translateY(-8px); filter: blur(3px); } }
   @keyframes rise { 0% { opacity: 0; transform: translateY(14px) scale(0.9); } 15% { opacity: 1; transform: none; } 75% { opacity: 1; } 100% { opacity: 0; transform: translateY(-30px); } }
   .gauges { position: absolute; bottom: max(14px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); display: flex; gap: 8px; align-items: center; font-size: 13px; font-weight: 700; background: rgba(8, 12, 18, 0.45); padding: 5px 12px; border-radius: 8px; }
   .gauges .u { font-size: 10px; font-weight: 600; letter-spacing: 1px; opacity: 0.6; }
@@ -368,9 +391,18 @@
     <div class="row paints-row"><div class="paints" id="hp-paints"></div><button class="h-act small" id="hp-paint-act" type="button"></button></div>
   </div>
   <div class="h-panel ups hidden" id="tab-ups"></div>
-  <div class="h-panel market hidden" id="tab-market">
+  <div class="h-plane market hidden" id="tab-market">
     <div class="shelves"><button type="button" data-shelf="missiles" class="on">טילים</button><button type="button" data-shelf="guns">מכונות ירייה</button></div>
-    <div id="market-list"></div>
+    <div class="era" id="hm-era"></div>
+    <div class="pname" id="hm-name"></div>
+    <div class="role" id="hm-role"></div>
+    <div class="specs" id="hm-specs"></div>
+    <div class="row">
+      <button class="chev" id="hm-prev" type="button" aria-label="הקודם"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
+      <div class="h-dots" id="hm-dots"></div>
+      <button class="chev" id="hm-next" type="button" aria-label="הבא"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <button class="h-act" id="hm-act" type="button"></button>
+    </div>
   </div>
   <div class="h-panel board hidden" id="tab-board"></div>
   <div class="h-panel friends hidden" id="tab-friends">
@@ -387,6 +419,7 @@
 </div>
 
 <!-- in the air -->
+<div id="notes"></div>
 <div id="hud" class="hidden">
   <div class="tags" id="tags"></div>
   <div id="cross"></div>
@@ -402,12 +435,11 @@
       <div class="xpbar"><i id="hud-xp"></i></div>
     </div>
   </div>
-  <div id="radar-box"><canvas id="radar"></canvas><div id="radar-near" class="num"></div></div>
+  <div id="compass-box"><canvas id="compass"></canvas></div>
   <div class="tr" id="score"></div>
   <div id="bossbar" class="hidden"><div class="bb-t"><span>מפציץ</span><span class="num" id="bb-left"></span></div><div class="bb-hp"><i id="bb-hp"></i></div></div>
   <div id="teamscore" class="hidden"><span class="b"><span class="num" id="ts-b">0</span> כחול</span><span class="sep">:</span><span class="r">אדום <span class="num" id="ts-r">0</span></span></div>
   <div id="feed"></div>
-  <div id="toast"></div>
   <div id="warn" class="hidden">טיל ננעל עליך — נורים!</div>
   <div id="edge" class="hidden">קצה הזירה — חוזרים פנימה</div>
   <div id="vig"></div>

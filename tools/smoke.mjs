@@ -65,9 +65,11 @@ async function run(label, viewport, mobile) {
   await snap('3-upgrades');
   ok('six upgrades for the plane on the table, turbo and flares among them', (await page.$$('.up')).length === 6 && /טורבו/.test(await page.textContent('#tab-ups')) && /נורים/.test(await page.textContent('#tab-ups')));
   await page.click('[data-tab="market"]');
-  ok('the market: five missiles, each with its reach', (await page.$$('#market-list .arm')).length === 5 && /טווח יעיל 350/.test(await page.textContent('#market-list')));
+  ok('the market: a card like the planes\', the free missile fitted', /שפריר 1/.test(await page.textContent('#hm-name')) && /מותקן/.test(await page.textContent('#hm-act')) && /טווח יעיל/.test(await page.textContent('#hm-specs')));
+  await page.click('#hm-next');
+  ok('the next missile: on the pylons at once, to be bought and fitted', /שפריר 2/.test(await page.textContent('#hm-name')) && await page.evaluate(() => window.__sky.hangarLoad?.() === 'm2'));
   await page.click('[data-shelf="guns"]');
-  ok('and five guns', (await page.$$('#market-list .arm')).length === 5 && /טווח יעיל 300/.test(await page.textContent('#market-list')));
+  ok('and the guns, the same way', /מקלע 7.62/.test(await page.textContent('#hm-name')) && /300/.test(await page.textContent('#hm-specs')));
   await snap('3c-market');
   await page.click('[data-tab="planes"]');
   ok('a guest is offered to save', await page.isVisible('#btn-save'));
