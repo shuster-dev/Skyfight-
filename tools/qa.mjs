@@ -4,7 +4,7 @@ import { GUNS, MISSILES, GUN_ORDER, MISSILE_ORDER, PLANES, PLANE_ORDER, UPGRADES
 import { ARENA, BRIDGE, BUILDINGS, HEAL, HEALS, groundAt, healAt, hitsSolid, inBay, spawnPoint, surfaceAt, terrainAt, underBridge } from '../src/shared/arena.js';
 import { fly, flyQ, forward, newBody, newBodyQ, plausibleMove, BOOST, BRAKE, Q } from '../src/shared/flight.js';
 import { GUN, MISSILE, RAM, aimDir, blastDamage, closestOn, missileHurt, DODGE, dodgeChance, gunTarget, leadPoint, offNose, pickTarget, ramDamage, segmentHit, steerMissile } from '../src/shared/combat.js';
-import { buyArm, equipArm, newPilot, normalize, buyPlane, buyUpgrade, choosePlane, payKill, view } from '../src/server/pilot.js';
+import { buyArm, buyPaint, choosePaint, equipArm, newPilot, normalize, buyPlane, buyUpgrade, choosePlane, payKill, view } from '../src/server/pilot.js';
 
 let pass = 0, fail = 0;
 const ok = (name, cond, info) => {
@@ -328,6 +328,17 @@ console.log('\nthe hangar');
     ok('not twice', buyArm(m, 'missiles', 'm2').error === 'owned');
     ok('another plane bought carries what the one flown carries', buyPlane(m, 'hornet').ok && m.loadout.hornet.missile === 'm2');
     ok('each plane its own load', equipArm(m, 'missiles', 'm1', 'hornet').ok && m.loadout.hornet.missile === 'm1' && m.loadout.sparrow.missile === 'm2');
+    // a plane's whole setup stays as it was left: weapons, tiers, paint
+    m.gold = 1e6; m.paints.push('night');
+    ok('a paint is one plane\'s', choosePaint(m, 'night', 'hornet').ok && m.paintOf.hornet === 'night' && m.paintOf.sparrow === 'stock');
+    choosePlane(m, 'hornet');
+    ok('flying it: its paint on', m.plane === 'hornet' && m.paint === 'night');
+    choosePlane(m, 'sparrow');
+    ok('back to the other: its own paint and load, untouched', m.paint === 'stock' && m.loadout.sparrow.missile === 'm2' && m.loadout.hornet.missile === 'm1');
+    const back2 = normalize(JSON.parse(JSON.stringify(m)));
+    ok('and all of it kept through a save and a load', back2.paintOf.hornet === 'night' && back2.loadout.sparrow.missile === 'm2' && back2.paint === 'stock');
+    ok('an older record (one paint for all) keeps it on every plane', normalize({ id: 'pp', planes: ['sparrow', 'gull'], paints: ['stock', 'gold'], paint: 'gold' }).paintOf.gull === 'gold');
+    ok('no painting a plane you do not own', choosePaint(m, 'night', 'phantom').error === 'not_owned');
     ok('not on a plane you do not own', equipArm(m, 'missiles', 'm2', 'phantom').error === 'not_owned');
     ok('not one not owned', equipArm(m, 'guns', 'g3').error === 'not_owned');
     ok('no gold, no gun', (m.gold = 10, buyArm(m, 'guns', 'g3').error === 'gold'));
