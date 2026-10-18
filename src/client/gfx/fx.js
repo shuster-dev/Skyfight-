@@ -131,7 +131,8 @@ export class Fx {
       seen.add(m.id);
       let e = this.missiles.get(m.id);
       const f = V.set(-Math.sin(m.yaw) * Math.cos(m.pitch), Math.sin(m.pitch), -Math.cos(m.yaw) * Math.cos(m.pitch));
-      const want = new Vector3(m.x, m.y, m.z).addScaledVector(f, MISSILE.speed * age);
+      const sp = m.speed || MISSILE.speed;
+      const want = new Vector3(m.x, m.y, m.z).addScaledVector(f, sp * age);
       if (!e) {
         e = { mesh: missileMesh(), trailT: 0 };
         e.mesh.position.copy(want);
@@ -139,9 +140,9 @@ export class Fx {
         this.missiles.set(m.id, e);
       }
       const p = e.mesh.position;
-      p.addScaledVector(f, MISSILE.speed * dt);
+      p.addScaledVector(f, sp * dt);
       p.lerp(want, Math.min(1, dt * 8));
-      if (p.distanceTo(want) > 40) p.copy(want);
+      if (p.distanceTo(want) > 60) p.copy(want);
       e.mesh.rotation.set(m.pitch, m.yaw, 0, 'YXZ');
       // the motor: a flickering flame and a hot point you can see from far off
       const fl = e.mesh.userData.flame;

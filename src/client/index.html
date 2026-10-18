@@ -295,7 +295,9 @@
   .tags { position: absolute; inset: 0; }
   .tagp { position: absolute; left: 0; top: 0; will-change: transform; text-align: center; font-size: 10.5px; font-weight: 700; opacity: 0.9; text-shadow: 0 1px 2px #000, 0 0 4px #000; white-space: nowrap; }
   .tagp .mini { width: 44px; height: 4px; margin: 3px auto 0; background: rgba(0, 0, 0, 0.5); border-radius: 2px; overflow: hidden; }
-  .tagp .mini i { display: block; height: 100%; background: var(--red); }
+  .tagp .mini i { display: block; height: 100%; background: var(--red); transition: width .25s ease-out; }
+  .tagp .mini.hot { width: 70px; height: 6px; box-shadow: 0 0 0 1px rgba(255,255,255,0.6), 0 0 10px rgba(255,80,80,0.6); }
+  .tagp .mini.hot i { background: linear-gradient(90deg, #ff4b5c, #ff8a5c); }
   .tagp.off { color: #ff8a95; }
   .arrow { position: absolute; width: 0; height: 0; border-left: 9px solid transparent; border-right: 9px solid transparent; border-bottom: 16px solid var(--red); filter: drop-shadow(0 0 3px #000); }
   /* patched up on a repair pad: the screen's edges glow green a moment */

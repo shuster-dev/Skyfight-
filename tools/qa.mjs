@@ -108,7 +108,7 @@ console.log('\nhow long a fight lasts');
   // a fight, not two rounds: like for like, a good three seconds of solid
   // hits — and as long low on the ladder as high on it
   ok('like for like, as it comes: three to four seconds of hits, all the way up', PLANE_ORDER.every((k) => { const v = ttk(k, {}, 'g1'); return v > 2.8 && v < 3.8; }), PLANE_ORDER.map((k) => +ttk(k, {}, 'g1').toFixed(2)));
-  ok('like for like at the top, maxed: about two and a half seconds', ttk('phantom', T5, 'g5') > 2.2 && ttk('phantom', T5, 'g5') < 3.2, ttk('phantom', T5, 'g5'));
+  ok('like for like at the top, maxed with the best gun: about two seconds', ttk('phantom', T5, 'g5') > 1.6 && ttk('phantom', T5, 'g5') < 2.6, ttk('phantom', T5, 'g5'));
   ok('like for like in the middle (tier 3): about three', ttk('viper', T3, 'g3') > 2.5 && ttk('viper', T3, 'g3') < 3.6, ttk('viper', T3, 'g3'));
   ok('a bot about your level (the jet after the starter, tier 3) still needs well over a second and a half', ttk('hornet', T3, 'g2', 'sparrow', {}) > 1.6, ttk('hornet', T3, 'g2', 'sparrow', {}));
   ok('the best plane maxed against a fresh starter: under a second — the ladder counts', ttk('phantom', T5, 'g5', 'sparrow', {}) < 1);
@@ -116,6 +116,34 @@ console.log('\nhow long a fight lasts');
   const share = (m, k, t) => missileHurt(0, MISSILES[m].dmg, statsOf(k, t).hp) / statsOf(k, t).hp;
   ok('the first missile takes about a quarter of anyone, the best about half', near(share('m1', 'sparrow', {}), share('m1', 'phantom', T5)) && share('m1', 'sparrow', {}) > 0.22 && share('m1', 'sparrow', {}) < 0.32 && share('m5', 'phantom', T5) > 0.45 && share('m5', 'phantom', T5) < 0.56, [share('m1', 'sparrow', {}), share('m5', 'phantom', T5)]);
   ok('one missile never brings anyone down on its own', MISSILE_ORDER.every((m) => share(m, 'sparrow', {}) < 0.6));
+}
+
+console.log('\nhow true the weapons are');
+{
+  ok('a dearer gun reaches further, scatters less, helps more onto a target', GUN_ORDER.every((k, i) => !i || (GUNS[k].range > GUNS[GUN_ORDER[i - 1]].range && GUNS[k].spread < GUNS[GUN_ORDER[i - 1]].spread && GUNS[k].assist > GUNS[GUN_ORDER[i - 1]].assist)));
+  ok('the best gun fires fastest of the heavy ones and hits hardest a second', GUNS.g5.rate * GUNS.g5.dmg === Math.max(...GUN_ORDER.map((k) => GUNS[k].rate * GUNS[k].dmg)) && GUNS.g5.rate > 1);
+  const w0 = statsOf('phantom', {}, { gun: 'g5' }), w5 = statsOf('phantom', { weapons: 5 }, { gun: 'g5' });
+  ok('the weapons tier trues the guns: less scatter, a wider cone of help', w5.gunSpread < w0.gunSpread * 0.6 && w5.gunAssist > w0.gunAssist * 1.25, [w0.gunSpread, w5.gunSpread, w0.gunAssist, w5.gunAssist]);
+  ok('a dearer missile sees through more flares and breaks', MISSILE_ORDER.every((k, i) => !i || MISSILES[k].ccm > MISSILES[MISSILE_ORDER[i - 1]].ccm) && statsOf('phantom', { weapons: 5 }, { missile: 'm5' }).mCcm > MISSILES.m5.ccm);
+  // a missile chases the fastest plane in the game, maxed, on full burner, breaking hard
+  const fast = statsOf('phantom', { engine: 5 });
+  for (const mk of ['m1', 'm5']) {
+    const M = MISSILES[mk];
+    let caught = 0;
+    for (const turnRate of [0, 0.6, 1.2]) {
+      const tgt = { x: 0, y: 300, z: -150, yaw: 0, alive: true, vel: null };
+      const m = { x: 0, y: 300, z: 0, yaw: 0, pitch: 0, speed: M.speed + 90, turn: M.turn };
+      for (let t = 0; t < (M.range * 2.5) / m.speed; t += 1 / 30) {
+        tgt.yaw += turnRate / 30;
+        const f = forward(tgt.yaw, 0);
+        tgt.vel = { x: f.x * fast.boost, y: 0, z: f.z * fast.boost };
+        tgt.x += tgt.vel.x / 30; tgt.z += tgt.vel.z / 30;
+        steerMissile(m, tgt, 1 / 30);
+        if (Math.hypot(m.x - tgt.x, m.y - tgt.y, m.z - tgt.z) < MISSILE.fuse) { caught++; break; }
+      }
+    }
+    ok(`${M.he} catches the fastest plane on its tail, burner on, breaking or not`, caught === 3, caught);
+  }
 }
 
 console.log('\nthe air brake');

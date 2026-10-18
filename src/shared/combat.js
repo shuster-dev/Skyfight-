@@ -168,10 +168,16 @@ export function aimDir(shooter, target) {
   return { x: px / n, y: py / n, z: pz / n };
 }
 
-/** Steer a missile toward its target, turning at most its own `turn` rad/s (its model's), at its own speed. */
+/**
+ * Steer a missile at where its target will be when it gets there (leading
+ * it, as a real seeker does), turning at most its own `turn` rad/s, at its
+ * own speed.
+ */
 export function steerMissile(m, target, dt) {
   if (target && target.alive) {
-    const dx = target.x - m.x, dy = target.y - m.y, dz = target.z - m.z;
+    const sp = m.speed || MISSILE.speed, v = target.vel || { x: 0, y: 0, z: 0 };
+    const dist = Math.hypot(target.x - m.x, target.y - m.y, target.z - m.z), go = Math.min(2, dist / sp);
+    const dx = target.x + v.x * go - m.x, dy = target.y + v.y * go - m.y, dz = target.z + v.z * go - m.z;
     const wantYaw = Math.atan2(-dx, -dz);
     const wantPitch = Math.atan2(dy, Math.hypot(dx, dz));
     let dy_ = Math.atan2(Math.sin(wantYaw - m.yaw), Math.cos(wantYaw - m.yaw));
