@@ -1,4 +1,4 @@
-// The gift code in the hangar (ALFASI), the helicopter on the table, and the
+// A gift code in the hangar (ALFASI, or CODES=SHUSTER,NEON), the helicopter on the table, and the
 // banner the whole sky sees when it takes off. On a phone, upright.
 //   npm run build && node tools/gift-shot.mjs [outDir]
 import { chromium } from 'playwright';
@@ -21,10 +21,15 @@ await page.fill('#in-name', 'מאיר');
 await page.click('#btn-go');
 await page.waitForSelector('#screen-hangar:not(.hidden)', { timeout: 60000 });
 await wait(1500);
-await page.fill('#gift-code', 'alfasi');
+// CODES=SHUSTER,NEON for others; the first is typed on camera
+const codes = (process.env.CODES || 'alfasi').split(',');
+await page.fill('#gift-code', codes[0]);
 await page.screenshot({ path: `${OUT}/1-code.png` });
-await page.click('#gift-form button');
-await wait(3000);
+for (const code of codes) {
+  await page.fill('#gift-code', code);
+  await page.click('#gift-form button');
+  await wait(2500);
+}
 await page.screenshot({ path: `${OUT}/2-heli.png` });
 // (software rendering is slow: hold the banner still so the picture catches it)
 await page.addStyleTag({ content: '#royal { animation: none !important; }' });

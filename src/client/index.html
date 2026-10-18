@@ -121,7 +121,9 @@
   .chev svg { width: 18px; height: 18px; stroke: #fff; fill: none; stroke-width: 2.2; }
   .h-act { white-space: nowrap; padding: 11px 22px; border-radius: 999px; font-size: 15px; font-weight: 800; letter-spacing: 0.5px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.25); }
   .h-act.small { padding: 8px 14px; font-size: 13px; }
-  .paints { display: flex; gap: 8px; }
+  .paints { display: flex; gap: 8px; flex-wrap: wrap; }
+  .paints .sw.neon { width: auto; padding: 0 10px; border-radius: 999px; font-size: 11px; font-weight: 800; color: #fff; background: linear-gradient(90deg, #00e1ff, #ff2fa8); box-shadow: 0 0 10px rgba(255,47,168,0.6); opacity: 0.55; }
+  .paints .sw.neon.on { opacity: 1; box-shadow: 0 0 16px #00e1ff, 0 0 26px rgba(255,47,168,0.8); }
   /* what a plane carries, kept per plane: gun, missile, paint */
   .h-plane .load { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-start; margin-top: 6px; }
   .h-plane .load:empty { display: none; }

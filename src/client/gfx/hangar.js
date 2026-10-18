@@ -193,9 +193,9 @@ export class Hangar {
    */
   show(kind, paint = 'stock', load = {}) {
     if (this.arm || this.armOut) this.hideArm();
-    const lk = `${load.missile || ''}/${load.gun || ''}`;
+    const lk = `${load.missile || ''}/${load.gun || ''}/${load.neon ? 'n' : ''}`;
     if (kind === this.kind && paint === this.paint && lk === this.lk) return;
-    const refit = this.plane && kind === this.kind && paint === this.paint;
+    const refit = this.plane && kind === this.kind && paint === this.paint && !!load.neon === !!this.plane.userData.neon;
     this.paint = paint; this.lk = lk;
     const old = this.plane;
     this.kind = kind;

@@ -10,7 +10,7 @@ import crypto from 'node:crypto';
 import { openStore, tagKey } from './store.js';
 import { presence } from './presence.js';
 import { hashPassword, verifyPassword, signToken, verifyToken, validateUsername } from './auth.js';
-import { adminEdit, redeemGift, buyArm, equipArm, buyPaint, buyPlane, buyUpgrade, choosePaint, choosePlane, newPilot, normalize, view } from './pilot.js';
+import { adminEdit, redeemGift, setNeon, buyArm, equipArm, buyPaint, buyPlane, buyUpgrade, choosePaint, choosePlane, newPilot, normalize, view } from './pilot.js';
 import { ArenaRoom } from './rooms/ArenaRoom.js';
 import { cleanCallsign, displayName, levelOf } from '../shared/planes.js';
 
@@ -151,6 +151,7 @@ app.post('/api/pilot/paint', requireAuth, hangar((p, b) => choosePaint(p, String
 app.post('/api/pilot/buy-arm', requireAuth, hangar((p, b) => buyArm(p, String(b.kind || ''), String(b.id || ''), b.plane ? String(b.plane) : p.plane)));
 // a gift code: guessed at, so knocked on slowly
 app.post('/api/pilot/gift', requireAuth, knock.mw(), hangar((p, b) => redeemGift(p, b.code)));
+app.post('/api/pilot/neon', requireAuth, hangar((p, b) => setNeon(p, !!b.on, b.plane ? String(b.plane) : p.plane)));
 app.post('/api/pilot/arm', requireAuth, hangar((p, b) => equipArm(p, String(b.kind || ''), String(b.id || ''), b.plane ? String(b.plane) : p.plane)));
 
 // --- friends ----------------------------------------------------------------

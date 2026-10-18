@@ -108,7 +108,7 @@ export class ArenaRoom extends Room {
       this.drop(p.key);
     }
     const pilot = auth.pilot;
-    const p = this.addPlane({ uid: auth.id, sid: client.sessionId, name: displayName(pilot), plane: pilot.plane, paint: pilot.paint, level: pilot.level, upgrades: tiersOf(pilot, pilot.plane), arms: pilot.loadout?.[pilot.plane] || {}, pilot, team: this.pickTeam(true) });
+    const p = this.addPlane({ uid: auth.id, sid: client.sessionId, name: displayName(pilot), plane: pilot.plane, paint: pilot.paint, neon: !!pilot.neonOf?.[pilot.plane], level: pilot.level, upgrades: tiersOf(pilot, pilot.plane), arms: pilot.loadout?.[pilot.plane] || {}, pilot, team: this.pickTeam(true) });
     this.bySession.set(client.sessionId, p.key);
     presence.enter(auth.id, this.roomId, this.teams ? 'teams' : 'ffa');
     this.fillBots();
@@ -126,7 +126,8 @@ export class ArenaRoom extends Room {
     client.send('welcome', { key: p.key, stats: p.stats, roster: this.roster(), pilot: view(p.pilot), mode: this.teams ? 'teams' : 'ffa', team: p.team, score: this.score, room: this.roomId, pads: this.healReady.map((t) => Math.max(0, Math.ceil((t - Date.now()) / 1000))) });
     this.spawn(p);
     // the king's helicopter takes off: everyone in the sky is told
-    if (p.pilot?.plane === 'alfasi') this.broadcast('royal', { name: p.name, text: 'אלפסי המלך הצטרף לקרב' });
+    const banner = PLANES[p.pilot?.plane]?.banner;
+    if (banner) this.broadcast('royal', { name: p.name, text: banner });
     // friends already in this sky hear that you came
     for (const q of this.planes.values()) if (q !== p && q.pilot?.friends?.includes(p.uid)) this.sendTo(q, 'friendIn', { name: p.name });
   }
@@ -148,11 +149,11 @@ export class ArenaRoom extends Room {
 
   // ---- planes -------------------------------------------------------------
 
-  addPlane({ uid = '', sid = '', name, plane, paint = 'stock', level, upgrades = {}, arms = {}, pilot = null, bot = null, team = '' }) {
+  addPlane({ uid = '', sid = '', name, plane, paint = 'stock', neon = false, level, upgrades = {}, arms = {}, pilot = null, bot = null, team = '' }) {
     const key = (++this.seq).toString(36);
     const stats = statsOf(plane, upgrades, arms);
     const p = {
-      key, uid, sid, name, plane, paint, team, level, bot, pilot, stats,
+      key, uid, sid, name, plane, paint, neon, team, level, bot, pilot, stats,
       hp: stats.hp, alive: false, respawnAt: 0, shieldUntil: 0,
       ...newBody(spawnPoint(0), stats),
       vel: { x: 0, y: 0, z: 0 },
@@ -308,7 +309,9 @@ export class ArenaRoom extends Room {
       if (m.target !== p.key) continue;
       // some seekers need more than one flare: each counts, the last may fool it
       if ((m.flared = (m.flared || 0) + 1) < (m.shake || 1)) continue;
-      if (Math.random() >= FLARE.decoy * (m.shake > 1 ? 1 : 1 - (m.ccm || 0))) continue;
+      // past what it needs for certain, it is fooled; before that, one time in two
+      const odds = m.shakeSure ? (m.flared >= m.shakeSure ? 1 : 0.5) : FLARE.decoy * (m.shake > 1 ? 1 : 1 - (m.ccm || 0));
+      if (Math.random() >= odds) continue;
       // it goes for the flare, falling away behind, and bursts on it
       m.target = ''; m.ignore = p.key; pulled++;
       m.decoy = { x: p.x - p.vel.x * 0.15, y: p.y - 2, z: p.z - p.vel.z * 0.15, vx: p.vel.x * 0.25, vy: -4, vz: p.vel.z * 0.25, t: 0 };
@@ -356,6 +359,9 @@ export class ArenaRoom extends Room {
 
   launch(p) {
     if (p.ammo < 1) return;
+    // some racks fire a missile at most every so often
+    if (p.stats.launchGap && this.now - (p.launchedAt || 0) < p.stats.launchGap * 1000) return;
+    p.launchedAt = this.now;
     const target = pickTarget(p, this.targets(p), MISSILE.lockCone, p.stats.mRange);
     p.ammo--;
     const f = forward(p.yaw, p.pitch);
@@ -364,7 +370,7 @@ export class ArenaRoom extends Room {
     // it leaves at the plane's own speed plus its motor's: always faster than whoever it is after
     const speed = st.mSpeed + Math.max(0, p.speed || 0);
     // (a bot's seeker is half as hard to fool: flares and a late break work better on a bot's missile)
-    const m = { id: (++this.seq).toString(36), owner: p.key, target: target?.key || '', t: 0, speed, turn: st.mTurn, dmg: st.mDmg, ccm: (st.mCcm || 0) * (p.bot ? 0.5 : 1), shake: st.shake || 1, life: Math.min(16, (st.mRange * 2.5) / speed), x: p.x + f.x * 4, y: p.y + f.y * 4 - 1, z: p.z + f.z * 4, yaw: p.yaw, pitch: p.pitch };
+    const m = { id: (++this.seq).toString(36), owner: p.key, target: target?.key || '', t: 0, speed, turn: st.mTurn, dmg: st.mDmg, ccm: (st.mCcm || 0) * (p.bot ? 0.5 : 1), shake: st.shake || 1, shakeSure: st.shakeSure || 0, oneShot: !!st.oneShot, life: Math.min(16, (st.mRange * 2.5) / speed), x: p.x + f.x * 4, y: p.y + f.y * 4 - 1, z: p.z + f.z * 4, yaw: p.yaw, pitch: p.pitch };
     this.missiles.push(m);
     if (target?.sid) this.sendTo(target, 'incoming', { from: p.key });
     const me = p.sid && this.clients.find((c) => c.sessionId === p.sid);
@@ -436,7 +442,9 @@ export class ArenaRoom extends Room {
     this.broadcast('boom', [q(at.x), q(at.y), q(at.z)]);
     for (const p of [...this.planes.values()]) {
       if (!p.alive || p.key === m.owner || p.key === m.ignore) continue;
-      const dmg = missileHurt(Math.hypot(p.x - at.x, p.y - at.y, p.z - at.z), m.dmg, p.stats.hp);
+      const d = Math.hypot(p.x - at.x, p.y - at.y, p.z - at.z);
+      // a one-shot missile: the plane it was after goes down, whatever is left of it
+      const dmg = m.oneShot && p.key === m.target && d <= MISSILE.blast ? p.hp + 1 : missileHurt(d, m.dmg, p.stats.hp);
       if (dmg > 0) this.hurt(p, m.owner, dmg, 'missile');
     }
   }
@@ -612,7 +620,7 @@ export class ArenaRoom extends Room {
   }
 
   roster() {
-    return [...this.planes.values()].map((p) => ({ key: p.key, name: p.name, plane: p.plane, paint: p.paint, gun: p.stats.gun, missile: p.stats.missile, team: p.team, level: p.level, bot: !!p.bot, kills: p.kills, deaths: p.deaths, streak: p.streak }));
+    return [...this.planes.values()].map((p) => ({ key: p.key, name: p.name, plane: p.plane, paint: p.paint, neon: !!p.neon, gun: p.stats.gun, missile: p.stats.missile, team: p.team, level: p.level, bot: !!p.bot, kills: p.kills, deaths: p.deaths, streak: p.streak }));
   }
 
   // ---- bots ---------------------------------------------------------------

@@ -1,5 +1,6 @@
 // The ten planes, one by one over the sea, from the front quarter and from above.
 //   npm run build && node tools/planes-shot.mjs [outDir]
+// ONLY=a,b to pick planes; PAINT=sea for a paint; NEON=1 for the glow.
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -20,12 +21,12 @@ await page.waitForSelector('#btn-go:not([disabled])', { timeout: 60000 });
 await page.addStyleTag({ content: '.screen, #corner { display: none !important }' });
 for (const id of (process.env.ONLY || 'sparrow,gull,hornet,shahak,skyhawk,viper,bulldog,sufa,lavi,phantom').split(',')) {
   for (const [view, cam] of [['front', [-7, 2.5, -9]], ['side', [11, 1.5, 1.5]], ['top', [2, 13, 3]]]) {
-    await page.evaluate(([id, cam, paint]) => {
+    await page.evaluate(([id, cam, paint, neon]) => {
       const S = window.__sky;
       S.mode = 'look';
       for (const p of S.preview || []) p.mesh.visible = false;
       S.shotPlane && S.scene.remove(S.shotPlane);
-      const m = id === 'bomber' ? S.buildBomber() : S.buildPlane(id, paint);
+      const m = id === 'bomber' ? S.buildBomber() : S.buildPlane(id, paint, { neon });
       if (id === 'bomber') m.scale.setScalar(0.45);
       m.position.set(-300, 140, -200);
       m.rotation.set(0.05, 0.6, -0.12, 'YXZ');
@@ -34,7 +35,7 @@ for (const id of (process.env.ONLY || 'sparrow,gull,hornet,shahak,skyhawk,viper,
       S.camera.position.set(-300 + cam[0], 140 + cam[1], -200 + cam[2]);
       S.camera.up.set(0, 1, 0);
       S.camera.lookAt(-300, 140, -200);
-    }, [id, cam, process.env.PAINT || 'stock']);
+    }, [id, cam, process.env.PAINT || 'stock', !!process.env.NEON]);
     await wait(1200);
     await page.screenshot({ path: `${OUT}/${id}-${view}.png` });
   }
