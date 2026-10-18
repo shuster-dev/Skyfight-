@@ -16,7 +16,7 @@ import { normalize, payKill, view } from '../pilot.js';
 import { GUNS, GUN_ORDER, MISSILES, MISSILE_ORDER, PAINT_ORDER, PLANES, PLANE_ORDER, UPGRADE_ORDER, displayName, levelOf, statsOf, tiersOf, killReward } from '../../shared/planes.js';
 import { ARENA, hitsSolid, spawnPoint, surfaceAt, HEAL, HEALS, healAt } from '../../shared/arena.js';
 import { Q, fly, forward, newBody, plausibleMove } from '../../shared/flight.js';
-import { ASSIST_SHARE, CREDIT_MS, FLARE, GUN, MISSILE, RAM, REPAIR, RESPAWN, ramDamage, aimDir, blastDamage, closestOn, DODGE, dodgeChance, offNose, pickTarget, segmentHit, steerMissile } from '../../shared/combat.js';
+import { ASSIST_SHARE, CREDIT_MS, FLARE, GUN, MISSILE, RAM, REPAIR, RESPAWN, ramDamage, aimDir, blastDamage, closestOn, DODGE, dodgeChance, gunTarget, offNose, pickTarget, segmentHit, steerMissile } from '../../shared/combat.js';
 
 const TICK_MS = 1000 / 30;
 const SNAP_EVERY = 2;          // 15 snapshots a second
@@ -33,8 +33,8 @@ const BOT_VS_PEOPLE = 0.85;
 /** How quickly a bot takes in a change of its target's course (1/s): about half a second. */
 const BOT_REACT = 2.2;
 /** A round's way off true: a little scatter round the aim, as a real gun has. */
-function scatter(d) {
-  const a = Math.random() * Math.PI * 2, r = GUN.spread * Math.sqrt(Math.random());
+function scatter(d, spread = GUN.spread) {
+  const a = Math.random() * Math.PI * 2, r = spread * Math.sqrt(Math.random());
   // two directions square to d, to push it off along
   const ux = Math.abs(d.y) < 0.9 ? 0 : 1, uy = Math.abs(d.y) < 0.9 ? 1 : 0;
   let px = d.y * 0 - d.z * uy, py = d.z * ux - d.x * 0, pz = d.x * uy - d.y * ux;
@@ -272,15 +272,15 @@ export class ArenaRoom extends Room {
       p.fireT -= every;
       const f = forward(p.yaw, p.pitch);
       // the aim help is for people: a bot gets a sliver of it
-      const target = pickTarget(p, others, p.bot ? GUN.assistCone * 0.4 : GUN.assistCone, p.stats.gunRange);
+      const target = p.bot ? pickTarget(p, others, GUN.assistCone * 0.4, p.stats.gunRange) : gunTarget(p, others, GUN.assistCone, p.stats.gunRange);
       // a bot leads its target by the way it has been flying the last half
       // second or so, not the way it is flying now: break hard, and the
       // stream goes where you were going
-      const d = scatter(aimDir(p, p.bot && target?.vel ? { ...target, vel: p.bot.seen || target.vel } : target));
+      const d = scatter(aimDir(p, p.bot && target?.vel ? { ...target, vel: p.bot.seen || target.vel } : target), p.bot ? GUN.botSpread : GUN.spread);
       // from the wing the barrel is on, alternating
       const side = (p.gun++ % 2 ? 1 : -1) * 2.2, rx = Math.cos(p.yaw), rz = -Math.sin(p.yaw);
       this.bullets.push({
-        owner: p.key, team: p.team, t: 0, dmg: p.stats.dmg, life: p.stats.gunRange / GUN.speed,
+        owner: p.key, team: p.team, t: 0, dmg: p.stats.dmg, r: p.bot ? GUN.botHitR : GUN.hitR, life: p.stats.gunRange / GUN.speed,
         x: p.x + f.x * 5 + rx * side, y: p.y + f.y * 5, z: p.z + f.z * 5 + rz * side,
         vx: d.x * GUN.speed + f.x * p.speed, vy: d.y * GUN.speed + f.y * p.speed, vz: d.z * GUN.speed + f.z * p.speed,
       });
@@ -322,7 +322,7 @@ export class ArenaRoom extends Room {
         if (p.key === b.owner || (b.team && p.team === b.team)) continue; // teammates' rounds pass through
         // where the target was when the shooter saw it is a little behind
         // where it is: the sphere is fat enough to cover that
-        const t = segmentHit(b.x, b.y, b.z, nx, ny, nz, p.x, p.y, p.z, GUN.hitR);
+        const t = segmentHit(b.x, b.y, b.z, nx, ny, nz, p.x, p.y, p.z, b.r || GUN.hitR);
         if (t >= 0 && t < tBest) tBest = t, hit = p;
       }
       if (hit) {

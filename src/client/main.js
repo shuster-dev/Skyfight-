@@ -10,7 +10,7 @@ import { Hangar } from './gfx/hangar.js';
 import { ARMS, GUNS, GUN_ORDER, MISSILES, MISSILE_ORDER, PAINTS, PAINT_ORDER, PLANES, PLANE_ORDER, UPGRADES, UPGRADE_ORDER, TIER_MAX, nextTier, statsOf, tiersOf, levelProgress, planeOpen, planeOwned, cleanCallsign, displayName } from '../shared/planes.js';
 import { ARENA, BRIDGE, HEAL, HEALS, groundAt, underBridge } from '../shared/arena.js';
 import { flyQ, forward, newBodyQ, drawnQ, Q as QQ } from '../shared/flight.js';
-import { DODGE, FLARE, GUN, MISSILE, RESPAWN, aimDir, offNose, pickTarget } from '../shared/combat.js';
+import { DODGE, FLARE, GUN, MISSILE, RESPAWN, aimDir, gunTarget, leadPoint, offNose, pickTarget } from '../shared/combat.js';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -994,7 +994,7 @@ function guns(o, mesh, rate, dt, mine) {
     const m = muzzles[(holder.gun = (holder.gun || 0) + 1) % muzzles.length];
     MZ.copy(m).applyQuaternion(mesh.quaternion).add(mesh.position);
     // the room leads the guns at a target near the nose: so does the tracer
-    const target = mine ? pickTarget(o, aimables(), GUN.assistCone, S.me.stats.gunRange) : null;
+    const target = mine ? gunTarget(o, aimables(), GUN.assistCone, S.me.stats.gunRange) : null;
     const d = aimDir(o, target);
     const f = forward(o.yaw, o.pitch);
     DIR.set(d.x * GUN.speed + f.x * (o.speed || 60), d.y * GUN.speed + f.y * (o.speed || 60), d.z * GUN.speed + f.z * (o.speed || 60));
@@ -1150,12 +1150,14 @@ function hud(dt, now) {
     if (project(P.set(b.x + f.x * 300, b.y + f.y * 300, b.z + f.z * 300))) cross.style.left = `${P.x}px`, cross.style.top = `${P.y}px`;
     // the aim pip: where the nearest plane ahead will be when the rounds get
     // there. Crosshair on it and the guns are helped onto it (shared/combat.js)
-    const g = me.alive ? pickTarget({ ...b, alive: true }, aimables().filter((o) => o.alive), 0.35, me.stats.gunRange + 100) : null;
+    const g = me.alive ? gunTarget({ ...b, alive: true }, aimables().filter((o) => o.alive), 0.35, me.stats.gunRange + 100) : null;
     const lead = $('#lead');
     if (g) {
-      const d = Math.hypot(g.x - b.x, g.y - b.y, g.z - b.z), tt = d / (GUN.speed + b.speed), v = g.vel || { x: 0, y: 0, z: 0 };
-      if (project(P.set(g.x + v.x * tt, g.y + v.y * tt, g.z + v.z * tt))) { show(lead); lead.style.left = `${P.x}px`; lead.style.top = `${P.y}px`; } else show(lead, false);
-      cross.classList.toggle('on', offNose(b, b.yaw, b.pitch, g) < GUN.assistCone && d < me.stats.gunRange);
+      const d = Math.hypot(g.x - b.x, g.y - b.y, g.z - b.z), L = leadPoint(b, g), reach = d < me.stats.gunRange;
+      if (project(P.set(L.x, L.y, L.z))) { show(lead); lead.style.left = `${P.x}px`; lead.style.top = `${P.y}px`; } else show(lead, false);
+      // faint while it is out of reach; the crosshair lights once the guns will be helped onto it
+      lead.classList.toggle('far', !reach);
+      cross.classList.toggle('on', reach && gunTarget({ ...b, alive: true }, [g], GUN.assistCone, me.stats.gunRange) === g);
     } else { show(lead, false); cross.classList.remove('on'); }
   }
   S.hudT += dt;
