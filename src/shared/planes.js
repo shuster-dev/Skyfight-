@@ -21,52 +21,52 @@ export const PLANES = {
   sparrow: {
     id: 'sparrow', he: 'סער', role: 'מטוס ראשון', era: '1948', kind: 'מטוס בוכנה', level: 1, price: 0,
     desc: 'לוחם הבוכנה של הטייסות הראשונות. כבד ויורה לאט — אבל כל שדרוג מקרב אותו לגדולים.',
-    hp: 250, speed: 56, boost: 86, turn: 1.25, climb: 1.1, rate: 8, dmg: 3.2, missiles: 1, flares: 2, reload: 10, fill: 0.12,
+    hp: 250, speed: 56, boost: 86, turn: 1.25, climb: 1.1, rate: 8, dmg: 8.7, missiles: 1, flares: 2, reload: 10, fill: 0.12,
   },
   gull: {
     id: 'gull', he: 'שחף', role: 'בוכנה כבד', era: '1952', kind: 'כנף שחף', level: 3, price: 1200,
     desc: 'כנף שבורה, מדחף ענק ושישה מקלעים. מחזיק יותר, יורה יותר.',
-    hp: 300, speed: 60, boost: 92, turn: 1.3, climb: 1.15, rate: 9, dmg: 3.6, missiles: 1, flares: 2, reload: 9.5, fill: 0.13,
+    hp: 300, speed: 60, boost: 92, turn: 1.3, climb: 1.15, rate: 9, dmg: 9.4, missiles: 1, flares: 2, reload: 9.5, fill: 0.13,
   },
   hornet: {
     id: 'hornet', he: 'ברק', role: 'סילון ראשון', era: '1956', kind: 'סילון כנף משוכה', level: 5, price: 2500,
     desc: 'דור הסילונים הראשון: כנף משוכה ומתכת חשופה. פוגע ובורח לפני שמספיקים להסתובב.',
-    hp: 260, speed: 70, boost: 112, turn: 1.6, climb: 1.4, rate: 13, dmg: 3.5, missiles: 1, flares: 2, reload: 9, fill: 0.15,
+    hp: 300, speed: 70, boost: 112, turn: 1.6, climb: 1.4, rate: 13, dmg: 6.5, missiles: 1, flares: 2, reload: 9, fill: 0.15,
   },
   shahak: {
     id: 'shahak', he: 'שחק', role: 'עלית', era: '1967', kind: 'כנף משולשת', level: 8, price: 7000, ace: true,
     desc: 'המיראז\' של מלחמת ששת הימים. מהיר מכל מה שלפניו, שני טילים ותותחי 30 מ"מ.',
-    hp: 320, speed: 78, boost: 126, turn: 1.8, climb: 1.65, rate: 9, dmg: 6.4, missiles: 2, flares: 2, reload: 7.5, fill: 0.16,
+    hp: 320, speed: 78, boost: 126, turn: 1.8, climb: 1.65, rate: 9, dmg: 11, missiles: 2, flares: 2, reload: 7.5, fill: 0.16,
   },
   skyhawk: {
     id: 'skyhawk', he: 'עיט', role: 'תקיפה', era: '1968', kind: 'מטוס תקיפה', level: 10, price: 5500,
     desc: 'קטן, עקשן וזריז. מחזיק פגיעות ונכנס לכל קרב.',
-    hp: 330, speed: 70, boost: 110, turn: 1.75, climb: 1.5, rate: 10, dmg: 5.2, missiles: 2, flares: 3, reload: 8, fill: 0.14,
+    hp: 330, speed: 70, boost: 110, turn: 1.75, climb: 1.5, rate: 10, dmg: 9.2, missiles: 2, flares: 3, reload: 8, fill: 0.14,
   },
   viper: {
     id: 'viper', he: 'כפיר', role: 'זריז', era: '1975', kind: 'כנף משולשת וכנפונים', level: 13, price: 8000,
     desc: 'כנף משולשת עם כנפונים, תוצרת הארץ. מסתובב בתוך העיגול של כל אחד אחר.',
-    hp: 300, speed: 74, boost: 116, turn: 2.0, climb: 1.7, rate: 8, dmg: 7.2, missiles: 2, flares: 2, reload: 7.5, fill: 0.15,
+    hp: 340, speed: 74, boost: 116, turn: 2.0, climb: 1.7, rate: 8, dmg: 11.5, missiles: 2, flares: 2, reload: 7.5, fill: 0.15,
   },
   bulldog: {
     id: 'bulldog', he: 'רעם', role: 'משוריין', era: '1976', kind: 'לוחם עליונות אווירית', level: 16, price: 11000,
     desc: 'דו־מנועי כבד עם שני זנבות ותותח רב־קני. איטי בפניות — אבל כמעט לא נופל.',
-    hp: 460, speed: 68, boost: 110, turn: 1.5, climb: 1.35, rate: 16, dmg: 3.8, missiles: 2, flares: 3, reload: 7.5, fill: 0.15,
+    hp: 460, speed: 68, boost: 110, turn: 1.5, climb: 1.35, rate: 16, dmg: 8.2, missiles: 2, flares: 3, reload: 7.5, fill: 0.15,
   },
   sufa: {
     id: 'sufa', he: 'סופה', role: 'עלית', era: '2004', kind: 'לוחם רב־משימתי', level: 19, price: 24000, ace: true,
     desc: 'ה־F-16I. מהירות, זריזות וארבעה טילים — קפיצה אמיתית מעל כל מה שלפניו.',
-    hp: 400, speed: 84, boost: 136, turn: 2.1, climb: 1.85, rate: 14, dmg: 5.4, missiles: 3, flares: 3, reload: 6.5, fill: 0.18,
+    hp: 400, speed: 84, boost: 136, turn: 2.1, climb: 1.85, rate: 14, dmg: 9.6, missiles: 3, flares: 3, reload: 6.5, fill: 0.18,
   },
   lavi: {
     id: 'lavi', he: 'לביא', role: 'מתקדם', era: '1987', kind: 'כנף משולשת מודרנית', level: 23, price: 20000,
     desc: 'המטוס שכמעט היה: כנפונים, אוויוניקה מתקדמת ופנייה חדה מכולם.',
-    hp: 380, speed: 82, boost: 130, turn: 2.2, climb: 1.9, rate: 12, dmg: 6.0, missiles: 3, flares: 3, reload: 6.5, fill: 0.17,
+    hp: 420, speed: 82, boost: 130, turn: 2.2, climb: 1.9, rate: 12, dmg: 10.8, missiles: 3, flares: 3, reload: 6.5, fill: 0.17,
   },
   phantom: {
     id: 'phantom', he: 'אדיר', role: 'עלית עליון', era: '2016', kind: 'חמקן', level: 27, price: 45000, ace: true,
     desc: 'ה־F-35I מהדור החמישי. הכל בו טוב יותר, וארבעה טילים.',
-    hp: 480, speed: 90, boost: 146, turn: 2.25, climb: 2.0, rate: 13, dmg: 6.8, missiles: 4, flares: 4, reload: 5.5, fill: 0.2,
+    hp: 480, speed: 90, boost: 146, turn: 2.25, climb: 2.0, rate: 13, dmg: 12.3, missiles: 4, flares: 4, reload: 5.5, fill: 0.2,
   },
 };
 /**

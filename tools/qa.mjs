@@ -3,7 +3,7 @@
 import { GUNS, MISSILES, GUN_ORDER, MISSILE_ORDER, PLANES, PLANE_ORDER, UPGRADES, TIER_COST, TIER_LEVEL, statsOf, xpAt, xpStep, levelOf, levelProgress, killReward, cleanCallsign, nextTier, MAX_LEVEL } from '../src/shared/planes.js';
 import { ARENA, BRIDGE, BUILDINGS, HEAL, HEALS, groundAt, healAt, hitsSolid, inBay, spawnPoint, surfaceAt, terrainAt, underBridge } from '../src/shared/arena.js';
 import { fly, flyQ, forward, newBody, newBodyQ, plausibleMove, BOOST, BRAKE, Q } from '../src/shared/flight.js';
-import { GUN, MISSILE, RAM, aimDir, blastDamage, closestOn, DODGE, dodgeChance, gunTarget, leadPoint, offNose, pickTarget, ramDamage, segmentHit, steerMissile } from '../src/shared/combat.js';
+import { GUN, MISSILE, RAM, aimDir, blastDamage, closestOn, missileHurt, DODGE, dodgeChance, gunTarget, leadPoint, offNose, pickTarget, ramDamage, segmentHit, steerMissile } from '../src/shared/combat.js';
 import { buyArm, equipArm, newPilot, normalize, buyPlane, buyUpgrade, choosePlane, payKill, view } from '../src/server/pilot.js';
 
 let pass = 0, fail = 0;
@@ -37,7 +37,7 @@ ok('three upgrades', Object.keys(UPGRADES).join() === 'engine,weapons,armor');
   ok('engine 5: 40% faster, a third quicker to turn, half again the burner', near(up.speed, base.speed * 1.4) && near(up.turn, base.turn * 1.35) && near(up.boost, base.boost * 1.5) && near(up.fill, base.fill * 1.75));
   ok('weapons 5: 60% more damage a second, 40% more reach, missiles reload much faster', near(up.rate * up.dmg, base.rate * base.dmg * 1.6) && up.gunRange === Math.round(base.gunRange * 1.4) && near(up.reload, base.reload * 0.4));
   ok('armour 5: three quarters more health, flares back faster', up.hp === Math.round(base.hp * 1.75) && up.flareReload < base.flareReload * 0.5);
-  ok('a maxed starter is still short of the best plane', up.speed < best.speed && up.rate * up.dmg < best.rate * best.dmg * 0.5);
+  ok('a maxed starter is still short of the best plane', up.speed < best.speed && up.rate * up.dmg < best.rate * best.dmg);
   ok('each tier a jump you feel (8% speed a tier), not a sliver', near(statsOf('sparrow', { engine: 2 }).speed, base.speed * 1.16) && statsOf('sparrow', { weapons: 1 }).reload < base.reload * 0.9);
   ok('the best plane still gains from an upgrade', statsOf('phantom', ALL5).speed > best.speed && statsOf('phantom', ALL5).rate * statsOf('phantom', ALL5).dmg > best.rate * best.dmg);
   ok('armour 3+: one more flare', statsOf('sparrow', { armor: 3 }).flares === base.flares + 1 && statsOf('sparrow', { armor: 2 }).flares === base.flares);
@@ -104,12 +104,18 @@ console.log('\nhow long a fight lasts');
   // gun on a fully upgraded plane, and the starter's own against itself
   const T5 = { engine: 5, weapons: 5, armor: 5 }, T3 = { engine: 3, weapons: 3, armor: 3 };
   const dps = (k, t, g) => { const s = statsOf(k, t, { gun: g }); return s.rate * s.dmg; };
-  ok('a bot about your level (the jet after the starter, tier 3, its gun) needs over 3 s of solid hits on a starter', statsOf('sparrow').hp / dps('hornet', T3, 'g2') > 3, statsOf('sparrow').hp / dps('hornet', T3, 'g2'));
-  ok('a plane a step up (tier 3, 30 mm) still needs over 2.5 s on a starter', statsOf('sparrow').hp / dps('skyhawk', T3, 'g3') > 2.5, statsOf('sparrow').hp / dps('skyhawk', T3, 'g3'));
-  ok('a starter on a starter: about ten seconds of hits', statsOf('sparrow').hp / dps('sparrow', {}, 'g1') > 8);
-  ok('like for like at the top, four seconds or more', statsOf('phantom', T5).hp / dps('phantom', T5, 'g5') >= 3.5, statsOf('phantom', T5).hp / dps('phantom', T5, 'g5'));
-  ok('like for like in the middle, as long', statsOf('viper', T3).hp / dps('viper', T3, 'g3') >= 3.5, statsOf('viper', T3).hp / dps('viper', T3, 'g3'));
-  ok('a missile takes a good third of a starter, not all of it', MISSILES.m1.dmg / statsOf('sparrow').hp > 0.25 && MISSILES.m5.dmg < statsOf('sparrow').hp * 0.6);
+  const ttk = (k, t, g, on = k, ont = t) => statsOf(on, ont).hp / dps(k, t, g);
+  // a fight, not two rounds: like for like, a good three seconds of solid
+  // hits — and as long low on the ladder as high on it
+  ok('like for like, as it comes: three to four seconds of hits, all the way up', PLANE_ORDER.every((k) => { const v = ttk(k, {}, 'g1'); return v > 2.8 && v < 3.8; }), PLANE_ORDER.map((k) => +ttk(k, {}, 'g1').toFixed(2)));
+  ok('like for like at the top, maxed: about two and a half seconds', ttk('phantom', T5, 'g5') > 2.2 && ttk('phantom', T5, 'g5') < 3.2, ttk('phantom', T5, 'g5'));
+  ok('like for like in the middle (tier 3): about three', ttk('viper', T3, 'g3') > 2.5 && ttk('viper', T3, 'g3') < 3.6, ttk('viper', T3, 'g3'));
+  ok('a bot about your level (the jet after the starter, tier 3) still needs well over a second and a half', ttk('hornet', T3, 'g2', 'sparrow', {}) > 1.6, ttk('hornet', T3, 'g2', 'sparrow', {}));
+  ok('the best plane maxed against a fresh starter: under a second — the ladder counts', ttk('phantom', T5, 'g5', 'sparrow', {}) < 1);
+  // a missile: the same share of anyone, so it counts at every level
+  const share = (m, k, t) => missileHurt(0, MISSILES[m].dmg, statsOf(k, t).hp) / statsOf(k, t).hp;
+  ok('the first missile takes about a quarter of anyone, the best about half', near(share('m1', 'sparrow', {}), share('m1', 'phantom', T5)) && share('m1', 'sparrow', {}) > 0.22 && share('m1', 'sparrow', {}) < 0.32 && share('m5', 'phantom', T5) > 0.45 && share('m5', 'phantom', T5) < 0.56, [share('m1', 'sparrow', {}), share('m5', 'phantom', T5)]);
+  ok('one missile never brings anyone down on its own', MISSILE_ORDER.every((m) => share(m, 'sparrow', {}) < 0.6));
 }
 
 console.log('\nthe air brake');

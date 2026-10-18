@@ -365,7 +365,7 @@ const STAT = {
   flareReload: { he: 'טעינת נור', val: (st) => +st.flareReload.toFixed(1), unit: 'ש׳', less: true },
   flares: { he: 'נורים', val: (st) => st.flares },
   rate: { he: 'קצב אש', val: (st) => +st.rate.toFixed(1), unit: 'לש׳' },
-  mDmg: { he: 'נזק', val: (st) => st.mDmg },
+  mDmg: { he: 'נזק · מהחיים', val: (st) => Math.round((st.mDmg / MISSILE.ref) * 100), unit: '%' },
   mSpeed: { he: 'מהירות טיל', val: (st) => KMH(st.mSpeed), unit: 'קמ"ש' },
 };
 /** What each upgrade moves, in that order: the first is the one its card names. */
