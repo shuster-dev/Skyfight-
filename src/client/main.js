@@ -47,6 +47,7 @@ const S = {
 };
 window.__sky = S; // the browser tests look in here
 S.hangarShows = () => hangar.armKey;
+S.renderHangar = () => renderHangar();
 // how many weapons stand on the pad (for the tests: none, out of the market)
 S.hangarArms = () => hangar.scene.children.filter((c) => c.children[0]?.userData?.model).length;
 S.note = (t, c) => toast(t, c);
@@ -254,6 +255,8 @@ function renderHangar() {
   show('#tab-board', tab === 'board');
   show('#tab-market', tab === 'market');
   show('#tab-friends', tab === 'friends');
+  // fight mode is chosen with the plane: it only gets in the way of the panels
+  show('.h-mode', tab === 'planes');
   if (tab !== 'market') hangar.show(viewing || p.plane, paintView || p.paint, loadOf(viewing || p.plane));
   if (tab === 'planes') renderPlanes();
   if (tab === 'ups') renderUps();
@@ -365,20 +368,29 @@ const STAT = {
   mDmg: { he: 'נזק', val: (st) => st.mDmg },
   mSpeed: { he: 'מהירות טיל', val: (st) => KMH(st.mSpeed), unit: 'קמ"ש' },
 };
-/** What each upgrade moves, in that order. */
+/** What each upgrade moves, in that order: the first is the one its card names. */
 const UP_STATS = {
   engine: ['speed', 'turn', 'boost'],
-  weapons: ['dps', 'gunRange', 'reload', 'missiles'],
-  armor: ['hp', 'flareReload', 'flares'],
+  weapons: ['dps', 'gunRange', 'reload'],
+  armor: ['hp', 'flareReload'],
 };
+/** In a word or two, what a tier of each upgrade gives. */
+const UP_GIVES = { engine: 'מהיר וחד יותר', weapons: 'יורה חזק ורחוק יותר', armor: 'שורד יותר פגיעות' };
 /** An icon for each upgrade, drawn in the line of the tabs. */
 const UP_ICON = {
-  engine: '<svg viewBox="0 0 24 24"><path d="M3 12h4l2-4h6l2 4h4M7 12l-2 5h14l-2-5"/><circle cx="12" cy="12" r="2"/></svg>',
-  weapons: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></svg>',
-  armor: '<svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z"/></svg>',
+  engine: '<svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>',
+  weapons: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>',
+  armor: '<svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></svg>',
 };
-/** The plane at a glance, over the upgrades. */
-const GLANCE = ['speed', 'hp', 'dps', 'gunRange'];
+/** The bars over the cards: the plane's numbers, each against the best anyone can have. */
+const BARS = ['speed', 'turn', 'dps', 'gunRange', 'hp'];
+const BAR_MAX = (() => {
+  const top = { engine: TIER_MAX, weapons: TIER_MAX, armor: TIER_MAX };
+  const all = PLANE_ORDER.map((k) => statsOf(k, top, { gun: GUN_ORDER.at(-1), missile: MISSILE_ORDER.at(-1) }));
+  return Object.fromEntries(BARS.map((key) => [key, Math.max(...all.map((st) => STAT[key].val(st)))]));
+})();
+/** The card picked on the upgrades tab: its next tier is what the bars preview. */
+let upPick = '';
 
 /**
  * One number, and what it becomes: "806 ← 870 קמ"ש", the new number green
@@ -391,7 +403,11 @@ function delta(key, now, next) {
   return `<span class="dl"><span>${S_.he}</span><b class="was">${a}</b><i>←</i><b class="${good ? 'up' : 'dn'}">${b}${unit}</b></span>`;
 }
 
-/** The upgrades of the plane on the table: each plane is upgraded on its own. */
+/**
+ * The upgrades of the plane on the table, each plane upgraded on its own:
+ * its numbers as bars, and three cards under them. Pick a card and the bars
+ * show in green what its next tier adds; the gold button buys it.
+ */
 function renderUps() {
   const p = S.pilot, k0 = viewing || p.plane, d = PLANES[k0];
   if (!planeOwned(p, k0)) {
@@ -399,21 +415,31 @@ function renderUps() {
     return;
   }
   const tiers = tiersOf(p, k0), now = statsOf(k0, tiers, loadOf(k0));
-  const glance = GLANCE.map((k) => `<div class="gl"><b>${STAT[k].val(now)}</b><span>${STAT[k].he}${STAT[k].unit ? ` · ${STAT[k].unit}` : ''}</span></div>`).join('');
-  $('#tab-ups').innerHTML = `<div class="up-head"><b>${d.he}</b><small>השדרוגים של המטוס הזה בלבד</small></div><div class="glance">${glance}</div>` + UPGRADE_ORDER.map((k) => {
-    const u = UPGRADES[k], have = tiers[k] || 0, n = nextTier(p, k, k0);
-    const segs = Array.from({ length: TIER_MAX }, (_, i) => `<i class="${i < have ? 'on' : ''}"></i>`).join('');
-    const after = n ? statsOf(k0, { ...tiers, [k]: n.tier }, loadOf(k0)) : null;
-    const nums = `<div class="deltas">${UP_STATS[k].map((key) => delta(key, now, after)).join('')}</div>`;
-    const btn = !n ? '<button disabled>מלא</button>'
-      : p.level < n.level ? `<button disabled>רמה ${n.level}</button>`
-        : `<button data-up="${k}" ${p.gold < n.cost ? 'disabled' : ''}><span class="num">${fmt(n.cost)}</span><span class="coin"></span></button>`;
-    return `<div class="up"><span class="up-ic">${UP_ICON[k] || ''}</span><div class="t"><b>${u.he} <small class="tier">דרגה ${have}/${TIER_MAX}</small></b><small>${u.desc}</small>${nums}<div class="segs">${segs}</div></div>${btn}</div>`;
-  }).join('') + '<div class="note" style="text-align:right">שלושה שדרוגים, חמש דרגות לכל אחד. זהב מרוויחים על כל הפלה.</div>';
+  if (!UPGRADES[upPick]) upPick = UPGRADE_ORDER.find((k) => nextTier(p, k, k0)) || UPGRADE_ORDER[0];
+  const n = nextTier(p, upPick, k0), after = n ? statsOf(k0, { ...tiers, [upPick]: n.tier }, loadOf(k0)) : null;
+  const bars = BARS.map((key) => {
+    const S_ = STAT[key], a = S_.val(now), b = after ? S_.val(after) : a, max = BAR_MAX[key];
+    const pa = Math.min(100, (a / max) * 100), pb = Math.min(100, (b / max) * 100);
+    return `<div class="bar ${b !== a ? 'gain' : ''}"><span class="k">${key === 'dps' ? 'כוח אש' : S_.he}</span><span class="track"><i class="now" style="width:${pa}%"></i><i class="next" style="right:${pa}%;width:${Math.max(0, pb - pa)}%"></i></span>`
+      + `<span class="v"><b>${a}</b>${b !== a ? `<em>+${b - a}</em>` : ''}</span></div>`;
+  }).join('');
+  const cards = UPGRADE_ORDER.map((k) => {
+    const u = UPGRADES[k], have = tiers[k] || 0, nt = nextTier(p, k, k0);
+    const pips = Array.from({ length: TIER_MAX }, (_, i) => `<i class="${i < have ? 'on' : ''}"></i>`).join('');
+    const btn = !nt ? '<button class="buy" disabled>מקסימום</button>'
+      : p.level < nt.level ? `<button class="buy" disabled>נפתח ברמה ${nt.level}</button>`
+        : `<button class="buy" data-up="${k}" ${p.gold < nt.cost ? 'disabled' : ''}><span class="num">${fmt(nt.cost)}</span><span class="coin"></span></button>`;
+    return `<div class="ucard ${k === upPick ? 'on' : ''} ${!nt ? 'full' : ''}" data-pick="${k}"><span class="up-ic">${UP_ICON[k]}</span><b>${u.he}</b><small>${UP_GIVES[k]}</small><div class="pips">${pips}</div>${btn}</div>`;
+  }).join('');
+  const u = UPGRADES[upPick];
+  $('#tab-ups').innerHTML = `<div class="up-head"><b>${d.he}</b><small>${n ? `${u.he} · דרגה ${n.tier} מוסיפה את הירוק` : `${u.he} בדרגה המלאה`}</small></div>`
+    + `<div class="bars">${bars}</div><div class="ucards">${cards}</div><div class="note">${u.desc}</div>`;
 }
 
 $('#tab-ups').addEventListener('click', async (e) => {
   const k = e.target.closest('[data-up]')?.dataset.up;
+  const pick = e.target.closest('[data-pick]')?.dataset.pick;
+  if (pick && pick !== upPick) { upPick = pick; renderUps(); if (!k) return; }
   if (!k) return;
   try {
     const plane = viewing || S.pilot.plane;

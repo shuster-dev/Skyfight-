@@ -63,7 +63,7 @@ async function run(label, viewport, mobile) {
   await page.click('[data-tab="ups"]');
   await wait(400);
   await snap('3-upgrades');
-  ok('three upgrades for the plane on the table: engine, weapons, armour', (await page.$$('#tab-ups > .up')).length === 3 && /←/.test(await page.textContent('#tab-ups')) && /מנוע/.test(await page.textContent('#tab-ups')) && /נשק/.test(await page.textContent('#tab-ups')) && /שריון/.test(await page.textContent('#tab-ups')));
+  ok('three upgrades for the plane on the table: engine, weapons, armour', (await page.$$('#tab-ups .ucard')).length === 3 && (await page.$$('#tab-ups .bar')).length === 5 && /מנוע/.test(await page.textContent('#tab-ups')) && /נשק/.test(await page.textContent('#tab-ups')) && /שריון/.test(await page.textContent('#tab-ups')));
   await page.click('[data-tab="market"]');
   ok('the market: a card like the planes\', the free missile fitted', /שפריר/.test(await page.textContent('#hm-name')) && /מותקן/.test(await page.textContent('#hm-act')) && /טווח נעילה/.test(await page.textContent('#hm-specs')));
   await page.click('#hm-next');
