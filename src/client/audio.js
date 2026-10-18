@@ -1,8 +1,8 @@
 // Sound, made on the spot: no files. Everything is built from noise and a
 // few oscillators, shaped the way the real thing is:
 //
-//   the engine     a jet: a rumble, a turbine whine that climbs with speed,
-//                  and the burner's roar; the piston fighter: a throbbing
+//   the engine     a jet: a soft low rumble and a faint turbine whine that
+//                  climbs with speed, the burner's roar only while lit; the piston fighter: a throbbing
 //                  exhaust beat with the propeller's buzz on it
 //   the guns       each its own report — the light gun's crack, the heavy
 //                  gun's bark, a cannon's thump, the rotary cannon's tearing
@@ -231,32 +231,29 @@ function bed(buf, kind, freq, q = 0.7) {
 
 // ---- the engines --------------------------------------------------------------
 
-/** A jet: the rumble, the turbine's whine, the burner's roar. */
+/**
+ * A jet: a low, soft rumble under you and the turbine's faint whine — a
+ * bed, not a noise: no hiss. The burner adds a roar only while it is lit.
+ */
 function jetEngine() {
   const out = ctx.createGain(); out.gain.value = 0; out.connect(bus);
-  const rumble = bed(brownBuf, 'lowpass', 220);
-  const roar = bed(noiseBuf, 'bandpass', 700, 0.6);
-  const hiss = bed(noiseBuf, 'highpass', 4000);
+  const rumble = bed(brownBuf, 'lowpass', 140);
+  const roar = bed(brownBuf, 'lowpass', 500, 0.5);
   const whine = ctx.createOscillator(), wg = ctx.createGain();
-  whine.type = 'sine'; wg.gain.value = 0.012; whine.connect(wg);
-  const whine2 = ctx.createOscillator(), wg2 = ctx.createGain();
-  whine2.type = 'triangle'; wg2.gain.value = 0.006; whine2.connect(wg2);
-  for (const x of [rumble.g, roar.g, hiss.g, wg, wg2]) x.connect(out);
-  whine.start(); whine2.start();
+  whine.type = 'sine'; wg.gain.value = 0.006; whine.connect(wg);
+  for (const x of [rumble.g, roar.g, wg]) x.connect(out);
+  whine.start();
   return {
     set(speed, boost) {
       const t = now(), k = Math.min(1.6, speed / 70);
-      out.gain.setTargetAtTime(0.5, t, 0.3);
-      rumble.g.gain.setTargetAtTime(boost ? 0.9 : 0.5, t, 0.2);
-      rumble.f.frequency.setTargetAtTime(boost ? 420 : 200 + k * 60, t, 0.2);
-      roar.g.gain.setTargetAtTime(boost ? 0.55 : 0.12, t, 0.15);
-      roar.f.frequency.setTargetAtTime(boost ? 1100 : 600 + k * 200, t, 0.2);
-      hiss.g.gain.setTargetAtTime(0.03 + k * 0.03, t, 0.3);
-      whine.frequency.setTargetAtTime(1400 + k * 1100, t, 0.4);
-      whine2.frequency.setTargetAtTime(2900 + k * 2000, t, 0.4);
+      out.gain.setTargetAtTime(0.16, t, 0.3);
+      rumble.g.gain.setTargetAtTime(boost ? 0.5 : 0.32, t, 0.3);
+      rumble.f.frequency.setTargetAtTime(110 + k * 40, t, 0.3);
+      roar.g.gain.setTargetAtTime(boost ? 0.35 : 0, t, 0.25);
+      whine.frequency.setTargetAtTime(1100 + k * 700, t, 0.5);
     },
     fade() { out.gain.setTargetAtTime(0, now(), 0.25); },
-    stop() { out.gain.setTargetAtTime(0, now(), 0.05); const s = [rumble.n, roar.n, hiss.n, whine, whine2]; setTimeout(() => s.forEach((x) => x.stop()), 300); },
+    stop() { out.gain.setTargetAtTime(0, now(), 0.05); const s = [rumble.n, roar.n, whine]; setTimeout(() => s.forEach((x) => x.stop()), 300); },
   };
 }
 
@@ -282,11 +279,11 @@ function propEngine() {
   return {
     set(speed, boost) {
       const t = now(), k = Math.min(1.6, speed / 60);
-      out.gain.setTargetAtTime(0.5, t, 0.3);
+      out.gain.setTargetAtTime(0.2, t, 0.3);
       growl.frequency.setTargetAtTime(48 + k * 26 + (boost ? 14 : 0), t, 0.3);
       beat.frequency.setTargetAtTime(22 + k * 12 + (boost ? 6 : 0), t, 0.3);
       gf.frequency.setTargetAtTime(boost ? 900 : 420 + k * 120, t, 0.2);
-      rush.g.gain.setTargetAtTime(0.18 + k * 0.12 + (boost ? 0.2 : 0), t, 0.3);
+      rush.g.gain.setTargetAtTime(0.04 + (boost ? 0.12 : 0), t, 0.3);
       buzz.frequency.setTargetAtTime(95 + k * 40, t, 0.3);
     },
     fade() { out.gain.setTargetAtTime(0, now(), 0.25); },
