@@ -31,7 +31,15 @@ export const MISSILE = {
    * `dmg` within `full` metres, less and less out to `blast`.
    */
   fuse: 14, full: 6, blast: 20, edge: 0.3,
+  /**
+   * A missile's damage is against a plane of this much health: on a plane
+   * with more it takes as large a share (a hit is a hit at any level — two
+   * of the best nearly finish anyone; the first takes about a quarter).
+   */
+  ref: 280,
 };
+/** What a missile's blast does to a plane with `hp` of health in full. */
+export const missileHurt = (d, dmg, hp) => blastDamage(d, dmg) * hp / MISSILE.ref;
 
 /**
  * Out-flying a missile: break hard (the nose swung through `turn` radians in
@@ -72,7 +80,7 @@ export const RAM = { r: 6.5, perMps: 2.2, min: 40, max: 800, cooldown: 1200 };
 export const ramDamage = (closing) => Math.max(RAM.min, Math.min(RAM.max, closing * RAM.perMps));
 
 /** Seconds of no damage before the airframe starts patching itself. */
-export const REPAIR = { after: 4, perSec: 12 };
+export const REPAIR = { after: 6, perSec: 8 };
 /** Seconds between going down and coming back, and of grace on arrival. */
 export const RESPAWN = { delay: 3, shield: 4 };
 /** Damage counts toward a kill (or an assist) for this long. */

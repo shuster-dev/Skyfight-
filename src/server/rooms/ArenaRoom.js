@@ -16,7 +16,7 @@ import { normalize, payKill, view } from '../pilot.js';
 import { GUNS, GUN_ORDER, MISSILES, MISSILE_ORDER, PAINT_ORDER, PLANES, PLANE_ORDER, UPGRADE_ORDER, displayName, levelOf, statsOf, tiersOf, killReward } from '../../shared/planes.js';
 import { ARENA, hitsSolid, spawnPoint, surfaceAt, HEAL, HEALS, healAt } from '../../shared/arena.js';
 import { Q, fly, forward, newBody, plausibleMove } from '../../shared/flight.js';
-import { ASSIST_SHARE, CREDIT_MS, FLARE, GUN, MISSILE, RAM, REPAIR, RESPAWN, ramDamage, aimDir, blastDamage, closestOn, DODGE, dodgeChance, gunTarget, offNose, pickTarget, segmentHit, steerMissile } from '../../shared/combat.js';
+import { ASSIST_SHARE, CREDIT_MS, FLARE, GUN, MISSILE, RAM, REPAIR, RESPAWN, ramDamage, aimDir, closestOn, DODGE, dodgeChance, gunTarget, missileHurt, offNose, pickTarget, segmentHit, steerMissile } from '../../shared/combat.js';
 
 const TICK_MS = 1000 / 30;
 const SNAP_EVERY = 2;          // 15 snapshots a second
@@ -418,7 +418,7 @@ export class ArenaRoom extends Room {
     this.broadcast('boom', [q(at.x), q(at.y), q(at.z)]);
     for (const p of [...this.planes.values()]) {
       if (!p.alive || p.key === m.owner || p.key === m.ignore) continue;
-      const dmg = blastDamage(Math.hypot(p.x - at.x, p.y - at.y, p.z - at.z), m.dmg);
+      const dmg = missileHurt(Math.hypot(p.x - at.x, p.y - at.y, p.z - at.z), m.dmg, p.stats.hp);
       if (dmg > 0) this.hurt(p, m.owner, dmg, 'missile');
     }
   }
@@ -700,9 +700,20 @@ export class ArenaRoom extends Room {
       if (p.ammo > 0 && dist < p.stats.mRange * 0.9 && offNose(p, p.yaw, p.pitch, t) < MISSILE.lockCone * 0.7 && Math.random() < dt * 0.25 * ai.skill) this.launch(p);
     }
     // a missile on its tail: flares, if it keeps its head
-    if (p.flares > 0 && this.missiles.some((m) => m.target === p.key && m.t > 0.6) && Math.random() < dt * 1.2 * ai.skill) this.flare(p);
-    // hit: break hard one way for a moment
-    if (this.now - ai.hurtAt < 300 && ai.jink <= 0 && Math.random() < 0.5) ai.jink = 0.8 + Math.random(), ai.jinkDir = Math.random() < 0.5 ? -1 : 1;
+    // once a missile closes in it decides, once: some keep their heads and
+    // flare, some do not see it in time
+    for (const m of this.missiles) {
+      if (m.target !== p.key || m.botSaw || Math.hypot(m.x - p.x, m.y - p.y, m.z - p.z) > 260) continue;
+      m.botSaw = true;
+      if (p.flares > 0 && Math.random() < 0.25 + 0.4 * ai.skill) this.flare(p);
+      else if (Math.random() < 0.3 * ai.skill) ai.jink = 0.9, ai.jinkDir = Math.random() < 0.5 ? -1 : 1;
+    }
+    // hit: break hard one way for a moment — and then fly on a while before
+    // the next break, so a pilot who stays on its tail can finish it
+    if (this.now - ai.hurtAt < 300 && ai.jink <= 0 && this.now > (ai.jinkNext || 0)) {
+      ai.jinkNext = this.now + 2500 + Math.random() * 2000;
+      if (Math.random() < 0.35 + 0.3 * ai.skill) ai.jink = 0.7 + Math.random() * 0.6, ai.jinkDir = Math.random() < 0.5 ? -1 : 1;
+    }
     // about to fly into it: pull up and away rather than ram (a collision
     // hurts both, and nobody enjoys being rammed by a bot)
     if (t && t.key !== 'boss' && ai.jink <= 0) {
