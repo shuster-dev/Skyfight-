@@ -65,20 +65,29 @@
   .coin { width: 13px; height: 13px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #fff3c4, #e2b23c 55%, #9a6f12); box-shadow: 0 0 6px rgba(240,200,90,0.5); }
   .icon-btn { width: 38px; height: 38px; display: grid; place-items: center; background: transparent; border: 1px solid rgba(255,255,255,0.18); border-radius: 50%; }
   .icon-btn svg { width: 18px; height: 18px; stroke: #dfe7f2; fill: none; stroke-width: 1.8; }
-  .h-tabs { position: absolute; top: max(66px, calc(env(safe-area-inset-top) + 58px)); right: 18px; left: 18px; display: flex; gap: 14px; justify-content: flex-start; overflow-x: auto; scrollbar-width: none; }
-  .h-tabs::-webkit-scrollbar { display: none; }
-  .h-tabs button { flex: none; background: none; padding: 6px 0; font-size: 14px; font-weight: 700; letter-spacing: 1.5px; color: rgba(255,255,255,0.45); border-bottom: 2px solid transparent; }
-  .h-tabs button.on { color: #fff; border-bottom-color: var(--teal); }
+  .h-tabs { position: absolute; top: max(62px, calc(env(safe-area-inset-top) + 54px)); right: 14px; left: 14px; max-width: 560px; margin-left: auto; display: flex; gap: 4px; padding: 4px;
+    background: linear-gradient(180deg, rgba(10,22,30,0.78), rgba(6,12,18,0.72)); border: 1px solid rgba(47,211,189,0.35); border-radius: 14px;
+    box-shadow: 0 0 24px rgba(47,211,189,0.14), inset 0 1px 0 rgba(255,255,255,0.08); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+  .h-tabs button { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 7px 2px 6px; border-radius: 10px; background: none;
+    font-size: 12px; font-weight: 800; letter-spacing: 0.5px; color: rgba(255,255,255,0.6); transition: background .2s, color .2s, box-shadow .2s; }
+  .h-tabs svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .h-tabs button.on { color: #04201c; background: linear-gradient(180deg, #5ff0dc, var(--teal)); box-shadow: 0 0 18px rgba(47,211,189,0.6), inset 0 1px 0 rgba(255,255,255,0.5); }
+  .h-tabs button:not(.on):hover { color: #fff; background: rgba(47,211,189,0.1); }
+  .up-ic { flex: none; width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; color: var(--teal); background: rgba(47,211,189,0.1); border: 1px solid rgba(47,211,189,0.35); box-shadow: 0 0 14px rgba(47,211,189,0.18); }
+  .up-ic svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
   .h-plane { position: absolute; left: 18px; right: 18px; bottom: max(116px, calc(env(safe-area-inset-bottom) + 106px)); text-align: right; }
   .h-plane .era { font-size: 12px; font-weight: 700; letter-spacing: 3px; color: var(--teal); }
   .h-plane .pname { font-size: clamp(54px, 15vw, 96px); font-weight: 900; line-height: 1; letter-spacing: 1px; margin: 4px 0 2px; text-shadow: 0 6px 30px rgba(0,0,0,0.5); }
+  .h-plane .era .ace { display: inline-block; margin-inline-start: 6px; padding: 1px 8px; border-radius: 999px; color: #1d1405; background: linear-gradient(90deg, #f1d27a, #ffb347); letter-spacing: 1px; box-shadow: 0 0 12px rgba(241,210,122,0.6); }
+  .h-plane .pname.ace { background: linear-gradient(180deg, #fff 30%, #f1d27a); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 0 14px rgba(241,210,122,0.35)); text-shadow: none; }
   .h-plane .role { font-size: 15px; color: rgba(255,255,255,0.7); }
   .h-plane .row { display: flex; align-items: center; gap: 12px; margin-top: 14px; justify-content: flex-start; }
-  .h-dots { display: flex; gap: 6px; }
-  .h-dots i { width: 18px; height: 3px; background: rgba(255,255,255,0.2); }
+  .h-dots { display: flex; gap: 4px; }
+  .h-dots i { width: 13px; height: 3px; background: rgba(255,255,255,0.2); }
   .h-dots i.on { background: #fff; }
   .h-dots i.own { background: rgba(47,211,189,0.6); }
   .h-dots i.on.own { background: #fff; }
+  .h-dots i.ace { height: 5px; box-shadow: 0 0 6px rgba(241,210,122,0.7); outline: 1px solid rgba(241,210,122,0.7); }
   .chev { width: 44px; height: 44px; display: grid; place-items: center; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.16); border-radius: 50%; }
   .chev svg { width: 18px; height: 18px; stroke: #fff; fill: none; stroke-width: 2.2; }
   .h-act { white-space: nowrap; padding: 11px 22px; border-radius: 999px; font-size: 15px; font-weight: 800; letter-spacing: 0.5px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.25); }
@@ -98,8 +107,8 @@
   .h-mode { position: absolute; right: 18px; bottom: max(84px, calc(env(safe-area-inset-bottom) + 76px)); display: flex; gap: 16px; }
   .h-mode button { background: none; padding: 4px 0; font-size: 12px; font-weight: 700; letter-spacing: 1px; color: rgba(255,255,255,0.45); border-bottom: 2px solid transparent; }
   .h-mode button.on { color: #fff; border-bottom-color: #6fe6ff; }
-  .h-invite { position: absolute; top: max(104px, calc(env(safe-area-inset-top) + 96px)); right: 18px; left: 18px; text-align: center; padding: 8px; background: rgba(47,211,189,0.15); border: 1px solid rgba(47,211,189,0.5); font-size: 13px; font-weight: 700; }
-  .h-panel { position: absolute; top: max(112px, calc(env(safe-area-inset-top) + 104px)); left: 18px; right: 18px; bottom: max(96px, calc(env(safe-area-inset-bottom) + 86px)); overflow: auto;
+  .h-invite { position: absolute; top: max(128px, calc(env(safe-area-inset-top) + 120px)); right: 18px; left: 18px; text-align: center; padding: 8px; background: rgba(47,211,189,0.15); border: 1px solid rgba(47,211,189,0.5); font-size: 13px; font-weight: 700; }
+  .h-panel { position: absolute; top: max(130px, calc(env(safe-area-inset-top) + 122px)); left: 18px; right: 18px; bottom: max(96px, calc(env(safe-area-inset-bottom) + 86px)); overflow: auto;
     background: linear-gradient(180deg, rgba(8,12,18,0.82), rgba(8,12,18,0.7)); border: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); padding: 6px 16px; }
   .up { display: flex; align-items: center; gap: 14px; padding: 14px 0; border-bottom: 1px solid rgba(255,255,255,0.08); }
   .up:last-child { border-bottom: 0; }
@@ -114,7 +123,7 @@
   .specs .dl { font-size: 13px; }
   .specs .dl b { font-size: 18px; }
   .specs .vs { font-size: 11px; color: var(--dim); }
-  .glance { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 8px 0 4px; }
+  .glance { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 8px 0 4px; }
   .gl { padding: 7px 8px; background: rgba(47,211,189,0.07); border: 1px solid rgba(47,211,189,0.22); border-radius: 6px; text-align: center; }
   .gl b { display: block; font-family: Orbitron, Rubik, sans-serif; font-size: 16px; color: #fff; }
   .gl span { font-size: 10.5px; color: var(--dim); }
@@ -163,19 +172,25 @@
     .h-launch { left: auto; width: min(560px, 56vw); }
   }
   @media (orientation: landscape) and (max-height: 500px) {
-    .h-tabs { top: 50px; }
+    .h-tabs { top: 54px; padding: 3px; border-radius: 11px; max-width: 520px; }
+    .h-tabs button { flex-direction: row; justify-content: center; gap: 6px; padding: 5px 4px; }
+    .h-tabs svg { width: 17px; height: 17px; }
     /* the plane card too: under the tabs, above the mode switch, growing down */
-    .h-plane { top: 86px; bottom: 112px; justify-content: flex-start; }
+    .h-plane { top: 98px; bottom: 112px; justify-content: flex-start; }
     .h-plane .pname { font-size: 38px; margin: 2px 0 0; }
     .h-plane .role { display: none; }
     .h-plane .row { margin-top: 6px; }
     .h-plane .chev { width: 36px; height: 36px; }
     .h-plane .h-act { padding: 8px 16px; font-size: 13px; }
     .h-plane > * { flex-shrink: 0; }
-    .h-panel { top: 92px; bottom: 116px; }
+    .h-panel { top: 100px; bottom: 116px; }
+    /* the upgrades on a short screen: the three rows, not the summary over them */
+    .h-panel.ups .glance, .h-panel.ups .up-head small, .h-panel.ups .up .t > small, .h-panel.ups > .note { display: none; }
+    .h-panel.ups .up { padding: 8px 0; }
+    .h-panel.ups .up-head { padding: 6px 0 0; }
     /* the market card on a short screen: the essentials only */
     /* starts under the tabs and grows down, never up over them */
-    .h-plane.market { top: 86px; bottom: 84px; justify-content: flex-start; }
+    .h-plane.market { top: 98px; bottom: 84px; justify-content: flex-start; }
     .h-plane.market > * { flex-shrink: 0; }
     .h-plane.market .pname { font-size: 30px; margin: 0; line-height: 1.05; }
     .h-plane.market .era, .h-plane.market .role { display: none; }
@@ -404,11 +419,11 @@
     <button class="icon-btn" id="btn-settings2" type="button" aria-label="הגדרות"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg></button>
   </div>
   <div class="h-tabs">
-    <button class="on" data-tab="planes" type="button">מטוסים</button>
-    <button data-tab="ups" type="button">שדרוגים</button>
-    <button data-tab="market" type="button">שוק</button>
-    <button data-tab="board" type="button">דירוג</button>
-    <button data-tab="friends" type="button">חברים</button>
+    <button class="on" data-tab="planes" type="button"><svg viewBox="0 0 24 24"><path d="M12 2l2 7 8 4v2l-8-2-1 5 3 2v2l-4-1-4 1v-2l3-2-1-5-8 2v-2l8-4z"/></svg><span>מטוסים</span></button>
+    <button data-tab="ups" type="button"><svg viewBox="0 0 24 24"><path d="M12 4l7 7h-4v8H9v-8H5z"/></svg><span>שדרוגים</span></button>
+    <button data-tab="market" type="button"><svg viewBox="0 0 24 24"><path d="M4 8h16l-1 12H5zM8 8V6a4 4 0 0 1 8 0v2"/></svg><span>שוק</span></button>
+    <button data-tab="board" type="button"><svg viewBox="0 0 24 24"><path d="M5 20V12M12 20V5M19 20v-6"/></svg><span>דירוג</span></button>
+    <button data-tab="friends" type="button"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3 19c0-3.5 3-5.5 6-5.5s6 2 6 5.5M16 5.5a3 3 0 0 1 0 5.6M18 13.8c2 .7 3 2.6 3 5.2"/></svg><span>חברים</span></button>
   </div>
   <div class="h-plane" id="tab-planes">
     <div class="era" id="hp-era"></div>

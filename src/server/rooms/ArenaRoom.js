@@ -397,15 +397,19 @@ export class ArenaRoom extends Room {
     this.missiles = keep;
   }
 
-  /** Through a repair pad that is ready, and hurt: patched up to full. */
+  /** Through a repair pad that is ready, short of anything: health, missiles and flares all back to full. */
   repair(p) {
-    if (p.hp >= p.stats.hp) return;
+    const short = p.hp < p.stats.hp || p.ammo < p.stats.missiles || p.flares < p.stats.flares;
+    if (!short) return;
     const i = healAt(p.x, p.y, p.z);
     if (i < 0 || this.now < (this.healReady[i] || 0)) return;
     this.healReady[i] = this.now + HEAL.every * 1000;
+    // everything back: the airframe, the missiles on the rails, the flares
     const was = p.hp;
     p.hp = p.stats.hp;
-    this.sendTo(p, 'healed', { hp: Math.round(p.hp), gain: Math.round(p.hp - was) });
+    p.ammo = p.stats.missiles; p.reloadT = 0;
+    p.flares = p.stats.flares; p.flareT = 0;
+    this.sendTo(p, 'healed', { hp: Math.round(p.hp), gain: Math.round(p.hp - was), ammo: p.ammo, flares: p.flares });
     this.broadcast('pad', { i, s: HEAL.every });
   }
 
@@ -631,7 +635,8 @@ export class ArenaRoom extends Room {
     const ace = Math.random() < 0.2 ? 4 + Math.floor(Math.random() * 6) : 0;
     const level = Math.max(1, Math.min(30, lv + Math.round(Math.random() * 6 - 3) + ace));
     const pick = (list) => list[Math.floor(Math.random() * list.length)];
-    const plane = pick(PLANE_ORDER.filter((k) => PLANES[k].level <= level));
+    // one of the last few planes its level opens, not a starter at level 25
+    const plane = pick(PLANE_ORDER.filter((k) => PLANES[k].level <= level).slice(-4));
     // a tier or two short of what the level allows, or right up to it
     const top = Math.min(5, Math.floor(level / 4));
     const upgrades = Object.fromEntries(UPGRADE_ORDER.map((k) => [k, Math.max(0, top - Math.floor(Math.random() * 3))]));

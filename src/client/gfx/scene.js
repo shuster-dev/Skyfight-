@@ -11,6 +11,7 @@ import {
   PlaneGeometry, PMREMGenerator, RGBAFormat, RepeatWrapping, Scene, ShaderMaterial, SphereGeometry, SRGBColorSpace, Sprite,
   SpriteMaterial, TubeGeometry, Vector3, WebGLRenderer, ClampToEdgeWrapping, RingGeometry, CircleGeometry,
 } from 'three';
+import { makeStreets } from './streets.js';
 import { ARENA, BRIDGE, BUILDINGS, GRID, ISLANDS, cityAt, noise, terrainAt, inBay } from '../../shared/arena.js';
 
 export const SKY = { top: 0x3b78c9, horizon: 0xd4e6f2, sun: 0xfff2d6, fog: 0xcfe2ef };
@@ -69,6 +70,8 @@ export function makeWorld(renderer) {
   scene.add(traffic.group);
   const ships = makeShips();
   scene.add(ships.group);
+  const streets = makeStreets();
+  scene.add(streets.group);
 
   /**
    * How much to draw. 'high' is everything; 'med' drops the small things you
@@ -82,6 +85,8 @@ export function makeWorld(renderer) {
     city.children[1].visible = !low;            // plant rooms on the roofs
     traffic.group.visible = !low;
     ships.group.visible = !low;
+    streets.group.visible = !low;
+    streets.setQuality(level);
     clouds.children.forEach((c, i) => (c.visible = !low || i % 3 === 0));
     sea.material.uniforms.detail.value = low ? 0 : 1;
     // clear air: the haze starts far out, where it only softens the horizon
@@ -101,6 +106,7 @@ export function makeWorld(renderer) {
       sea.position.z = Math.round(camera.position.z / 100) * 100;
       traffic.tick(dt);
       ships.tick(dt);
+      if (streets.group.visible) streets.tick(dt, camera.position);
     },
   };
 }

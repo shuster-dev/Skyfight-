@@ -11,7 +11,7 @@
 // carried gun's muzzles), load ({ missile, gun }).
 import {
   AdditiveBlending, BufferAttribute, BufferGeometry, CanvasTexture, ConeGeometry, CylinderGeometry, Group, Mesh,
-  MeshBasicMaterial, MeshStandardMaterial, SphereGeometry, SRGBColorSpace, Vector3, BoxGeometry, TorusGeometry,
+  MeshBasicMaterial, MeshStandardMaterial, SphereGeometry, SRGBColorSpace, Vector3, BoxGeometry, TorusGeometry, Color,
 } from 'three';
 import { PAINTS, PLANES } from '../../shared/planes.js';
 import { buildMissile } from './arms.js';
@@ -176,6 +176,16 @@ const SCHEMES = {
   bulldog: { top: '#8794a1', blot: ['#6e7a87', '#7d8995'], under: '#a6b0ba', metal: 0.2, rough: 0.55, low: true, num: '688', splinter: true },
   // desert: sand, brown and green over light blue
   viper: { top: '#c3a26c', blot: ['#8a683d', '#6f7350'], under: '#a8bac7', metal: 0.15, rough: 0.6, low: false, num: '874' },
+  // dark sea blue, gloss: the gull-winged naval fighter
+  gull: { top: '#2b3f5c', blot: [], under: '#33496a', metal: 0.3, rough: 0.35, nose: '#e8e6dc', low: false, num: '22' },
+  // the Six-Day War delta: sand and two browns, the yellow-and-black ID triangles
+  shahak: { top: '#c9a66b', blot: ['#8e6a3e', '#6e5636'], under: '#9fb4c4', metal: 0.25, rough: 0.4, band: '#f2c230', low: false, num: '159', ace: '#f2c230' },
+  // the little attack jet: two-tone desert, a long refuelling probe
+  skyhawk: { top: '#b89a63', blot: ['#7a6440', '#8c8a5e'], under: '#a9bccb', metal: 0.15, rough: 0.6, low: false, num: '311' },
+  // the F-16I: two greys, glossy, the squadron's red tail flash
+  sufa: { top: '#7d8894', blot: ['#66717d'], under: '#b3bcc5', metal: 0.35, rough: 0.32, band: '#c4262e', low: true, num: '493', ace: '#c4262e' },
+  // the Lavi: light grey with a blue spine, the plane that almost was
+  lavi: { top: '#a9b3bd', blot: ['#8f9aa5'], under: '#c5ccd3', metal: 0.3, rough: 0.4, band: '#2f6fd1', low: false, num: 'B-01' },
   // radar-absorbent dark grey with darker saw-toothed panel edges
   phantom: { top: '#62686f', blot: [], under: '#5c6268', metal: 0.25, rough: 0.5, low: true, num: '901', stealth: true },
 };
@@ -508,6 +518,137 @@ const BUILD = {
     g.userData = { props: [], flames: [f], guns, tips: [new Vector3(-4.5, 0, 3.8), new Vector3(4.5, 0, 3.8)], missiles, len: 13.8 };
     return g;
   },
+  // the gull-winged naval fighter: a long nose, a big three-blade prop, wings bent down then up
+  gull() {
+    const M = mats('gull'), g = new Group();
+    g.add(new Mesh(loft([
+      { z: -5.2, w: 1.35, h: 1.4 }, { z: -4.8, w: 1.5, h: 1.55 }, { z: -2.6, w: 1.45, h: 1.6 }, { z: -0.6, w: 1.3, h: 1.65, y: 0.08 },
+      { z: 1.2, w: 1.05, h: 1.4, y: 0.05 }, { z: 3.2, w: 0.55, h: 0.95, y: 0.12 }, { z: 4.9, w: 0.14, h: 0.4, y: 0.2 },
+    ]), M.body));
+    // the bent wing: down to the leg, then up and out
+    for (const w of wings({ x0: 0.55, span: 1.7, chord: (t) => 2.8 - 0.2 * t, le: (t) => -1.5 + 0.05 * t, y0: -0.2, dihedral: -0.42, thick: 0.15 })) g.add(new Mesh(w, M.wing));
+    for (const w of wings({ x0: 2.25, span: 3.6, chord: (t) => 2.6 - 1.3 * t, le: (t) => -1.45 + 0.35 * t, y0: -0.2 - 1.7 * Math.tan(0.42), dihedral: 0.2, thick: 0.13 })) g.add(new Mesh(w, M.wing));
+    for (const w of wings({ x0: 0.2, span: 2.2, chord: (t) => 1.35 - 0.55 * t, le: (t) => 3.7 + 0.2 * t, y0: 0.2, thick: 0.09 })) g.add(new Mesh(w, M.wing));
+    g.add(new Mesh(fin({ y0: 0.35, height: 1.9, chord: (t) => 1.8 - 0.9 * t, le: (t) => 3.3 + 0.9 * t }), M.fin));
+    g.add(canopy(0.2, 0.78, 1.3, 0.5, 0.62, true));
+    const prop = propeller(-5.3, 0, 3, 2.1, 0xd9d4c4);
+    g.add(prop);
+    const missiles = [store(3.0, -1.05, -0.4, LOAD.missile), store(-3.0, -1.05, -0.4, LOAD.missile)];
+    missiles.forEach((m) => g.add(m));
+    const guns = [2.6, 2.9, 3.2, -2.6, -2.9, -3.2].map((x) => new Vector3(x, -0.75, -1.5));
+    g.userData = { props: [prop], flames: [], guns, tips: [new Vector3(-5.8, 0, 0), new Vector3(5.8, 0, 0)], missiles, len: 10.2 };
+    return g;
+  },
+  // the Mirage delta: a needle nose, half-cone intakes, one great triangle, no tailplane
+  shahak() {
+    const M = mats('shahak'), g = new Group();
+    g.add(new Mesh(loft([
+      { z: -8.0, w: 0.05, h: 0.05 }, { z: -6.6, w: 0.55, h: 0.55 }, { z: -4.6, w: 1.0, h: 1.1 }, { z: -2.8, w: 1.2, h: 1.4, y: 0.12 },
+      { z: -0.4, w: 1.35, h: 1.4, y: 0.05 }, { z: 2.6, w: 1.25, h: 1.25 }, { z: 5.0, w: 1.05, h: 1.05 }, { z: 5.8, w: 0.95, h: 0.95 },
+    ]), M.body));
+    for (const s of [-1, 1]) {
+      const it = new Mesh(loft([{ z: -3.0, w: 0.1, h: 0.4 }, { z: -2.6, w: 0.5, h: 0.85 }, { z: 0.4, w: 0.55, h: 0.85 }, { z: 1.6, w: 0.2, h: 0.5 }], 14), M.body);
+      it.position.set(s * 0.8, 0, 0);
+      g.add(it);
+      // the shock cone in each intake
+      const cone = new Mesh(new ConeGeometry(0.2, 0.55, 12).rotateX(-Math.PI / 2), new MeshStandardMaterial({ color: 0x2a2c30, roughness: 0.4, metalness: 0.6 }));
+      cone.position.set(s * 0.8, 0, -3.0);
+      g.add(cone);
+    }
+    for (const w of wings({ x0: 0.55, span: 3.9, chord: (t) => 7.8 - 6.9 * t, le: (t) => -2.6 + 6.6 * t, y0: -0.2, thick: 0.045, n: 5 })) g.add(new Mesh(w, M.wing));
+    g.add(new Mesh(fin({ y0: 0.45, height: 2.7, chord: (t) => 3.8 - 2.7 * t, le: (t) => 1.4 + 3.0 * t }), M.fin));
+    g.add(canopy(-3.4, 0.72, 1.3, 0.48, 0.56, true));
+    g.add(nozzle(0, 0, 6.0, 0.48, 0.8));
+    const f = flame(0, 0, 6.4, 0.44, 0xff8a3a);
+    g.add(f);
+    const missiles = [store(3.4, -0.45, 1.6, LOAD.missile), store(-3.4, -0.45, 1.6, LOAD.missile)];
+    missiles.forEach((m) => g.add(m));
+    const guns = [new Vector3(-0.75, -0.4, -2.2), new Vector3(0.75, -0.4, -2.2)];
+    g.userData = { props: [], flames: [f], guns, tips: [new Vector3(-4.4, 0, 3.6), new Vector3(4.4, 0, 3.6)], missiles, len: 13.8, ace: true };
+    return g;
+  },
+  // the Skyhawk: small, a hump behind the canopy, a long probe, low swept wings
+  skyhawk() {
+    const M = mats('skyhawk'), g = new Group();
+    g.add(new Mesh(loft([
+      { z: -5.4, w: 0.12, h: 0.12 }, { z: -4.6, w: 0.75, h: 0.85 }, { z: -2.8, w: 1.05, h: 1.25, y: 0.1 }, { z: -0.8, w: 1.25, h: 1.55, y: 0.25 },
+      { z: 1.4, w: 1.15, h: 1.35, y: 0.18 }, { z: 3.6, w: 0.8, h: 0.95, y: 0.1 }, { z: 4.8, w: 0.6, h: 0.65 },
+    ]), M.body));
+    // the refuelling probe, out to the right of the nose
+    const probe = new Mesh(new CylinderGeometry(0.05, 0.05, 2.4, 8).rotateX(Math.PI / 2), new MeshStandardMaterial({ color: 0x9aa0a8, metalness: 0.8, roughness: 0.3 }));
+    probe.position.set(0.45, 0.1, -5.2);
+    g.add(probe);
+    for (const s of [-1, 1]) {
+      const it = new Mesh(loft([{ z: -2.6, w: 0.1, h: 0.5 }, { z: -2.2, w: 0.45, h: 0.7 }, { z: 0.4, w: 0.45, h: 0.7 }, { z: 1.2, w: 0.15, h: 0.4 }], 12), M.body);
+      it.position.set(s * 0.7, 0.15, 0);
+      g.add(it);
+    }
+    for (const w of wings({ x0: 0.5, span: 3.6, chord: (t) => 3.6 - 2.1 * t, le: (t) => -1.4 + 2.4 * t, y0: -0.4, dihedral: -0.04, thick: 0.09 })) g.add(new Mesh(w, M.wing));
+    for (const w of wings({ x0: 0.25, span: 1.6, chord: (t) => 1.3 - 0.6 * t, le: (t) => 3.4 + 0.8 * t, y0: 0.85, thick: 0.07 })) g.add(new Mesh(w, M.wing));
+    g.add(new Mesh(fin({ y0: 0.6, height: 1.8, chord: (t) => 2.0 - 1.2 * t, le: (t) => 2.8 + 1.4 * t }), M.fin));
+    g.add(canopy(-2.6, 0.78, 1.1, 0.46, 0.55, true));
+    g.add(nozzle(0, 0.05, 4.9, 0.36, 0.5));
+    const f = flame(0, 0.05, 5.1, 0.33);
+    g.add(f);
+    const missiles = [store(2.6, -0.7, 0.4, LOAD.missile), store(-2.6, -0.7, 0.4, LOAD.missile)];
+    missiles.forEach((m) => g.add(m));
+    const guns = [new Vector3(-0.65, -0.3, -1.6), new Vector3(0.65, -0.3, -1.6)];
+    g.userData = { props: [], flames: [f], guns, tips: [new Vector3(-4.1, 0, 2.2), new Vector3(4.1, 0, 2.2)], missiles, len: 10.4 };
+    return g;
+  },
+  // the F-16I Sufa: the chin intake, a blended body with conformal tanks, a big bubble canopy, a dorsal spine
+  sufa() {
+    const M = mats('sufa'), g = new Group();
+    g.add(new Mesh(loft([
+      { z: -7.2, w: 0.06, h: 0.06 }, { z: -6.0, w: 0.75, h: 0.8 }, { z: -4.2, w: 1.15, h: 1.25, y: 0.2 }, { z: -2.2, w: 1.5, h: 1.45, y: 0.25 },
+      { z: 0.4, w: 2.1, h: 1.35, y: 0.2, p: 2.6 }, { z: 3.0, w: 1.8, h: 1.15, y: 0.1, p: 2.4 }, { z: 5.0, w: 1.1, h: 0.95 }, { z: 6.0, w: 0.95, h: 0.9 },
+    ]), M.body));
+    // the dorsal spine of the two-seater, and the chin intake
+    g.add(new Mesh(loft([{ z: -2.0, w: 0.3, h: 0.2, y: 0.95 }, { z: -1.2, w: 0.8, h: 0.6, y: 0.95 }, { z: 2.6, w: 0.7, h: 0.5, y: 0.7 }, { z: 4.4, w: 0.2, h: 0.15, y: 0.5 }], 12), M.body));
+    const chin = new Mesh(loft([{ z: -3.4, w: 1.1, h: 0.75, y: -0.75, p: 3 }, { z: -2.2, w: 1.1, h: 0.75, y: -0.7, p: 3 }, { z: 0.2, w: 0.9, h: 0.5, y: -0.55 }], 14), M.body);
+    g.add(chin);
+    const mouth = new Mesh(new BoxGeometry(1.0, 0.65, 0.1), new MeshStandardMaterial({ color: 0x0c0c0d, roughness: 1 }));
+    mouth.position.set(0, -0.75, -3.42);
+    g.add(mouth);
+    for (const w of wings({ x0: 0.9, span: 4.0, chord: (t) => 4.6 - 3.3 * t, le: (t) => -0.8 + 3.1 * t, y0: 0.05, thick: 0.05 })) g.add(new Mesh(w, M.wing));
+    for (const w of wings({ x0: 0.8, span: 2.2, chord: (t) => 2.3 - 1.2 * t, le: (t) => 4.0 + 1.0 * t, y0: 0.0, dihedral: -0.08, thick: 0.045 })) g.add(new Mesh(w, M.wing));
+    g.add(new Mesh(fin({ y0: 0.75, height: 2.6, chord: (t) => 2.8 - 1.6 * t, le: (t) => 2.8 + 1.6 * t }), M.fin));
+    g.add(canopy(-3.6, 0.95, 2.0, 0.55, 0.62, false));
+    g.add(nozzle(0, 0.1, 6.1, 0.5, 0.8));
+    const f = flame(0, 0.1, 6.5, 0.46, 0xff9a4a);
+    g.add(f);
+    const missiles = [store(4.95, 0.05, 1.8, LOAD.missile), store(-4.95, 0.05, 1.8, LOAD.missile), store(3.2, -0.3, 1.0, LOAD.missile), store(-3.2, -0.3, 1.0, LOAD.missile)];
+    missiles.forEach((m) => g.add(m));
+    const guns = [new Vector3(-0.85, 0.5, -2.4)];
+    g.userData = { props: [], flames: [f], guns, tips: [new Vector3(-4.95, 0, 2.6), new Vector3(4.95, 0, 2.6)], missiles, len: 13.4, ace: true };
+    return g;
+  },
+  // the Lavi: canards close behind the canopy, a cranked delta, a chin intake
+  lavi() {
+    const M = mats('lavi'), g = new Group();
+    g.add(new Mesh(loft([
+      { z: -7.0, w: 0.05, h: 0.05 }, { z: -5.8, w: 0.7, h: 0.75 }, { z: -3.8, w: 1.15, h: 1.3, y: 0.2 }, { z: -1.6, w: 1.45, h: 1.4, y: 0.2 },
+      { z: 1.0, w: 1.6, h: 1.3, y: 0.12, p: 2.4 }, { z: 3.6, w: 1.3, h: 1.1 }, { z: 5.4, w: 0.95, h: 0.95 },
+    ]), M.body));
+    const chin = new Mesh(loft([{ z: -2.6, w: 1.0, h: 0.7, y: -0.7, p: 3.4 }, { z: -1.2, w: 1.05, h: 0.75, y: -0.65, p: 3 }, { z: 1.2, w: 0.8, h: 0.5, y: -0.5 }], 14), M.body);
+    g.add(chin);
+    const mouth = new Mesh(new BoxGeometry(0.9, 0.6, 0.1), new MeshStandardMaterial({ color: 0x0c0c0d, roughness: 1 }));
+    mouth.position.set(0, -0.7, -2.62);
+    g.add(mouth);
+    // the cranked delta and the big canards
+    for (const w of wings({ x0: 0.7, span: 4.0, chord: (t) => 6.2 - 4.9 * t, le: (t) => -1.0 + 4.6 * t, y0: -0.15, thick: 0.045, n: 5 })) g.add(new Mesh(w, M.wing));
+    for (const w of wings({ x0: 0.7, span: 1.8, chord: (t) => 2.0 - 1.3 * t, le: (t) => -2.4 + 1.4 * t, y0: 0.35, thick: 0.05 })) g.add(new Mesh(w, M.wing));
+    g.add(new Mesh(fin({ y0: 0.6, height: 2.5, chord: (t) => 3.0 - 1.9 * t, le: (t) => 2.0 + 2.2 * t }), M.fin));
+    g.add(canopy(-3.4, 0.9, 1.4, 0.5, 0.58, false));
+    g.add(nozzle(0, 0.05, 5.6, 0.46, 0.7));
+    const f = flame(0, 0.05, 6.0, 0.42, 0xff8a3a);
+    g.add(f);
+    const missiles = [store(4.6, -0.2, 2.0, LOAD.missile), store(-4.6, -0.2, 2.0, LOAD.missile), store(2.8, -0.4, 1.2, LOAD.missile), store(-2.8, -0.4, 1.2, LOAD.missile)];
+    missiles.forEach((m) => g.add(m));
+    const guns = [new Vector3(0.8, -0.3, -1.6)];
+    g.userData = { props: [], flames: [f], guns, tips: [new Vector3(-4.7, 0, 3.4), new Vector3(4.7, 0, 3.4)], missiles, len: 12.6 };
+    return g;
+  },
   // fifth generation: chined nose, faceted body, canted twin tails
   phantom() {
     const M = mats('phantom'), g = new Group();
@@ -535,7 +676,7 @@ const BUILD = {
     const missiles = [store(3.4, -0.35, 1.6, LOAD.missile), store(-3.4, -0.35, 1.6, LOAD.missile), store(2.2, -0.4, 0.9, LOAD.missile), store(-2.2, -0.4, 0.9, LOAD.missile)];
     missiles.forEach((m) => g.add(m));
     const guns = [new Vector3(-1.0, 0.3, -2.4)];
-    g.userData = { props: [], flames: [f], guns, tips: [new Vector3(-5.4, 0, 2.6), new Vector3(5.4, 0, 2.6)], missiles, len: 13.6 };
+    g.userData = { props: [], flames: [f], guns, tips: [new Vector3(-5.4, 0, 2.6), new Vector3(5.4, 0, 2.6)], missiles, len: 13.6, ace: true };
     return g;
   },
 };
@@ -592,6 +733,16 @@ export function buildPlane(kind, paint = 'stock', load = {}) {
   g.userData.barrels = g.userData.guns.map((v) => barrel(v, LOAD.gun));
   g.userData.barrels.forEach((b) => g.add(b));
   g.userData.load = { ...LOAD };
+  // an elite plane shows it: steady wingtip lights in its own colour
+  if (g.userData.ace) {
+    const c = new Color(SCHEMES[id].ace || '#6fe6ff');
+    for (const tip of g.userData.tips) {
+      const l = new Mesh(new SphereGeometry(0.16, 10, 8), new MeshBasicMaterial({ color: c }));
+      const h = new Mesh(new SphereGeometry(0.42, 10, 8), new MeshBasicMaterial({ color: c, transparent: true, opacity: 0.35, blending: AdditiveBlending, depthWrite: false }));
+      l.position.copy(tip); h.position.copy(tip);
+      g.add(l, h);
+    }
+  }
   return g;
 }
 

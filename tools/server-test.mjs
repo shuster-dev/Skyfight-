@@ -256,7 +256,7 @@ try {
   await go(pad.x, pad.y + HEAL.h * 0.5, pad.z);
   await until(() => got(rp, 'healed').length > 0, 1500);
   const healed = got(rp, 'healed')[0]?.m;
-  ok('flying low through a pad patches the plane up to full', healed && healed.gain > 0 && healed.hp >= 250, { healed, fixes: got(rp, 'fix').length });
+  ok('flying low through a pad patches the plane up to full, missiles and flares too', healed && healed.gain > 0 && healed.hp >= 250 && healed.ammo >= 1 && healed.flares >= 2, { healed, fixes: got(rp, 'fix').length });
   ok('and the pad is spent for a while, for everyone', got(rp, 'pad').some((e) => e.m.i === 0 && e.m.s === HEAL.every));
   await rp.room.leave();
 
