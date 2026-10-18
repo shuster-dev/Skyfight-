@@ -318,8 +318,9 @@
   .arrow.boss { border-bottom-color: #ffd27a; }
   .tagp.mate { color: #8fc0ff; } .tagp.foe { color: #ff9a9a; }
   /* the aim pip: where to put the crosshair to hit the plane in the box */
-  #lead { position: absolute; width: 8px; height: 8px; margin: -4px; border: 1.5px solid #ffd25e; border-radius: 50%; box-shadow: 0 0 2px #000; }
-  #lead::after { content: ''; position: absolute; left: 5px; top: 5px; width: 2px; height: 2px; background: #ffd25e; }
+  #lead { position: absolute; width: 16px; height: 16px; margin: -9px; border: 2px solid #ffd25e; border-radius: 50%; box-shadow: 0 0 6px rgba(255,210,94,0.6), 0 0 2px #000; transition: opacity .2s; }
+  #lead::after { content: ''; position: absolute; left: 6px; top: 6px; width: 4px; height: 4px; border-radius: 50%; background: #ffd25e; }
+  #lead.far { opacity: 0.35; }
   /* hit from: arcs round the middle, turned to the shooter */
   #hitdir { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
   #hitdir i { position: absolute; left: -110px; top: -110px; width: 220px; height: 220px; border-radius: 50%; border-top: 6px solid rgba(255, 50, 60, 0.85); filter: drop-shadow(0 0 6px rgba(255, 40, 50, 0.8)); animation: hitfade 1.2s forwards; }

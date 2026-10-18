@@ -8,11 +8,12 @@ export const GUN = {
   speed: 480,
   /** Seconds a round flies before it is spent: the guns' reach. */
   life: 1.0,
-  /** How fat a plane is to a round: enough for lag, small enough that a
-   *  plane breaking hard slips out of a stream of rounds aimed where it was going. */
-  hitR: 5,
-  /** The guns' scatter: each round leaves up to this far off true (radians). */
-  spread: 0.011,
+  /** How fat a plane is to a round: a person's rounds get the room that lag
+   *  eats; a bot's are tighter, so a plane breaking hard slips out of them. */
+  hitR: 7.5, botHitR: 5,
+  /** The guns' scatter: each round leaves up to this far off true (radians).
+   *  A person's guns barely scatter: on the pip is on the plane. */
+  spread: 0.004, botSpread: 0.011,
   /** Aim help: a target this close to the nose (radians) and in reach is led. */
   assistCone: 0.13,
   assistRange: 520,
@@ -121,6 +122,30 @@ export function pickTarget(shooter, others, cone, range) {
   return best;
 }
 
+/** Where `target` will be when a round fired now from `shooter` gets there. */
+export function leadPoint(shooter, target) {
+  const d = Math.hypot(target.x - shooter.x, target.y - shooter.y, target.z - shooter.z);
+  const t = d / (GUN.speed + (shooter.speed || 0));
+  const v = target.vel || { x: 0, y: 0, z: 0 };
+  return { x: target.x + v.x * t, y: target.y + v.y * t, z: target.z + v.z * t };
+}
+
+/**
+ * The plane the guns are helped onto: the one whose pip (or the plane
+ * itself) is nearest the nose, within a cone and a reach — so the nose on
+ * the yellow pip of a plane crossing fast still counts.
+ */
+export function gunTarget(shooter, others, cone, range) {
+  let best = null, bestA = cone;
+  for (const o of others) {
+    if (o === shooter || !o.alive) continue;
+    if (Math.hypot(o.x - shooter.x, o.y - shooter.y, o.z - shooter.z) > range) continue;
+    const a = Math.min(offNose(shooter, shooter.yaw, shooter.pitch, o), offNose(shooter, shooter.yaw, shooter.pitch, leadPoint(shooter, o)));
+    if (a < bestA) { bestA = a; best = o; }
+  }
+  return best;
+}
+
 /**
  * Which way a round leaves: down the nose — or, with a target close to the
  * nose, at where that target will be when the round gets there. Returns a
@@ -129,10 +154,8 @@ export function pickTarget(shooter, others, cone, range) {
 export function aimDir(shooter, target) {
   const f = forward(shooter.yaw, shooter.pitch);
   if (!target) return f;
-  const d = Math.hypot(target.x - shooter.x, target.y - shooter.y, target.z - shooter.z);
-  const t = d / (GUN.speed + (shooter.speed || 0));
-  const v = target.vel || { x: 0, y: 0, z: 0 };
-  const px = target.x + v.x * t - shooter.x, py = target.y + v.y * t - shooter.y, pz = target.z + v.z * t - shooter.z;
+  const L = leadPoint(shooter, target);
+  const px = L.x - shooter.x, py = L.y - shooter.y, pz = L.z - shooter.z;
   const n = Math.hypot(px, py, pz) || 1;
   return { x: px / n, y: py / n, z: pz / n };
 }

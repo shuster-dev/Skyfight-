@@ -3,7 +3,7 @@
 import { GUNS, MISSILES, GUN_ORDER, MISSILE_ORDER, PLANES, PLANE_ORDER, UPGRADES, TIER_COST, TIER_LEVEL, statsOf, xpAt, xpStep, levelOf, levelProgress, killReward, cleanCallsign, nextTier, MAX_LEVEL } from '../src/shared/planes.js';
 import { ARENA, BRIDGE, BUILDINGS, HEAL, HEALS, groundAt, healAt, hitsSolid, inBay, spawnPoint, surfaceAt, terrainAt, underBridge } from '../src/shared/arena.js';
 import { fly, flyQ, forward, newBody, newBodyQ, plausibleMove, BOOST, BRAKE, Q } from '../src/shared/flight.js';
-import { GUN, MISSILE, RAM, aimDir, blastDamage, closestOn, DODGE, dodgeChance, offNose, pickTarget, ramDamage, segmentHit, steerMissile } from '../src/shared/combat.js';
+import { GUN, MISSILE, RAM, aimDir, blastDamage, closestOn, DODGE, dodgeChance, gunTarget, leadPoint, offNose, pickTarget, ramDamage, segmentHit, steerMissile } from '../src/shared/combat.js';
 import { buyArm, equipArm, newPilot, normalize, buyPlane, buyUpgrade, choosePlane, payKill, view } from '../src/server/pilot.js';
 
 let pass = 0, fail = 0;
@@ -222,6 +222,24 @@ ok('a segment that stops short does not', segmentHit(0, 0, 0, 0, 0, -5, 0, 0, -1
   ok('nothing in the cone: nothing', pickTarget(me, [me, side], 0.3, 500) === null);
   const d = aimDir(me, ahead);
   ok('guns lead a crossing target', d.x > 0.01 && d.z < -0.9, d);
+  // a plane crossing fast, 300 m out: the nose on its pip, well off the plane itself
+  const fast = { x: 0, y: 100, z: -300, alive: true, vel: { x: 120, y: 0, z: 0 } };
+  const shooter = { x: 0, y: 100, z: 0, yaw: 0, pitch: 0, speed: 80, alive: true };
+  const L = leadPoint(shooter, fast);
+  shooter.yaw = Math.atan2(-L.x, -L.z);
+  ok('the nose on the pip of a fast crossing plane: the guns are helped onto it', offNose(shooter, shooter.yaw, 0, fast) > GUN.assistCone && gunTarget(shooter, [fast], GUN.assistCone, 400) === fast && pickTarget(shooter, [fast], GUN.assistCone, 400) === null);
+  // and the rounds, scattered as a person's are, mostly hit
+  let hits = 0;
+  for (let i = 0; i < 400; i++) {
+    const a = Math.random() * Math.PI * 2, r = GUN.spread * Math.sqrt(Math.random()), dd = aimDir(shooter, fast), f = forward(shooter.yaw, 0);
+    const vx = (dd.x + Math.cos(a) * r) * GUN.speed + f.x * shooter.speed, vy = (dd.y + Math.sin(a) * r) * GUN.speed, vz = dd.z * GUN.speed + f.z * shooter.speed;
+    const tx = fast.x, tz = fast.z;
+    for (let t = 0, dt = 1 / 30; t < 1; t += dt) {
+      const bx = vx * t, by = 100 + vy * t, bz = vz * t, cx = tx + fast.vel.x * (t + dt);
+      if (segmentHit(bx, by, bz, bx + vx * dt, by + vy * dt, bz + vz * dt, cx, 100, tz, GUN.hitR) >= 0) { hits++; break; }
+    }
+  }
+  ok('on the pip, nine rounds in ten hit', hits / 400 > 0.9, hits / 400);
   const m = { x: 0, y: 100, z: 0, yaw: Math.PI / 2, pitch: 0 }; // facing -x
   for (let i = 0; i < 90; i++) steerMissile(m, ahead, 1 / 30);
   ok('a missile turns after its target', Math.hypot(m.x - ahead.x, m.z - ahead.z) < 200, m);
