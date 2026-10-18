@@ -197,7 +197,7 @@
      where they are from the nose */
   #compass-box { position: absolute; top: max(8px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); width: min(460px, 44vw); pointer-events: none; }
   #compass { width: 100%; height: 54px; display: block; }
-  @media (max-width: 700px) and (orientation: portrait) { #compass-box { top: calc(max(8px, env(safe-area-inset-top)) + 64px); width: 92vw; } #notes { top: calc(max(10px, env(safe-area-inset-top)) + 128px); } }
+  @media (max-width: 700px) and (orientation: portrait) { #compass-box { top: calc(max(8px, env(safe-area-inset-top)) + 64px); width: 92vw; } #notes { top: calc(max(10px, env(safe-area-inset-top)) + 184px); } #menu-btn, #invite-btn { top: calc(max(10px, env(safe-area-inset-top)) + 146px); } }
   .tagdot { position: absolute; left: 0; top: 0; will-change: transform; width: 5px; height: 5px; margin: -2.5px; border-radius: 50%; background: rgba(255, 120, 130, 0.9); box-shadow: 0 0 3px #000; }
   .tagdot.mate { background: #8fc0ff; }
   #hud .tr { position: absolute; top: max(10px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left)); width: min(150px, 34vw); background: rgba(8, 12, 18, 0.45); border-radius: 8px; padding: 4px 8px; font-size: 11px; line-height: 1.35; }
@@ -274,9 +274,10 @@
   .msl { display: flex; gap: 3px; }
   .msl i { width: 7px; height: 16px; border-radius: 3px; background: rgba(255, 255, 255, 0.2); }
   .msl i.on { background: #fff; }
-  #menu-btn { pointer-events: auto; position: absolute; bottom: max(14px, env(safe-area-inset-bottom)); right: max(12px, env(safe-area-inset-right)); background: rgba(8, 12, 18, 0.35); }
+  /* home and invite: top left, under the board — clear of the thumbs and the fire button */
+  #menu-btn { pointer-events: auto; position: absolute; top: calc(max(10px, env(safe-area-inset-top)) + 112px); left: max(12px, env(safe-area-inset-left)); background: rgba(8, 12, 18, 0.35); }
   #corner .icon-btn { background: rgba(8, 12, 18, 0.45); }
-  #invite-btn { pointer-events: auto; position: absolute; bottom: max(62px, calc(env(safe-area-inset-bottom) + 52px)); right: max(12px, env(safe-area-inset-right)); background: rgba(8, 12, 18, 0.35); }
+  #invite-btn { pointer-events: auto; position: absolute; top: calc(max(10px, env(safe-area-inset-top)) + 112px); left: calc(max(12px, env(safe-area-inset-left)) + 52px); background: rgba(8, 12, 18, 0.35); }
   #teamscore { position: absolute; top: max(10px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); display: flex; gap: 8px; align-items: center; padding: 4px 14px; background: rgba(8, 12, 18, 0.5); border-radius: 4px; font-size: 14px; font-weight: 800; letter-spacing: 1px; }
   #teamscore .b { color: #6aa8ff; } #teamscore .r { color: #ff6a6a; } #teamscore .sep { opacity: 0.5; }
   #bossbar { position: absolute; top: max(40px, calc(env(safe-area-inset-top) + 32px)); left: 50%; transform: translateX(-50%); width: min(340px, 60vw); }

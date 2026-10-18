@@ -225,6 +225,7 @@ function showHangar() {
   show('#corner', false);
   controls.enabled = false;
   sound.engine(false);
+  sound.seeker('off');
   clearPreview();
   viewing = S.pilot.plane;
   paintView = S.pilot.paint;
@@ -577,6 +578,7 @@ function hook(room) {
     paintTeams(m.score);
     (m.pads || []).forEach((t, i) => pads.spend(i, t));
     S.pilot = m.pilot;
+    sound.setPlane(S.pilot.plane);
     for (const r of m.roster) S.roster.set(r.key, r);
     const mesh = buildPlane(S.pilot.plane, S.pilot.paint, { gun: m.stats.gun, missile: m.stats.missile });
     scene.add(mesh);
@@ -770,6 +772,7 @@ function onDown(m) {
     S.killer = m.k ? { name: nameOf(m.k), how: m.how } : null;
     S.killcam = m.k && S.others.has(m.k) ? { key: m.k, until: performance.now() + 2600 } : null;
     sound.engine(false);
+    sound.seeker('off');
     show('#death');
     $('#death-title').textContent = m.how === 'collision' ? 'התנגשת' : m.how === 'crash' && !m.k ? 'התרסקת' : 'הופלת';
     $('#death-by').innerHTML = S.killer ? `על ידי <b>${esc(S.killer.name)}</b> · ${how}` : m.into === 'building' ? 'לתוך בניין' : m.into === 'bridge' ? 'לתוך הגשר' : 'שימו לב לגובה';
@@ -794,12 +797,13 @@ function onReward(m) {
 async function leaveSky(why) {
   if (S.mode !== 'air') return;
   S.leaving = true;
-  // nothing more goes out on a socket that is closing
+  // nothing more goes out on a socket that is closing; the room is told we
+  // are going, but nobody waits for it to answer
   const room = S.room;
   S.room = null;
   S.mode = 'leaving';
   controls.enabled = false;
-  try { await room?.leave(); } catch {}
+  room?.leave().catch(() => {});
   if (S.me) scene.remove(S.me.mesh);
   S.me = null;
   for (const o of S.others.values()) scene.remove(o.mesh), o.tag?.remove();
@@ -807,10 +811,11 @@ async function leaveSky(why) {
   clearBoss();
   fx.syncMissiles([], 0);
   for (const t of tagEls) t.d.style.display = 'none';
-  // the pilot as the server has them now (the pay is in)
-  try { took(await net.api('/api/me')); } catch {}
+  // the hangar at once, with what we know; the pilot as the server has them
+  // (the pay is in) fills in a moment later
   showHangar();
   why && toast(why);
+  try { took(await net.api('/api/me')); if (S.mode === 'hangar') renderHangar(); } catch {}
 }
 $('#menu-btn').addEventListener('click', () => leaveSky());
 $('#btn-to-hangar').addEventListener('click', () => leaveSky());
@@ -968,7 +973,6 @@ function chase(b, dt, input) {
 }
 
 // cannons thump; machine guns rattle
-const HEAVY = new Set(['bulldog', 'viper', 'phantom']);
 /** Tracers from the muzzles of whoever is firing, at their rate. */
 const MZ = new Vector3(), DIR = new Vector3();
 function guns(o, mesh, rate, dt, mine) {
@@ -990,7 +994,7 @@ function guns(o, mesh, rate, dt, mine) {
     // a round goes only as far as its gun reaches
     const reach = mine ? S.me.stats.gunRange : (GUNS[S.roster.get(o.key)?.gun] || GUNS.g1).range;
     if (mine || (holder.gun >> 1) % 2) fx.tracer(MZ, DIR.normalize(), sp, reach / GUN.speed), fx.muzzle(MZ);
-    if (mine) sound.shot(HEAVY.has(S.pilot.plane));
+    if (mine) sound.shot(S.me.stats.gun);
   }
 }
 
@@ -1033,6 +1037,11 @@ const P = new Vector3();
 function threat(dt) {
   const me = S.me, el = $('#threat');
   const b = me?.alive && me.body;
+  // any missile tearing past close, whoever it was for: the rush of it
+  if (b) for (const x of S.missiles) {
+    if (Math.hypot(x.x - b.x, x.y - b.y, x.z - b.z) < 30 && !(S.whooshed ||= new Set()).has(x.id)) S.whooshed.add(x.id), sound.whoosh();
+    if (S.whooshed?.size > 200) S.whooshed.clear();
+  }
   let m = null, d = Infinity;
   if (b) for (const x of S.missiles) {
     if (x.target !== S.myKey) continue;
@@ -1094,7 +1103,9 @@ function hud(dt, now) {
       // tight on it once it has been held a moment
       S.lockT = same ? (S.lockT || 0) + dt : 0;
       lock.classList.toggle('ready', S.lockT > 0.4);
-    } else show(lock, false), S.lockOn = '', S.lockT = 0;
+      // in the headset: the growl while it looks, the tone once it holds
+      sound.seeker(S.lockT > 0.4 ? 'lock' : 'search');
+    } else show(lock, false), S.lockOn = '', S.lockT = 0, sound.seeker('off');
     // the crosshair where the guns point: 300 m down the nose
     const f = forward(b.yaw, b.pitch), cross = $('#cross');
     if (project(P.set(b.x + f.x * 300, b.y + f.y * 300, b.z + f.z * 300))) cross.style.left = `${P.x}px`, cross.style.top = `${P.y}px`;
@@ -1409,6 +1420,6 @@ addEventListener('resize', resize);
 addEventListener('orientationchange', () => [50, 200, 450, 900].forEach((ms) => setTimeout(resize, ms)));
 visualViewport?.addEventListener('resize', resize);
 if (typeof ResizeObserver !== 'undefined') new ResizeObserver(resize).observe(renderer.domElement);
-document.addEventListener('visibilitychange', () => { if (document.hidden) sound.engine(false); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) sound.engine(false), sound.seeker('off'); });
 
 boot();
