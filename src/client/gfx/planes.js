@@ -14,6 +14,7 @@ import {
   MeshBasicMaterial, MeshStandardMaterial, SphereGeometry, SRGBColorSpace, Vector3, BoxGeometry, TorusGeometry,
 } from 'three';
 import { PAINTS, PLANES } from '../../shared/planes.js';
+import { buildMissile } from './arms.js';
 
 // ---- shapes -------------------------------------------------------------------
 
@@ -331,49 +332,13 @@ function propeller(z, y, blades, r, spinner) {
   return g;
 }
 
-/**
- * The missiles a plane can carry, each its own look: length, girth, colour,
- * the band round it, the shape of its nose and whether it has canards up
- * front — so a glance at the wing tells which one is hung there.
- */
-const MISSILE_LOOK = {
-  m1: { len: 2.2, r: 0.14, body: 0x7b8058, band: 0xb8322a, nose: 0x3d3f39, noseLen: 0.38, canards: false },
-  m2: { len: 2.6, r: 0.12, body: 0xc9ccc4, band: 0xd8b13a, nose: 0x6d7178, noseLen: 0.42, canards: false },
-  m3: { len: 2.9, r: 0.115, body: 0xeeeeea, band: 0x2f6fd1, nose: 0x8a8f96, noseLen: 0.45, canards: true },
-  m4: { len: 3.1, r: 0.12, body: 0xf3f3ef, band: 0xff7a1a, nose: 0x22252a, noseLen: 0.5, canards: true },
-  m5: { len: 3.6, r: 0.1, body: 0xf6f6f2, band: 0x2fd37a, nose: 0x9aa0a8, noseLen: 0.85, canards: false, strakes: true },
-};
-
-/** A missile of a model hung under the wing on its pylon. */
+/** A missile of a model hung under the wing on its pylon (the models are arms.js's). */
 function store(x, y, z, model = 'm1') {
-  const L = MISSILE_LOOK[model] || MISSILE_LOOK.m1, g = new Group();
-  const { len, r } = L;
-  const body = new Mesh(new CylinderGeometry(r, r, len, 12).rotateX(Math.PI / 2), new MeshStandardMaterial({ color: L.body, roughness: 0.45, metalness: 0.2 }));
-  const nose = new Mesh(new ConeGeometry(r, L.noseLen, 12).rotateX(-Math.PI / 2), new MeshStandardMaterial({ color: L.nose, roughness: 0.3, metalness: 0.3 }));
-  nose.position.z = -len / 2 - L.noseLen / 2;
-  const band = new Mesh(new CylinderGeometry(r * 1.06, r * 1.06, 0.18, 12).rotateX(Math.PI / 2), new MeshStandardMaterial({ color: L.band, roughness: 0.5, emissive: L.band, emissiveIntensity: 0.25 }));
-  band.position.z = -len / 2 + 0.55;
-  g.add(body, nose, band);
-  for (let i = 0; i < 4; i++) {
-    const a = new Group();
-    a.rotation.z = (i / 4) * Math.PI * 2 + Math.PI / 4;
-    const f = new Mesh(new BoxGeometry(0.02, r * 3, 0.34), DARK());
-    f.position.set(0, r * 1.6, len / 2 - 0.2);
-    a.add(f);
-    if (L.canards) {
-      const c = new Mesh(new BoxGeometry(0.02, r * 2.1, 0.2), DARK());
-      c.position.set(0, r * 1.2, -len / 2 + 0.3);
-      a.add(c);
-    }
-    if (L.strakes) {
-      const k = new Mesh(new BoxGeometry(0.015, r * 0.9, len * 0.55), DARK());
-      k.position.set(0, r * 1.1, 0);
-      a.add(k);
-    }
-    g.add(a);
-  }
-  const pylon = new Mesh(new BoxGeometry(0.08, 0.3, Math.min(1.2, len * 0.45)), DARK());
-  pylon.position.y = r + 0.12;
+  const g = new Group();
+  const m = buildMissile(model);
+  g.add(m);
+  const pylon = new Mesh(new BoxGeometry(0.07, 0.24, Math.min(1.2, m.userData.len * 0.4)), DARK());
+  pylon.position.y = 0.17;
   g.add(pylon);
   g.position.set(x, y, z);
   g.userData.model = model;
@@ -621,7 +586,7 @@ export function buildBomber() {
 export function buildPlane(kind, paint = 'stock', load = {}) {
   const id = PLANES[kind] ? kind : 'sparrow';
   PAINT = PAINTS[paint] ? paint : 'stock';
-  LOAD = { missile: MISSILE_LOOK[load.missile] ? load.missile : 'm1', gun: GUN_LOOK[load.gun] ? load.gun : 'g1' };
+  LOAD = { missile: /^m[1-5]$/.test(load.missile || '') ? load.missile : 'm1', gun: GUN_LOOK[load.gun] ? load.gun : 'g1' };
   const g = BUILD[id]();
   // the gun carried, at every muzzle
   g.userData.barrels = g.userData.guns.map((v) => barrel(v, LOAD.gun));

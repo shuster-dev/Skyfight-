@@ -75,6 +75,7 @@ export class Controls {
     };
     hold('#btn-fire', 'fireHeld');
     hold('#btn-boost', 'boostHeld');
+    hold('#btn-brake', 'brakeHeld');
     $('#btn-missile').addEventListener('pointerdown', (e) => { e.preventDefault(); this.missileQueued = true; });
     $('#btn-flare').addEventListener('pointerdown', (e) => { e.preventDefault(); this.flareQueued = true; });
   }
@@ -147,6 +148,7 @@ export class Controls {
     return {
       turn, climb,
       boost: this.boostHeld || k('ShiftLeft') || k('ShiftRight'),
+      brake: this.brakeHeld || k('KeyB') || k('KeyC') || k('ControlLeft'),
       fire: this.fireHeld || k('Space'),
       missile, flare,
     };

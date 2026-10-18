@@ -46,7 +46,7 @@ const S = {
   preview: [], previewKind: '',
 };
 window.__sky = S; // the browser tests look in here
-S.hangarLoad = () => hangar.plane?.userData.load?.missile;
+S.hangarShows = () => hangar.armKey;
 S.note = (t, c) => toast(t, c);
 S.world = world; S.camera = camera; S.buildPlane = buildPlane; S.buildBomber = buildBomber; S.scene = scene;
 S.look = controls.look;
@@ -339,34 +339,66 @@ $('#hp-act').addEventListener('click', async (e) => {
 
 /** What an upgrade does, in the numbers a pilot reads: now, and after the next tier. */
 const KMH = (v) => Math.round(v * 3.6 * 4);
-const UP_SHOW = {
-  engine: (st) => `${KMH(st.speed)} קמ"ש · פנייה ${st.turn.toFixed(2)}`,
-  turbo: (st) => `${KMH(st.boost)} קמ"ש במבער`,
-  guns: (st) => `${Math.round(st.rate * st.dmg)} נזק לשנייה`,
-  armor: (st) => `${st.hp} חיים`,
-  missiles: (st) => `${st.missiles} ${st.missiles > 1 ? 'טילים' : 'טיל'} · טעינה ${st.reload.toFixed(1)} ש׳`,
-  flares: (st) => `${st.flares} נורים · טעינה ${st.flareReload.toFixed(1)} ש׳`,
+/**
+ * A plane's numbers as a pilot reads them, each with how to show it and
+ * which way is better: speed in km/h, turn in degrees a second, a reload in
+ * seconds (less is better), ranges in metres.
+ */
+const STAT = {
+  speed: { he: 'מהירות', val: (st) => KMH(st.speed), unit: 'קמ"ש' },
+  turn: { he: 'פנייה', val: (st) => Math.round((st.turn * 180) / Math.PI), unit: '°/ש׳' },
+  boost: { he: 'מבער', val: (st) => KMH(st.boost), unit: 'קמ"ש' },
+  refill: { he: 'מילוי מבער', val: (st) => +(1 / st.fill).toFixed(1), unit: 'ש׳', less: true },
+  dps: { he: 'נזק לשנייה', val: (st) => Math.round(st.rate * st.dmg) },
+  gunRange: { he: 'טווח ירי', val: (st) => st.gunRange, unit: "מ'" },
+  hp: { he: 'חיים', val: (st) => st.hp },
+  reload: { he: 'טעינת טיל', val: (st) => +st.reload.toFixed(1), unit: 'ש׳', less: true },
+  mRange: { he: 'טווח נעילה', val: (st) => st.mRange, unit: "מ'" },
+  missiles: { he: 'טילים', val: (st) => st.missiles },
+  flareReload: { he: 'טעינת נור', val: (st) => +st.flareReload.toFixed(1), unit: 'ש׳', less: true },
+  flares: { he: 'נורים', val: (st) => st.flares },
+  rate: { he: 'קצב אש', val: (st) => +st.rate.toFixed(1), unit: 'לש׳' },
+  mDmg: { he: 'נזק', val: (st) => st.mDmg },
+  mSpeed: { he: 'מהירות טיל', val: (st) => KMH(st.mSpeed), unit: 'קמ"ש' },
 };
+/** What each upgrade moves, in that order. */
+const UP_STATS = {
+  engine: ['speed', 'turn'], turbo: ['boost', 'refill'], guns: ['dps', 'gunRange'],
+  armor: ['hp'], missiles: ['reload', 'mRange', 'missiles'], flares: ['flareReload', 'flares'],
+};
+/** The plane at a glance, over the upgrades. */
+const GLANCE = ['speed', 'turn', 'hp', 'dps', 'gunRange', 'mRange'];
+
+/**
+ * One number, and what it becomes: "806 ← 870 קמ"ש", the new number green
+ * when better (red when worse). Unchanged, just the number.
+ */
+function delta(key, now, next) {
+  const S_ = STAT[key], a = S_.val(now), b = next ? S_.val(next) : a, unit = S_.unit ? ` <u>${S_.unit}</u>` : '';
+  if (a === b) return `<span class="dl"><span>${S_.he}</span><b>${a}${unit}</b></span>`;
+  const good = S_.less ? b < a : b > a;
+  return `<span class="dl"><span>${S_.he}</span><b class="was">${a}</b><i>←</i><b class="${good ? 'up' : 'dn'}">${b}${unit}</b></span>`;
+}
 
 /** The upgrades of the plane on the table: each plane is upgraded on its own. */
 function renderUps() {
   const p = S.pilot, k0 = viewing || p.plane, d = PLANES[k0];
-  const head = `<div class="up-head"><b>${d.he}</b><small>השדרוגים של המטוס הזה בלבד</small></div>`;
   if (!planeOwned(p, k0)) {
-    $('#tab-ups').innerHTML = head + `<div class="note">קנו את ה${d.he} כדי לשדרג אותו — או בחרו מטוס שלכם בלשונית המטוסים.</div>`;
+    $('#tab-ups').innerHTML = `<div class="up-head"><b>${d.he}</b></div><div class="note">קנו את ה${d.he} כדי לשדרג אותו — או בחרו מטוס שלכם בלשונית המטוסים.</div>`;
     return;
   }
-  const tiers = tiersOf(p, k0), now = statsOf(k0, tiers);
-  $('#tab-ups').innerHTML = head + UPGRADE_ORDER.map((k) => {
+  const tiers = tiersOf(p, k0), now = statsOf(k0, tiers, loadOf(k0));
+  const glance = GLANCE.map((k) => `<div class="gl"><b>${STAT[k].val(now)}</b><span>${STAT[k].he}${STAT[k].unit ? ` · ${STAT[k].unit}` : ''}</span></div>`).join('');
+  $('#tab-ups').innerHTML = `<div class="up-head"><b>${d.he}</b><small>השדרוגים של המטוס הזה בלבד</small></div><div class="glance">${glance}</div>` + UPGRADE_ORDER.map((k) => {
     const u = UPGRADES[k], have = tiers[k] || 0, n = nextTier(p, k, k0);
     const segs = Array.from({ length: TIER_MAX }, (_, i) => `<i class="${i < have ? 'on' : ''}"></i>`).join('');
-    const after = n ? statsOf(k0, { ...tiers, [k]: n.tier }) : null;
-    const nums = `<small class="nums">${UP_SHOW[k](now)}${after ? ` <em>← ${UP_SHOW[k](after)}</em>` : ''}</small>`;
+    const after = n ? statsOf(k0, { ...tiers, [k]: n.tier }, loadOf(k0)) : null;
+    const nums = `<div class="deltas">${UP_STATS[k].map((key) => delta(key, now, after)).join('')}</div>`;
     const btn = !n ? '<button disabled>מלא</button>'
       : p.level < n.level ? `<button disabled>רמה ${n.level}</button>`
         : `<button data-up="${k}" ${p.gold < n.cost ? 'disabled' : ''}><span class="num">${fmt(n.cost)}</span><span class="coin"></span></button>`;
-    return `<div class="up"><div class="t"><b>${u.he}</b><small>${u.desc}</small>${nums}<div class="segs">${segs}</div></div>${btn}</div>`;
-  }).join('') + '<div class="note" style="text-align:right">תנועה וטורבו מביאים בדרגה 5 עד המטוס הטוב במשחק. ירי, מיגון, טילים ונורים — עד המטוס השלישי בחוזקו. זהב מרוויחים על כל הפלה.</div>';
+    return `<div class="up"><div class="t"><b>${u.he} <small class="tier">דרגה ${have}/${TIER_MAX}</small></b>${nums}<div class="segs">${segs}</div></div>${btn}</div>`;
+  }).join('') + '<div class="note" style="text-align:right">כל דרגה היא קפיצה: חמש דרגות תנועה מביאות מטוס פשוט קרוב למהירות של הטוב במשחק. זהב מרוויחים על כל הפלה.</div>';
 }
 
 $('#tab-ups').addEventListener('click', async (e) => {
@@ -384,10 +416,9 @@ $('#tab-ups').addEventListener('click', async (e) => {
 
 // ---- the market ------------------------------------------------------------------
 // Guns and missiles, one at a time on a card like the planes': a name, what
-// it does in bars and numbers, and the active plane on the pad wearing it —
-// flick through and each is fitted on the pylons as it comes up. Bought once
-// with gold (opened by level), then put on any plane: each plane keeps its
-// own load.
+// it does on the plane flown beside what is fitted now, and the weapon
+// itself big on the pad. Bought once with gold (opened by level), then put
+// on any plane: each plane keeps its own load.
 let shelf = 'missiles';
 const mView = { missiles: '', guns: '' };
 const loadOf = (plane) => S.pilot?.loadout?.[plane] || { gun: 'g1', missile: 'm1' };
@@ -395,12 +426,6 @@ const SPEC_MAX = {
   missiles: { range: Math.max(...MISSILE_ORDER.map((k) => MISSILES[k].range)), dmg: Math.max(...MISSILE_ORDER.map((k) => MISSILES[k].dmg)), speed: Math.max(...MISSILE_ORDER.map((k) => MISSILES[k].speed)) },
   guns: { range: Math.max(...GUN_ORDER.map((k) => GUNS[k].range)) },
 };
-/** What the pad shows: the active plane, with the weapon being looked at fitted. */
-function marketLoad() {
-  const l = { ...loadOf(S.pilot.plane) };
-  if (mView[shelf]) l[shelf === 'guns' ? 'gun' : 'missile'] = mView[shelf];
-  return l;
-}
 function renderMarket() {
   const p = S.pilot, plane = p.plane, order = shelf === 'guns' ? GUN_ORDER : MISSILE_ORDER, items = ARMS[shelf];
   const on = loadOf(plane)[shelf === 'guns' ? 'gun' : 'missile'];
@@ -409,18 +434,12 @@ function renderMarket() {
   $('#hm-era').textContent = `${shelf === 'guns' ? 'מכונת ירייה' : 'טיל'} · רמה ${w.level}`;
   $('#hm-name').textContent = w.he;
   $('#hm-role').textContent = w.desc;
-  const spec = (label, v, max, shown) => `<div class="spec"><span>${label}</span><div class="bar"><i style="width:${Math.min(100, (v / max) * 100)}%"></i></div><b>${shown}</b></div>`;
-  if (shelf === 'guns') {
-    // on the plane flown, upgrades and all
-    const t = tiersOf(p, plane), dps = (g) => { const st = statsOf(plane, t, { gun: g }); return st.rate * st.dmg; };
-    const top = Math.max(...GUN_ORDER.map(dps)), st = statsOf(plane, t, { gun: k });
-    $('#hm-specs').innerHTML = spec('טווח יעיל', w.range, SPEC_MAX.guns.range, `${w.range} מ'`)
-      + spec('נזק לשנייה', dps(k), top, Math.round(dps(k)))
-      + spec('קצב אש', st.rate, Math.max(...GUN_ORDER.map((g) => statsOf(plane, t, { gun: g }).rate)), `${st.rate.toFixed(1)}/ש׳`);
-  } else {
-    const M = SPEC_MAX.missiles;
-    $('#hm-specs').innerHTML = spec('טווח יעיל', w.range, M.range, `${w.range} מ'`) + spec('נזק', w.dmg, M.dmg, w.dmg) + spec('מהירות', w.speed, M.speed, `${Math.round(w.speed * 3.6 * 4)}`);
-  }
+  // what it does on the plane flown (its upgrades on), beside what is fitted now
+  const t = tiersOf(p, plane), fitted = loadOf(plane);
+  const was = statsOf(plane, t, fitted), will = statsOf(plane, t, { ...fitted, [shelf === 'guns' ? 'gun' : 'missile']: k });
+  const keys = shelf === 'guns' ? ['gunRange', 'dps', 'rate'] : ['mRange', 'mDmg', 'mSpeed'];
+  $('#hm-specs').innerHTML = keys.map((key) => delta(key, was, will)).join('')
+    + (k === on ? '' : `<small class="vs">לעומת ה${ARMS[shelf][on].he} שמותקן עכשיו</small>`);
   $('#hm-dots').innerHTML = order.map((id) => `<i class="${id === k ? 'on' : ''} ${p.arms[shelf].includes(id) ? 'own' : ''}"></i>`).join('');
   const act = $('#hm-act');
   act.className = 'h-act';
@@ -430,7 +449,7 @@ function renderMarket() {
   else if (own) { act.textContent = 'הלבש על המטוס'; act.dataset.equip = k; }
   else if (p.level >= w.level) { act.innerHTML = `קנה והלבש · <span class="num">${fmt(w.price)}</span>`; act.classList.add('buy'); act.dataset.buy = k; act.disabled = p.gold < w.price; }
   else { act.textContent = `נפתח ברמה ${w.level}`; act.disabled = true; }
-  hangar.show(plane, p.paint, marketLoad());
+  hangar.showArm(shelf, k);
 }
 $$('.shelves button').forEach((b) => b.addEventListener('click', () => { shelf = b.dataset.shelf; renderMarket(); }));
 const mStep = (dir) => {
@@ -857,6 +876,7 @@ function air(dt, time) {
     me.mesh.quaternion.set(dq.x, dq.y, dq.z, dq.w);
     me.mesh.visible = now > me.shieldUntil || Math.floor(time * 8) % 2 === 0;
     animatePlane(me.mesh, dt, { boost: b.boosting, speed: b.speed, time, ammo: me.ammo, ammoMax: me.stats.missiles });
+    $('#btn-brake').classList.toggle('on', !!b.braking);
     if (input.missile && me.ammo > 0) S.room?.send('missile');
     if (input.flare && me.flares > 0) S.room?.send('flare');
     if (me.flares < me.stats.flares) { me.flareT += dt; if (me.flareT >= me.stats.flareReload) me.flares++, me.flareT = 0; }
@@ -942,7 +962,8 @@ function chase(b, dt, input) {
   QL.setFromAxisAngle(fwd, -b.roll * 0.3 * (1 - lk));
   camera.up.copy(S.camUp).applyQuaternion(QL);
   camera.lookAt(camLook);
-  const fov = b.boosting ? 72 : 62;
+  // the burner widens the view, the brake draws it in a little
+  const fov = b.boosting ? 72 : b.braking ? 58 : 62;
   if (Math.abs(camera.fov - fov) > 0.1) { camera.fov += (fov - camera.fov) * Math.min(1, dt * 4); camera.updateProjectionMatrix(); }
 }
 

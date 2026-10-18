@@ -11,6 +11,7 @@ import {
 } from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { buildPlane, animatePlane } from './planes.js';
+import { buildGun, buildMissile } from './arms.js';
 
 const L = 90;           // the bay's depth
 const R = 20;           // the tunnel's radius, corner to corner
@@ -179,7 +180,7 @@ export class Hangar {
 
     this.holder = new Group();
     scene.add(this.holder);
-    this.plane = null; this.kind = ''; this.t = 0; this.swapT = 1; this.fitT = 1; this.lk = '';
+    this.plane = null; this.kind = ''; this.t = 0; this.swapT = 1; this.fitT = 1; this.lk = ''; this.arm = null; this.armOut = null; this.armKey = '';
     this.leaving = [];
     this.drag = 0; this.spin = 0;
   }
@@ -191,6 +192,7 @@ export class Hangar {
    * pylons with a flash.
    */
   show(kind, paint = 'stock', load = {}) {
+    if (this.arm) this.hideArm();
     const lk = `${load.missile || ''}/${load.gun || ''}`;
     if (kind === this.kind && paint === this.paint && lk === this.lk) return;
     const refit = this.plane && kind === this.kind && paint === this.paint;
@@ -213,6 +215,35 @@ export class Hangar {
       this.fitT = 1;
     }
     this.holder.add(this.plane);
+  }
+
+  /**
+   * The market's showcase: a weapon on its own, big over the pad, turning
+   * slowly under the lights; the next one slides in as the last slides out.
+   * (show() brings a plane back.)
+   */
+  showArm(kind, model) {
+    if (this.armKey === `${kind}/${model}`) return;
+    this.armKey = `${kind}/${model}`;
+    if (this.arm) this.armOut = { m: this.arm, t: 0 };
+    const w = kind === 'guns' ? buildGun(model) : buildMissile(model);
+    const g = new Group();
+    g.add(w);
+    // as long as the pad is wide, whatever its real size
+    // a gun is a slim thing: shown a little fatter than true, to read at a glance
+    const k = (kind === 'guns' ? 11 : 13) / w.userData.len;
+    g.scale.set(k * (kind === 'guns' ? 1.5 : 1), k * (kind === 'guns' ? 1.5 : 1), k);
+    g.userData.spin = w.userData.spin;
+    this.arm = g; this.armT = 0;
+    this.scene.add(g);
+    if (this.plane) this.plane.visible = false;
+  }
+
+  /** Back to planes: the showcase is put away. */
+  hideArm() {
+    for (const a of [this.arm, this.armOut?.m]) a && this.scene.remove(a);
+    this.arm = null; this.armOut = null; this.armKey = '';
+    if (this.plane) this.plane.visible = true;
   }
 
   resize(aspect) {
@@ -268,6 +299,21 @@ export class Hangar {
           });
         }
       }
+    }
+    if (this.arm) {
+      // in from the side, then hanging there, turning, the nose dipping a little
+      this.armT = Math.min(1, this.armT + dt * 1.8);
+      const e = 1 - (1 - this.armT) ** 3;
+      this.arm.position.set((1 - e) * 14, 5.2 + Math.sin(t * 0.9) * 0.25, 3);
+      this.arm.rotation.set(0.12 + Math.sin(t * 0.5) * 0.06, this.table.rotation.y * 1.6 + 0.6, Math.sin(t * 0.7) * 0.05, 'YXZ');
+      // the rotary cannon's barrels turn
+      if (this.arm.userData.spin) this.arm.children[0].children[0].rotation.z += dt * 2.5;
+    }
+    if (this.armOut) {
+      const o = this.armOut;
+      o.t += dt * 2.2;
+      o.m.position.x = -o.t * o.t * 18;
+      if (o.t > 1) { this.scene.remove(o.m); this.armOut = null; }
     }
     for (let i = this.leaving.length - 1; i >= 0; i--) {
       const l = this.leaving[i];
