@@ -18,6 +18,13 @@ for (const [name, vp] of [['portrait', { width: 390, height: 844 }], ['landscape
   await page.fill('#in-name', 'Ace');
   await page.click('#btn-go');
   await page.waitForSelector('#screen-hangar:not(.hidden)', { timeout: 60000 });
+  // a pilot well on: every plane, some gold, a few tiers in (the page only: nothing is saved)
+  if (process.env.RICH) await page.evaluate(() => {
+    const S = window.__sky, P = S.pilot;
+    P.level = 30; P.gold = 7820; P.planes = ['sparrow', 'gull', 'hornet', 'shahak', 'phantom']; P.plane = 'phantom';
+    P.upgrades.phantom = { engine: 0, weapons: 3, armor: 1 };
+    S.renderHangar();
+  });
   await wait(2500);
   await page.screenshot({ path: `${OUT}/${name}-planes.png` });
   await page.click('.h-tabs [data-tab="ups"]');

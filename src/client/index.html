@@ -73,6 +73,32 @@
   .h-tabs svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
   .h-tabs button.on { color: #04201c; background: linear-gradient(180deg, #5ff0dc, var(--teal)); box-shadow: 0 0 18px rgba(47,211,189,0.6), inset 0 1px 0 rgba(255,255,255,0.5); }
   .h-tabs button:not(.on):hover { color: #fff; background: rgba(47,211,189,0.1); }
+  .bars { display: grid; gap: 9px; margin: 6px 0 14px; padding: 12px 14px; border-radius: 12px; background: linear-gradient(180deg, rgba(47,211,189,0.08), rgba(47,211,189,0.02)); border: 1px solid rgba(47,211,189,0.18); }
+  .bar { display: grid; grid-template-columns: 62px 1fr 64px; align-items: center; gap: 10px; font-size: 12.5px; }
+  .bar .k { color: rgba(255,255,255,0.75); font-weight: 600; white-space: nowrap; }
+  .bar .track { position: relative; height: 8px; border-radius: 99px; background: rgba(255,255,255,0.08); overflow: hidden; }
+  .bar .track i { position: absolute; top: 0; bottom: 0; border-radius: 99px; transition: width .35s ease, right .35s ease; }
+  .bar .track .now { right: 0; background: linear-gradient(270deg, #1fa596, #5ff0dc); box-shadow: 0 0 10px rgba(47,211,189,0.5); }
+  .bar .track .next { background: #4dff9a; box-shadow: 0 0 12px rgba(77,255,154,0.8); animation: barpulse 1.2s ease-in-out infinite; }
+  @keyframes barpulse { 50% { opacity: 0.45; } }
+  .bar .v { display: flex; gap: 5px; align-items: baseline; justify-content: flex-start; font-family: Orbitron, Rubik, sans-serif; }
+  .bar .v b { font-size: 14px; color: #fff; }
+  .bar .v em { font-style: normal; font-size: 11px; color: #4dff9a; font-weight: 700; }
+  .ucards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .ucard { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 6px 10px; border-radius: 14px; text-align: center; cursor: pointer;
+    background: rgba(255,255,255,0.035); border: 1px solid rgba(255,255,255,0.1); transition: border-color .2s, box-shadow .2s, transform .2s; }
+  .ucard.on { border-color: rgba(47,211,189,0.8); background: linear-gradient(180deg, rgba(47,211,189,0.16), rgba(47,211,189,0.03)); box-shadow: 0 0 18px rgba(47,211,189,0.3); transform: translateY(-2px); }
+  .ucard > b { font-size: 16px; letter-spacing: 0.5px; }
+  .ucard > small { font-size: 11px; color: var(--dim); line-height: 1.25; min-height: 2.5em; }
+  .ucard .up-ic { width: 44px; height: 44px; }
+  .ucard .pips { display: flex; gap: 3px; direction: ltr; }
+  .ucard .pips i { width: 12px; height: 5px; border-radius: 2px; background: rgba(255,255,255,0.14); }
+  .ucard .pips i.on { background: var(--teal); box-shadow: 0 0 6px rgba(47,211,189,0.7); }
+  .ucard .buy { width: 100%; margin-top: 2px; padding: 9px 4px; border-radius: 999px; font-weight: 800; font-size: 13px; background: linear-gradient(180deg, #ffe08a, #e8b94a); color: #1d1405; display: flex; gap: 5px; align-items: center; justify-content: center; box-shadow: 0 0 12px rgba(241,210,122,0.35); }
+  .ucard .buy:disabled { background: rgba(255,255,255,0.07); color: var(--dim); box-shadow: none; font-size: 11.5px; }
+  .ucard.full .up-ic { color: #f1d27a; border-color: rgba(241,210,122,0.5); }
+  .h-panel.ups > .note { text-align: center; margin-top: 10px; }
+  .h-panel.ups { bottom: auto; max-height: calc(100% - 260px); padding-bottom: 12px; border-radius: 16px; }
   .up-ic { flex: none; width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; color: var(--teal); background: rgba(47,211,189,0.1); border: 1px solid rgba(47,211,189,0.35); box-shadow: 0 0 14px rgba(47,211,189,0.18); }
   .up-ic svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
   .h-plane { position: absolute; left: 18px; right: 18px; bottom: max(116px, calc(env(safe-area-inset-bottom) + 106px)); text-align: right; }
@@ -87,7 +113,10 @@
   .h-dots i.on { background: #fff; }
   .h-dots i.own { background: rgba(47,211,189,0.6); }
   .h-dots i.on.own { background: #fff; }
-  .h-dots i.ace { height: 5px; box-shadow: 0 0 6px rgba(241,210,122,0.7); outline: 1px solid rgba(241,210,122,0.7); }
+  .h-dots i { border-radius: 2px; }
+  .h-dots i.ace { background: rgba(241,210,122,0.45); }
+  .h-dots i.ace.own { background: #f1d27a; }
+  .h-dots i.on, .h-dots i.ace.on { background: #fff; width: 22px; box-shadow: 0 0 8px rgba(255,255,255,0.6); }
   .chev { width: 44px; height: 44px; display: grid; place-items: center; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.16); border-radius: 50%; }
   .chev svg { width: 18px; height: 18px; stroke: #fff; fill: none; stroke-width: 2.2; }
   .h-act { white-space: nowrap; padding: 11px 22px; border-radius: 999px; font-size: 15px; font-weight: 800; letter-spacing: 0.5px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.25); }
@@ -185,9 +214,21 @@
     .h-plane > * { flex-shrink: 0; }
     .h-panel { top: 100px; bottom: 116px; }
     /* the upgrades on a short screen: the three rows, not the summary over them */
-    .h-panel.ups .glance, .h-panel.ups .up-head small, .h-panel.ups .up .t > small, .h-panel.ups > .note { display: none; }
-    .h-panel.ups .up { padding: 8px 0; }
+    .h-panel.ups { bottom: 84px; max-height: none; }
+    .h-panel.ups .up-head small, .h-panel.ups > .note, .ucard > small { display: none; }
     .h-panel.ups .up-head { padding: 6px 0 0; }
+    /* side by side: the bars on one hand, the three cards as rows on the other */
+    .h-panel.ups { display: grid; grid-template-columns: 1.05fr 1fr; grid-template-rows: auto 1fr; gap: 0 10px; align-items: start; }
+    .h-panel.ups .up-head { grid-column: 1 / -1; }
+    .bars { gap: 6px; padding: 8px 10px; margin: 4px 0 0; grid-template-columns: 1fr; }
+    .bar { grid-template-columns: 52px 1fr 54px; gap: 6px; font-size: 11.5px; }
+    .ucards { grid-template-columns: 1fr; gap: 5px; margin-top: 4px; }
+    .ucard { flex-direction: row; justify-content: flex-start; padding: 5px 8px; gap: 8px; transform: none !important; }
+    .ucard .up-ic { width: 28px; height: 28px; border-radius: 8px; }
+    .ucard .up-ic svg { width: 17px; height: 17px; }
+    .ucard > b { font-size: 13px; min-width: 38px; text-align: right; }
+    .ucard .pips i { width: 7px; }
+    .ucard .buy { width: auto; margin: 0 auto 0 0; padding: 6px 10px; font-size: 12px; min-width: 76px; }
     /* the market card on a short screen: the essentials only */
     /* starts under the tabs and grows down, never up over them */
     .h-plane.market { top: 98px; bottom: 84px; justify-content: flex-start; }
