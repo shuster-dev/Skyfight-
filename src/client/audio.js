@@ -7,8 +7,8 @@
 //   the guns       each its own report — the light gun's crack, the heavy
 //                  gun's bark, a cannon's thump, the rotary cannon's tearing
 //                  buzz
-//   the seeker     the heat-seeker's growl in the headset: a low warble while
-//                  it searches, a steady high tone once it has a lock
+//   the seeker     the heat-seeker's growl in the headset: a soft low warble
+//                  while it searches, a short high tone when it locks
 //   the missile    the clunk off the rail and the rocket motor's roar fading
 //                  away ahead
 //   the warning    the missile-launch warning's fast double beep, quicker as
@@ -309,9 +309,16 @@ function seekerVoice() {
       if (s === state) return;
       state = s;
       const t = now();
+      g.gain.cancelScheduledValues(t);
+      g.gain.setValueAtTime(g.gain.value, t);
       if (s === 'off') { g.gain.setTargetAtTime(0, t, 0.03); return; }
-      if (s === 'search') { o.frequency.setTargetAtTime(560, t, 0.05); depth.gain.setTargetAtTime(45, t, 0.05); g.gain.setTargetAtTime(0.05, t, 0.04); }
-      else { o.frequency.setTargetAtTime(1250, t, 0.03); depth.gain.setTargetAtTime(0, t, 0.03); g.gain.setTargetAtTime(0.075, t, 0.03); }
+      if (s === 'search') { o.frequency.setTargetAtTime(560, t, 0.05); depth.gain.setTargetAtTime(45, t, 0.05); g.gain.setTargetAtTime(0.022, t, 0.04); }
+      else {
+        // the lock: a short clear tone, then quiet — it has told you
+        o.frequency.setTargetAtTime(1250, t, 0.02); depth.gain.setTargetAtTime(0, t, 0.02);
+        g.gain.setTargetAtTime(0.035, t, 0.02);
+        g.gain.setTargetAtTime(0, t + 0.28, 0.05);
+      }
     },
   };
 }
