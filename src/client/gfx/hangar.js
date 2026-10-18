@@ -192,7 +192,7 @@ export class Hangar {
    * pylons with a flash.
    */
   show(kind, paint = 'stock', load = {}) {
-    if (this.arm) this.hideArm();
+    if (this.arm || this.armOut) this.hideArm();
     const lk = `${load.missile || ''}/${load.gun || ''}`;
     if (kind === this.kind && paint === this.paint && lk === this.lk) return;
     const refit = this.plane && kind === this.kind && paint === this.paint;
@@ -225,6 +225,8 @@ export class Hangar {
   showArm(kind, model) {
     if (this.armKey === `${kind}/${model}`) return;
     this.armKey = `${kind}/${model}`;
+    // flicking fast: the one still on its way out goes now, not left behind
+    if (this.armOut) this.scene.remove(this.armOut.m), this.armOut = null;
     if (this.arm) this.armOut = { m: this.arm, t: 0 };
     const w = kind === 'guns' ? buildGun(model) : buildMissile(model);
     const g = new Group();

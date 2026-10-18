@@ -70,8 +70,12 @@ async function run(label, viewport, mobile) {
   ok('the next missile: big on the pad, compared with the one fitted', /שפריר 2/.test(await page.textContent('#hm-name')) && /←/.test(await page.textContent('#hm-specs')) && await page.evaluate(() => window.__sky.hangarShows?.() === 'missiles/m2'));
   await page.click('[data-shelf="guns"]');
   ok('and the guns, the same way', /מקלע 7.62/.test(await page.textContent('#hm-name')) && /250/.test(await page.textContent('#hm-specs')));
+  // flicking fast, then out: nothing of the market is left on the pad
+  for (let i = 0; i < 3; i++) await page.click('#hm-next');
   await snap('3c-market');
   await page.click('[data-tab="planes"]');
+  await wait(1500);
+  ok('back on the planes, no weapon left standing on the pad', await page.evaluate(() => window.__sky.hangarArms()) === 0);
   ok('a guest is offered to save', await page.isVisible('#btn-save'));
   await page.click('#btn-launch');
   await page.waitForFunction(() => window.__sky?.me?.alive === true, null, { timeout: 20000 });

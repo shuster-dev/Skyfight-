@@ -47,6 +47,8 @@ const S = {
 };
 window.__sky = S; // the browser tests look in here
 S.hangarShows = () => hangar.armKey;
+// how many weapons stand on the pad (for the tests: none, out of the market)
+S.hangarArms = () => hangar.scene.children.filter((c) => c.children[0]?.userData?.model).length;
 S.note = (t, c) => toast(t, c);
 S.world = world; S.camera = camera; S.buildPlane = buildPlane; S.buildBomber = buildBomber; S.scene = scene;
 S.look = controls.look;

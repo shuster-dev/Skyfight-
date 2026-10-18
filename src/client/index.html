@@ -164,17 +164,27 @@
   }
   @media (orientation: landscape) and (max-height: 500px) {
     .h-tabs { top: 50px; }
-    .h-plane .pname { font-size: 56px; }
+    /* the plane card too: under the tabs, above the mode switch, growing down */
+    .h-plane { top: 86px; bottom: 112px; justify-content: flex-start; }
+    .h-plane .pname { font-size: 38px; margin: 2px 0 0; }
+    .h-plane .role { display: none; }
+    .h-plane .row { margin-top: 6px; }
+    .h-plane .chev { width: 36px; height: 36px; }
+    .h-plane .h-act { padding: 8px 16px; font-size: 13px; }
+    .h-plane > * { flex-shrink: 0; }
     .h-panel { top: 92px; bottom: 116px; }
     /* the market card on a short screen: the essentials only */
-    .h-plane.market { top: 88px; bottom: 112px; }
+    /* starts under the tabs and grows down, never up over them */
+    .h-plane.market { top: 86px; bottom: 84px; justify-content: flex-start; }
     .h-plane.market > * { flex-shrink: 0; }
-    .h-plane.market .pname { font-size: 34px; margin: 0; }
+    .h-plane.market .pname { font-size: 30px; margin: 0; line-height: 1.05; }
     .h-plane.market .era, .h-plane.market .role { display: none; }
-    .h-plane.market .shelves { margin-bottom: 6px; }
+    .h-plane.market .shelves { margin-bottom: 4px; }
     .h-plane.market .shelves button { padding: 5px 12px; }
     .h-plane.market .specs { display: flex; flex-wrap: wrap; gap: 2px 14px; margin-top: 4px; max-width: none; justify-content: flex-start; }
-    .h-plane.market .specs .dl b { font-size: 15px; }
+    .h-plane.market .specs .dl { font-size: 11px; gap: 4px; }
+    .h-plane.market .specs .dl b { font-size: 14px; }
+    .h-plane.market .specs .dl b.was { font-size: 12px; }
     .h-plane.market .specs .vs { display: none; }
     .h-plane.market .row { margin-top: 8px; }
     .h-plane.market .chev { width: 36px; height: 36px; }
