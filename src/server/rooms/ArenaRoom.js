@@ -78,6 +78,15 @@ export class ArenaRoom extends Room {
       const p = this.planeOf(client);
       p && this.launch(p);
     });
+    // the client felt it hit something: the room calls it if the plane is
+    // where the client says, against something solid (a roof the client
+    // stops on sits a metre or so above it: hence the slack)
+    this.onMessage('crash', (client) => {
+      const p = this.planeOf(client);
+      if (!p?.alive) return;
+      const into = hitsSolid(p.x, p.y, p.z, 4);
+      if (into) this.down(p, '', 'crash', into);
+    });
     this.onMessage('hello', (client) => this.hello(client));
     this.onMessage('ping', (client, t) => client.send('pong', t));
   }

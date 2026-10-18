@@ -715,6 +715,7 @@ function hook(room) {
     S.camUp = new Vector3(0, 1, 0);
     me.alive = true; me.hp = m.hp; me.ammo = m.ammo; me.reloadT = 0; me.crashed = false; me.flares = m.flares ?? me.stats.flares; me.flareT = 0;
     me.shieldUntil = performance.now() + m.shield * 1000;
+    coach();
     me.mesh.visible = true;
     // the camera starts behind, not wherever the last life ended
     const f = forward(me.body.yaw, 0);
@@ -1039,6 +1040,10 @@ function air(dt, time) {
     if (S.sendT >= 0.05) {
       S.sendT = 0;
       S.room?.send('pose', [r2(b.x), r2(b.y), r2(b.z), r3(b.yaw), r3(b.pitch), r3(b.roll), r2(b.speed), (input.fire ? 1 : 0) | (b.boosting ? 2 : 0), r3(dq.x), r3(dq.y), r3(dq.z), r3(dq.w)]);
+      // stopped against something: say so with every pose until the room calls
+      // it (its own check wants the plane inside the thing, and one stopped on
+      // a roof sits a metre above it)
+      if (me.crashed) S.room?.send('crash');
     }
     sound.engine(true, b.speed, b.boosting);
     chase(b, dt, input);
@@ -1215,6 +1220,16 @@ function threat(dt) {
  * crosshair says so — how far, and which side — with a low tone now and then:
  * time to break, or to brake and let it overshoot.
  */
+/** The first two sorties: a legend of what each button does, for a few seconds. */
+function coach() {
+  let n = 0;
+  try { n = Number(localStorage.getItem('sky.coached')) || 0; localStorage.setItem('sky.coached', String(n + 1)); } catch {}
+  if (n >= 2) return;
+  show('#coach');
+  clearTimeout(coach.t);
+  coach.t = setTimeout(() => show('#coach', false), 7000);
+}
+
 function tail(dt) {
   const el = $('#tail'), b = S.me?.alive && S.me.body;
   let worst = null;
