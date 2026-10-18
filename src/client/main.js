@@ -46,6 +46,8 @@ const S = {
   preview: [], previewKind: '',
 };
 window.__sky = S; // the browser tests look in here
+S.hangarLoad = () => hangar.plane?.userData.load?.missile;
+S.note = (t, c) => toast(t, c);
 S.world = world; S.camera = camera; S.buildPlane = buildPlane; S.buildBomber = buildBomber; S.scene = scene;
 S.look = controls.look;
 
@@ -217,6 +219,7 @@ $$('.h-mode button').forEach((b) => b.addEventListener('click', () => {
 }));
 function showHangar() {
   S.mode = 'hangar';
+  mView.missiles = mView.guns = ''; // the market opens on what is fitted
   ['#screen-title', '#hud', '#death'].forEach((s) => show(s, false));
   show('#screen-hangar');
   show('#corner', false);
@@ -248,7 +251,7 @@ function renderHangar() {
   show('#tab-board', tab === 'board');
   show('#tab-market', tab === 'market');
   show('#tab-friends', tab === 'friends');
-  hangar.show(viewing || p.plane, paintView || p.paint);
+  if (tab !== 'market') hangar.show(viewing || p.plane, paintView || p.paint, loadOf(viewing || p.plane));
   if (tab === 'planes') renderPlanes();
   if (tab === 'ups') renderUps();
   if (tab === 'board') renderBoard();
@@ -288,7 +291,7 @@ $('#hp-paints').addEventListener('click', (e) => {
   const id = e.target.closest('[data-paint]')?.dataset.paint;
   if (!id) return;
   paintView = id;
-  hangar.show(viewing || S.pilot.plane, id);
+  hangar.show(viewing || S.pilot.plane, id, loadOf(viewing || S.pilot.plane));
   renderPlanes();
 });
 $('#hp-paint-act').addEventListener('click', async (e) => {
@@ -300,13 +303,13 @@ $('#hp-paint-act').addEventListener('click', async (e) => {
     paintView = S.pilot.paint;
     if (buy) sound.coin(), toast(`צבע ${PAINTS[buy].he} שלך`);
     renderHangar();
-  } catch (x) { toast(err(x)); }
+  } catch (x) { toast(err(x), 'bad'); }
 });
 
 const step = (dir) => {
   const i = PLANE_ORDER.indexOf(viewing || S.pilot.plane);
   viewing = PLANE_ORDER[(i + dir + PLANE_ORDER.length) % PLANE_ORDER.length];
-  hangar.show(viewing, paintView || S.pilot.paint);
+  hangar.show(viewing, paintView || S.pilot.paint, loadOf(viewing));
   renderPlanes();
 };
 // in a right-to-left page the arrow on the right goes back
@@ -331,7 +334,7 @@ $('#hp-act').addEventListener('click', async (e) => {
     viewing = S.pilot.plane;
     if (buy) sound.coin(), toast(`${PLANES[buy].he} בהאנגר שלך`);
     renderHangar();
-  } catch (x) { toast(err(x)); }
+  } catch (x) { toast(err(x), 'bad'); }
 });
 
 /** What an upgrade does, in the numbers a pilot reads: now, and after the next tier. */
@@ -376,42 +379,78 @@ $('#tab-ups').addEventListener('click', async (e) => {
     sound.coin();
     toast(`${PLANES[plane].he} · ${UPGRADES[k].he} · דרגה ${r.tier}`);
     renderHangar();
-  } catch (x) { toast(err(x)); }
+  } catch (x) { toast(err(x), 'bad'); }
 });
 
 // ---- the market ------------------------------------------------------------------
-// Guns and missiles: each with its reach and its punch, opened by level and
-// bought once with gold, carried to every plane. What it does is shown on
-// the plane now flown, upgrades and all.
+// Guns and missiles, one at a time on a card like the planes': a name, what
+// it does in bars and numbers, and the active plane on the pad wearing it —
+// flick through and each is fitted on the pylons as it comes up. Bought once
+// with gold (opened by level), then put on any plane: each plane keeps its
+// own load.
 let shelf = 'missiles';
-const REACH_MAX = { guns: Math.max(...GUN_ORDER.map((k) => GUNS[k].range)), missiles: Math.max(...MISSILE_ORDER.map((k) => MISSILES[k].range)) };
+const mView = { missiles: '', guns: '' };
+const loadOf = (plane) => S.pilot?.loadout?.[plane] || { gun: 'g1', missile: 'm1' };
+const SPEC_MAX = {
+  missiles: { range: Math.max(...MISSILE_ORDER.map((k) => MISSILES[k].range)), dmg: Math.max(...MISSILE_ORDER.map((k) => MISSILES[k].dmg)), speed: Math.max(...MISSILE_ORDER.map((k) => MISSILES[k].speed)) },
+  guns: { range: Math.max(...GUN_ORDER.map((k) => GUNS[k].range)) },
+};
+/** What the pad shows: the active plane, with the weapon being looked at fitted. */
+function marketLoad() {
+  const l = { ...loadOf(S.pilot.plane) };
+  if (mView[shelf]) l[shelf === 'guns' ? 'gun' : 'missile'] = mView[shelf];
+  return l;
+}
 function renderMarket() {
-  const p = S.pilot, list = shelf === 'guns' ? GUN_ORDER : MISSILE_ORDER, items = ARMS[shelf];
-  const using = shelf === 'guns' ? p.gun : p.missile, tiers = tiersOf(p, p.plane);
+  const p = S.pilot, plane = p.plane, order = shelf === 'guns' ? GUN_ORDER : MISSILE_ORDER, items = ARMS[shelf];
+  const on = loadOf(plane)[shelf === 'guns' ? 'gun' : 'missile'];
+  const k = (mView[shelf] ||= on), w = items[k], own = p.arms[shelf].includes(k);
   $$('.shelves button').forEach((b) => b.classList.toggle('on', b.dataset.shelf === shelf));
-  $('#market-list').innerHTML = list.map((k) => {
-    const w = items[k], own = p.arms[shelf].includes(k), on = using === k;
-    const st = statsOf(p.plane, tiers, shelf === 'guns' ? { gun: k, missile: p.missile } : { gun: p.gun, missile: k });
-    const nums = shelf === 'guns'
-      ? `טווח יעיל ${w.range} מ' · ${Math.round(st.rate * st.dmg)} נזק לשנייה`
-      : `טווח יעיל ${w.range} מ' · ${w.dmg} נזק · מהירות ${Math.round(w.speed * 3.6 * 4)} קמ"ש`;
-    const btn = on ? '<button disabled>בשימוש</button>'
-      : own ? `<button class="pick" data-arm="${k}">בחר</button>`
-        : p.level < w.level ? `<button disabled>רמה ${w.level}</button>`
-          : `<button data-buy="${k}" ${p.gold < w.price ? 'disabled' : ''}><span class="num">${fmt(w.price)}</span><span class="coin"></span></button>`;
-    return `<div class="arm ${on ? 'on' : ''}"><div class="t"><b>${w.he}</b><small>${w.desc}</small><small class="nums">${nums}</small><div class="reach"><i style="width:${(w.range / REACH_MAX[shelf]) * 100}%"></i></div></div>${btn}</div>`;
-  }).join('') + `<div class="note" style="text-align:right">${shelf === 'guns' ? 'כדורים עפים עד הטווח היעיל שלהם ונעלמים.' : 'טיל ננעל רק על מטרה בתוך הטווח היעיל שלו.'} הנשק עובר איתך לכל מטוס.</div>`;
+  $('#hm-era').textContent = `${shelf === 'guns' ? 'מכונת ירייה' : 'טיל'} · רמה ${w.level}`;
+  $('#hm-name').textContent = w.he;
+  $('#hm-role').textContent = w.desc;
+  const spec = (label, v, max, shown) => `<div class="spec"><span>${label}</span><div class="bar"><i style="width:${Math.min(100, (v / max) * 100)}%"></i></div><b>${shown}</b></div>`;
+  if (shelf === 'guns') {
+    // on the plane flown, upgrades and all
+    const t = tiersOf(p, plane), dps = (g) => { const st = statsOf(plane, t, { gun: g }); return st.rate * st.dmg; };
+    const top = Math.max(...GUN_ORDER.map(dps)), st = statsOf(plane, t, { gun: k });
+    $('#hm-specs').innerHTML = spec('טווח יעיל', w.range, SPEC_MAX.guns.range, `${w.range} מ'`)
+      + spec('נזק לשנייה', dps(k), top, Math.round(dps(k)))
+      + spec('קצב אש', st.rate, Math.max(...GUN_ORDER.map((g) => statsOf(plane, t, { gun: g }).rate)), `${st.rate.toFixed(1)}/ש׳`);
+  } else {
+    const M = SPEC_MAX.missiles;
+    $('#hm-specs').innerHTML = spec('טווח יעיל', w.range, M.range, `${w.range} מ'`) + spec('נזק', w.dmg, M.dmg, w.dmg) + spec('מהירות', w.speed, M.speed, `${Math.round(w.speed * 3.6 * 4)}`);
+  }
+  $('#hm-dots').innerHTML = order.map((id) => `<i class="${id === k ? 'on' : ''} ${p.arms[shelf].includes(id) ? 'own' : ''}"></i>`).join('');
+  const act = $('#hm-act');
+  act.className = 'h-act';
+  act.disabled = false;
+  delete act.dataset.equip; delete act.dataset.buy;
+  if (k === on) { act.textContent = `מותקן על ה${PLANES[plane].he}`; act.classList.add('ok'); act.disabled = true; }
+  else if (own) { act.textContent = 'הלבש על המטוס'; act.dataset.equip = k; }
+  else if (p.level >= w.level) { act.innerHTML = `קנה והלבש · <span class="num">${fmt(w.price)}</span>`; act.classList.add('buy'); act.dataset.buy = k; act.disabled = p.gold < w.price; }
+  else { act.textContent = `נפתח ברמה ${w.level}`; act.disabled = true; }
+  hangar.show(plane, p.paint, marketLoad());
 }
 $$('.shelves button').forEach((b) => b.addEventListener('click', () => { shelf = b.dataset.shelf; renderMarket(); }));
-$('#tab-market').addEventListener('click', async (e) => {
-  const buy = e.target.closest('[data-buy]')?.dataset.buy, pick = e.target.closest('[data-arm]')?.dataset.arm;
-  if (!buy && !pick) return;
+const mStep = (dir) => {
+  const order = shelf === 'guns' ? GUN_ORDER : MISSILE_ORDER, i = order.indexOf(mView[shelf]);
+  mView[shelf] = order[(i + dir + order.length) % order.length];
+  sound.tick?.();
+  renderMarket();
+};
+$('#hm-prev').addEventListener('click', () => mStep(-1));
+$('#hm-next').addEventListener('click', () => mStep(1));
+$('#hm-act').addEventListener('click', async (e) => {
+  const b = e.currentTarget, buy = b.dataset.buy, equip = b.dataset.equip;
+  if (!buy && !equip) return;
   try {
-    const r = await net.api(buy ? '/api/pilot/buy-arm' : '/api/pilot/arm', { kind: shelf, id: buy || pick });
+    const r = await net.api(buy ? '/api/pilot/buy-arm' : '/api/pilot/arm', { kind: shelf, id: buy || equip, plane: S.pilot.plane });
     S.pilot = r.pilot;
-    if (buy) sound.coin(), toast(`${ARMS[shelf][buy].he} נקנה`);
+    if (buy) sound.coin();
+    toast(`${ARMS[shelf][buy || equip].he} הותקן על ה${PLANES[S.pilot.plane].he}`);
     renderHangar();
-  } catch (x) { toast(err(x)); }
+  } catch (x) { toast(err(x), 'bad'); }
 });
 
 async function renderBoard() {
@@ -458,7 +497,7 @@ $('#f-add').addEventListener('submit', async (e) => {
     $('#f-code').value = '';
     toast(`${r.friend.code} נוסף לחברים`);
     renderFriends(true);
-  } catch (x) { toast(err(x)); }
+  } catch (x) { toast(err(x), 'bad'); }
 });
 $('#tab-friends').addEventListener('click', async (e) => {
   if (e.target.id === 'f-copy') {
@@ -477,7 +516,7 @@ $('#tab-friends').addEventListener('click', async (e) => {
   }
   const rm = e.target.closest('[data-rm]');
   if (rm && confirm(`להסיר את ${rm.dataset.rm} מהחברים?`)) {
-    try { await net.api('/api/friends/remove', { code: rm.dataset.rm }); renderFriends(true); } catch (x) { toast(err(x)); }
+    try { await net.api('/api/friends/remove', { code: rm.dataset.rm }); renderFriends(true); } catch (x) { toast(err(x), 'bad'); }
   }
 });
 
@@ -508,7 +547,7 @@ async function launch() {
     controls.enabled = true;
     $('#feed').innerHTML = '';
   } catch (x) {
-    toast(err(x));
+    toast(err(x), 'bad');
   } finally { btn.disabled = false; renderHangar(); }
 }
 
@@ -520,7 +559,7 @@ function hook(room) {
     (m.pads || []).forEach((t, i) => pads.spend(i, t));
     S.pilot = m.pilot;
     for (const r of m.roster) S.roster.set(r.key, r);
-    const mesh = buildPlane(S.pilot.plane, S.pilot.paint);
+    const mesh = buildPlane(S.pilot.plane, S.pilot.paint, { gun: m.stats.gun, missile: m.stats.missile });
     scene.add(mesh);
     S.me = { stats: m.stats, alive: false, hp: m.stats.hp, ammo: m.stats.missiles, shieldUntil: 0, gunT: 0, gun: 0, mesh, body: null, reloadT: 0 };
     $('#hud-name').textContent = displayName(S.pilot);
@@ -591,7 +630,7 @@ function hook(room) {
     fx.pop(p, 1.2);
     for (let i = 0; i < 6; i++) fx.spark(p.clone().add(new Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(6)));
     sound.boom(near(p) * 0.7);
-    if (m.a === S.myKey || m.b === S.myKey) toast('התנגשות');
+    if (m.a === S.myKey || m.b === S.myKey) toast('התנגשות', 'bad');
   });
   // the bomber: it comes, its gunners fire, it goes down (or away)
   room.onMessage('bossStart', () => { toast('מפציץ מעל העיר — הפילו אותו יחד', 'lvl'); sound.warn(); });
@@ -636,13 +675,13 @@ function onSnapshot(s) {
     let o = S.others.get(key);
     const r = S.roster.get(key);
     if (!o) {
-      o = { key, kind: r?.plane || 'sparrow', paint: r?.paint || 'stock', mesh: buildPlane(r?.plane || 'sparrow', r?.paint), buf: [], fireT: 0, gun: 0, smokeT: 0, tag: null };
+      o = { key, kind: r?.plane || 'sparrow', paint: r?.paint || 'stock', mesh: buildPlane(r?.plane || 'sparrow', r?.paint, { gun: r?.gun, missile: r?.missile }), buf: [], fireT: 0, gun: 0, smokeT: 0, tag: null };
       scene.add(o.mesh);
       S.others.set(key, o);
     }
     if (r && (r.plane !== o.kind || (r.paint || 'stock') !== o.paint)) {
       // a different plane under the same key (it changed in the hangar)
-      scene.remove(o.mesh); o.mesh = buildPlane(r.plane, r.paint); o.kind = r.plane; o.paint = r.paint || 'stock'; scene.add(o.mesh);
+      scene.remove(o.mesh); o.mesh = buildPlane(r.plane, r.paint, { gun: r.gun, missile: r.missile }); o.kind = r.plane; o.paint = r.paint || 'stock'; scene.add(o.mesh);
     }
     // the attitude as a quaternion when the room sends one (any way up), else from the angles
     const qa = qw !== undefined ? new Quaternion(qx / 1000, qy / 1000, qz / 1000, qw / 1000).normalize() : new Quaternion().setFromEuler(new Euler(pitch / 1000, yaw / 1000, roll / 1000, 'YXZ'));
@@ -1013,6 +1052,7 @@ function hud(dt, now) {
   show('#warn', now < S.warnUntil && !!me?.alive);
   threat(dt);
   tags();
+  compass();
   if (me?.body) {
     const b = me.body;
     show('#edge', Math.hypot(b.x, b.z) > ARENA.radius - 30 && me.alive);
@@ -1061,7 +1101,6 @@ function hud(dt, now) {
   }
   $('#hud-msl').innerHTML = Array.from({ length: me.stats.missiles }, (_, i) => `<i class="${i < me.ammo ? 'on' : ''}"></i>`).join('');
   $('#hud-flr').innerHTML = Array.from({ length: me.stats.flares }, (_, i) => `<i class="${i < (me.flares ?? 0) ? 'on' : ''}"></i>`).join('');
-  radar();
 }
 
 /** Screen position of a world point; false when behind the camera. */
@@ -1076,8 +1115,8 @@ function project(v) {
 /** Names over the planes in view, and arrows at the edge for the nearest ones out of it. */
 /**
  * Over the planes in view: a small mark each, and words (name, distance,
- * health) only on the two nearest — the radar has the rest. No arrows at the
- * edges any more: the radar says where everyone is.
+ * health) only on the two nearest — the compass has the rest. No arrows at the
+ * edges any more: the compass says where everyone is.
  */
 /**
  * Over each plane in sight, a dot — and over the nearest two, the name and
@@ -1126,62 +1165,92 @@ function tags() {
 }
 
 /**
- * The radar: who is where, turned so the nose is up. Rings every 500 m out
- * to 1600; red the enemies, blue the side, gold the bomber, white a missile
- * coming for me. A triangle up or down for a plane well above or below.
- * Under it, the nearest enemy's distance.
+ * The compass tape: the heading under a caret in the middle, 120° of it
+ * across the strip, ticks every 5° and the cardinal points named. On it,
+ * by their bearing from the nose: red the enemies (the nearest with its
+ * range), blue the side, gold the bomber, white a missile coming for me,
+ * green a repair pad that is ready. One beyond the strip waits at its edge,
+ * dimmed, pointing the way. A tip up or down: well above or below me.
  */
-const RADAR = { range: 1600 };
-function radar() {
-  const cv = $('#radar'), me = S.me?.body;
+const COMPASS = { span: 120, range: 1800 };
+const deg = (r) => (r * 180) / Math.PI;
+const wrap = (a) => ((a + 540) % 360) - 180;
+function compass() {
+  const cv = $('#compass'), me = S.me?.body;
   if (!cv || !me) return;
-  const dpr = Math.min(2, devicePixelRatio || 1), W = cv.clientWidth;
-  if (cv.width !== Math.round(W * dpr)) cv.width = cv.height = Math.round(W * dpr);
-  const g = cv.getContext('2d'), R = cv.width / 2;
-  g.setTransform(1, 0, 0, 1, 0, 0);
-  g.clearRect(0, 0, cv.width, cv.height);
-  g.translate(R, R);
-  g.fillStyle = 'rgba(6, 14, 22, 0.55)'; g.beginPath(); g.arc(0, 0, R - 1, 0, Math.PI * 2); g.fill();
-  g.strokeStyle = 'rgba(120, 220, 200, 0.22)'; g.lineWidth = 1 * dpr;
-  for (const k of [500, 1000, 1500]) { g.beginPath(); g.arc(0, 0, (k / RADAR.range) * (R - 4), 0, Math.PI * 2); g.stroke(); }
-  g.beginPath(); g.moveTo(0, -R + 3); g.lineTo(0, R - 3); g.moveTo(-R + 3, 0); g.lineTo(R - 3, 0); g.stroke();
-  // me: a small chevron, nose up
-  g.fillStyle = '#eaf6ff'; g.beginPath(); g.moveTo(0, -5 * dpr); g.lineTo(4 * dpr, 4 * dpr); g.lineTo(0, 2 * dpr); g.lineTo(-4 * dpr, 4 * dpr); g.closePath(); g.fill();
-  const cos = Math.cos(me.yaw), sin = Math.sin(me.yaw);
-  const put = (x, y, z, color, size, mark) => {
-    const dx = x - me.x, dz = z - me.z;
-    // into my frame: forward is up on the radar, right is right
-    const fx = -sin * dx - cos * dz, rx = cos * dx - sin * dz;
-    let px = rx, py = -fx, d = Math.hypot(px, py);
-    const max = RADAR.range;
-    if (d > max) px *= max / d, py *= max / d, size *= 0.7;
-    px *= (R - 6) / max; py *= (R - 6) / max;
-    g.fillStyle = color;
-    const dy = y - me.y, s = size * dpr;
+  const dpr = Math.min(2, devicePixelRatio || 1), W = cv.clientWidth, H = cv.clientHeight;
+  if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) cv.width = Math.round(W * dpr), cv.height = Math.round(H * dpr);
+  const g = cv.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, W, H);
+  const head = ((deg(-me.yaw) % 360) + 360) % 360, px = W / COMPASS.span, mid = W / 2, base = 22;
+  const xOf = (rel) => mid + rel * px;
+  // the glass behind it, fading out at both ends
+  const bg = g.createLinearGradient(0, 0, W, 0);
+  bg.addColorStop(0, 'rgba(6,14,22,0)'); bg.addColorStop(0.15, 'rgba(6,14,22,0.5)'); bg.addColorStop(0.85, 'rgba(6,14,22,0.5)'); bg.addColorStop(1, 'rgba(6,14,22,0)');
+  g.fillStyle = bg; g.fillRect(0, 4, W, base);
+  const line = g.createLinearGradient(0, 0, W, 0);
+  line.addColorStop(0, 'rgba(111,230,255,0)'); line.addColorStop(0.5, 'rgba(111,230,255,0.8)'); line.addColorStop(1, 'rgba(111,230,255,0)');
+  g.fillStyle = line; g.fillRect(0, base + 4, W, 1);
+  // ticks and names
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  const first = Math.ceil((head - COMPASS.span / 2) / 5) * 5;
+  for (let a = first; a <= head + COMPASS.span / 2; a += 5) {
+    const x = xOf(a - head), fade = 1 - Math.abs(a - head) / (COMPASS.span / 2);
+    const n = ((a % 360) + 360) % 360, big = n % 15 === 0;
+    g.fillStyle = `rgba(200,240,255,${0.25 + 0.6 * fade})`;
+    g.fillRect(x - 0.5, base + 4 - (big ? 7 : 4), 1, big ? 7 : 4);
+    if (n % 30 === 0) {
+      const name = { 0: 'N', 90: 'E', 180: 'S', 270: 'W' }[n];
+      g.font = `${name ? 800 : 600} ${name ? 12 : 9}px Orbitron, Rubik, sans-serif`;
+      g.fillStyle = name ? `rgba(111,230,255,${0.4 + 0.6 * fade})` : `rgba(220,240,250,${0.25 + 0.5 * fade})`;
+      g.fillText(name || String(n).padStart(3, '0'), x, 12);
+    }
+  }
+  // the heading itself, under a caret
+  g.fillStyle = '#6fe6ff';
+  g.beginPath(); g.moveTo(mid - 5, base + 5); g.lineTo(mid + 5, base + 5); g.lineTo(mid, base + 10); g.closePath(); g.fill();
+  // the marks
+  const mark = (x, y, z, color, size, opts = {}) => {
+    const dx = x - me.x, dz = z - me.z, d = Math.hypot(dx, y - me.y, dz);
+    if (opts.range && d > opts.range) return null;
+    const rel = wrap(deg(Math.atan2(dx, -dz)) - head), out = Math.abs(rel) > COMPASS.span / 2 - 3;
+    const sx = xOf(Math.max(-COMPASS.span / 2 + 3, Math.min(COMPASS.span / 2 - 3, rel))), sy = base + 17;
+    g.globalAlpha = out ? 0.45 : 1;
+    g.fillStyle = color; g.shadowColor = color; g.shadowBlur = out ? 0 : 6;
     g.beginPath();
-    if (mark && dy > 60) { g.moveTo(px, py - s); g.lineTo(px + s, py + s * 0.8); g.lineTo(px - s, py + s * 0.8); }
-    else if (mark && dy < -60) { g.moveTo(px, py + s); g.lineTo(px + s, py - s * 0.8); g.lineTo(px - s, py - s * 0.8); }
-    else g.arc(px, py, s * 0.8, 0, Math.PI * 2);
+    if (out) {
+      // at the edge, pointing the way round
+      const s = rel > 0 ? 1 : -1;
+      g.moveTo(sx + s * size, sy); g.lineTo(sx - s * size * 0.6, sy - size); g.lineTo(sx - s * size * 0.6, sy + size);
+    } else if (opts.cross) {
+      g.rect(sx - size, sy - size * 0.3, size * 2, size * 0.6); g.rect(sx - size * 0.3, sy - size, size * 0.6, size * 2);
+    } else {
+      const dy = y - me.y;
+      if (dy > 60) { g.moveTo(sx, sy - size); g.lineTo(sx + size, sy + size * 0.7); g.lineTo(sx - size, sy + size * 0.7); }
+      else if (dy < -60) { g.moveTo(sx, sy + size); g.lineTo(sx + size, sy - size * 0.7); g.lineTo(sx - size, sy - size * 0.7); }
+      else { g.moveTo(sx, sy - size); g.lineTo(sx + size, sy); g.lineTo(sx, sy + size); g.lineTo(sx - size, sy); }
+    }
     g.fill();
+    g.shadowBlur = 0; g.globalAlpha = 1;
+    return { sx, sy, d, out };
   };
+  HEALS.forEach((h, i) => pads.ready(i) && mark(h.x, h.y, h.z, '#4dff9a', 3.2, { cross: true, range: COMPASS.range }));
   let near = null;
   for (const o of S.others.values()) {
     if (!o.alive || o.x === undefined) continue;
     const mate = S.teams && S.roster.get(o.key)?.team === S.myTeam;
-    put(o.x, o.y, o.z, mate ? '#6aa8ff' : '#ff5a64', 3, true);
-    if (!mate) { const d = Math.hypot(o.x - me.x, o.y - me.y, o.z - me.z); if (!near || d < near.d) near = { d, dy: o.y - me.y }; }
+    const m = mark(o.x, o.y, o.z, mate ? '#6aa8ff' : '#ff4d5a', 4.5);
+    if (!mate && m && (!near || m.d < near.d)) near = m;
   }
-  // the repair pads: a green cross, grey while one recharges
-  HEALS.forEach((h, i) => {
-    const sx = h.x - me.x, sz = h.z - me.z, fx = -sin * sx - cos * sz, rx = cos * sx - sin * sz, dd = Math.hypot(rx, fx);
-    if (dd > RADAR.range) return;
-    const px = rx * (R - 6) / RADAR.range, py = -fx * (R - 6) / RADAR.range, a = 3 * dpr, b = 1 * dpr;
-    g.fillStyle = pads.ready(i) ? '#4dff9a' : 'rgba(160,170,180,0.5)';
-    g.fillRect(px - a, py - b, a * 2, b * 2); g.fillRect(px - b, py - a, b * 2, a * 2);
-  });
-  if (S.boss) put(S.boss.x, S.boss.y, S.boss.z, '#ffd27a', 5, true);
-  for (const m of S.missiles) if (m.target === S.myKey && Math.floor(performance.now() / 150) % 2) put(m.x, m.y, m.z, '#ffffff', 2.5, false);
-  $('#radar-near').textContent = near ? `${Math.round(near.d)}m${near.dy > 60 ? ' ▲' : near.dy < -60 ? ' ▼' : ''}` : '';
+  if (S.boss) mark(S.boss.x, S.boss.y, S.boss.z, '#ffd27a', 6.5);
+  if (Math.floor(performance.now() / 150) % 2) for (const m of S.missiles) if (m.target === S.myKey) mark(m.x, m.y, m.z, '#ffffff', 4);
+  // the nearest enemy's range, under its mark
+  if (near) {
+    g.font = '700 9px Orbitron, Rubik, sans-serif';
+    g.fillStyle = '#ff9aa2';
+    g.fillText(`${Math.round(near.d / 10) * 10}m`, Math.max(16, Math.min(W - 16, near.sx)), near.sy + 12);
+  }
 }
 
 /** Who I may shoot at: everyone, or in teams the other side. */
@@ -1230,15 +1299,36 @@ function feed(html, mine) {
   setTimeout(() => d.remove(), 4600);
 }
 
+/**
+ * A game event on screen: a card in the stack at the top, in for about
+ * three seconds. The same words again only keep their card up longer; four
+ * at most, the oldest leaving first. `cls`: 'lvl' good news, 'bad' bad.
+ */
+const NOTE = { hold: 2800, max: 4 };
 function toast(text, cls = '') {
-  const t = document.createElement('div');
-  t.textContent = text;
-  cls && t.classList.add(cls);
-  // over the hangar too
-  const host = S.mode === 'air' ? $('#toast') : document.body;
-  if (host === document.body) Object.assign(t.style, { position: 'fixed', top: '42%', left: '50%', transform: 'translate(-50%,-50%)', zIndex: 60, pointerEvents: 'none', fontSize: '20px', fontWeight: 900, color: '#eaf6ff', letterSpacing: '1px', textShadow: '0 2px 10px rgba(0,0,0,.8)', animation: 'rise 1.8s forwards', textAlign: 'center' });
-  host.append(t);
-  setTimeout(() => t.remove(), 1900);
+  const box = $('#notes');
+  for (const c of box.children) if (c.dataset.text === text && !c.classList.contains('gone')) return void keep(c);
+  const c = document.createElement('div');
+  c.className = 'note-c';
+  c.dataset.text = text;
+  const x = document.createElement('div');
+  x.className = `note-x ${cls === 'lvl' ? 'lvl' : cls === 'bad' ? 'bad' : ''}`;
+  x.textContent = text;
+  c.append(Object.assign(document.createElement('div'), {}));
+  c.firstChild.append(x);
+  box.append(c);
+  const live = [...box.children].filter((n) => !n.classList.contains('gone'));
+  if (live.length > NOTE.max) drop(live[0]);
+  keep(c);
+  sound.note(cls === 'lvl');
+}
+function keep(c) { clearTimeout(c._t); c._t = setTimeout(() => drop(c), NOTE.hold); }
+function drop(c) {
+  if (c.classList.contains('gone')) return;
+  clearTimeout(c._t);
+  c.querySelector('.note-x').classList.add('out');
+  setTimeout(() => c.classList.add('gone'), 300);
+  setTimeout(() => c.remove(), 700);
 }
 
 // ---- how much to draw ------------------------------------------------------

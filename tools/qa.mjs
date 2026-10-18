@@ -223,18 +223,22 @@ console.log('\nthe hangar');
   ok('a plane bought later starts with none', (p.gold = 1e6, buyPlane(p, 'bulldog').ok) && Object.values(p.upgrades.bulldog).every((t) => t === 0));
   {
     const m = newPilot('arms');
-    ok('a new pilot carries the free gun and missile', m.gun === 'g1' && m.missile === 'm1' && m.arms.guns[0] === 'g1');
+    ok('a new pilot\'s plane carries the free gun and missile', m.loadout.sparrow.gun === 'g1' && m.loadout.sparrow.missile === 'm1' && m.arms.guns[0] === 'g1');
     m.gold = 100000; m.xp = 0; normalize(m);
     ok('a weapon above the level is refused', buyArm(m, 'missiles', 'm2').error === 'level');
     m.xp = xpAt(10); normalize(m);
-    ok('bought: paid for, owned and carried', buyArm(m, 'missiles', 'm2').ok && m.missile === 'm2' && m.gold === 100000 - MISSILES.m2.price);
+    ok('bought: paid for, owned, and on the plane flown', buyArm(m, 'missiles', 'm2').ok && m.loadout.sparrow.missile === 'm2' && m.gold === 100000 - MISSILES.m2.price);
     ok('not twice', buyArm(m, 'missiles', 'm2').error === 'owned');
-    ok('back to one owned', equipArm(m, 'missiles', 'm1').ok && m.missile === 'm1');
+    ok('another plane bought carries what the one flown carries', buyPlane(m, 'hornet').ok && m.loadout.hornet.missile === 'm2');
+    ok('each plane its own load', equipArm(m, 'missiles', 'm1', 'hornet').ok && m.loadout.hornet.missile === 'm1' && m.loadout.sparrow.missile === 'm2');
+    ok('not on a plane you do not own', equipArm(m, 'missiles', 'm2', 'phantom').error === 'not_owned');
     ok('not one not owned', equipArm(m, 'guns', 'g3').error === 'not_owned');
     ok('no gold, no gun', (m.gold = 10, buyArm(m, 'guns', 'g3').error === 'gold'));
-    ok('nonsense is refused, prototype keys too', buyArm(m, '__proto__', 'toString').error === 'no_such_weapon' && buyArm(m, 'guns', 'constructor').error === 'no_such_weapon' && equipArm(m, 'missiles', 'hasOwnProperty').error === 'no_such_weapon');
+    ok('nonsense is refused, prototype keys too', buyArm(m, '__proto__', 'toString').error === 'no_such_weapon' && buyArm(m, 'guns', 'constructor').error === 'no_such_weapon' && equipArm(m, 'missiles', 'hasOwnProperty').error === 'no_such_weapon' && equipArm(m, 'missiles', 'm1', '__proto__').error === 'not_owned');
+    const older = normalize({ id: 'o', planes: ['sparrow', 'viper'], arms: { guns: ['g1', 'g2'], missiles: ['m1', 'm3'] }, gun: 'g2', missile: 'm3' });
+    ok('one choice for every plane (an older record) becomes each plane\'s', older.loadout.sparrow.gun === 'g2' && older.loadout.viper.missile === 'm3' && !('gun' in older));
     const bad = normalize({ id: 'z', arms: { guns: ['laser'], missiles: ['m9'] }, gun: 'laser', missile: 'm9' });
-    ok('a broken arms record is mended', bad.gun === 'g1' && bad.missile === 'm1' && bad.arms.guns.join() === 'g1');
+    ok('a broken arms record is mended', bad.loadout.sparrow.gun === 'g1' && bad.loadout.sparrow.missile === 'm1' && bad.arms.guns.join() === 'g1');
   }
   const q = newPilot('u2');
   const r = payKill(q, { level: 1, bot: true });

@@ -56,6 +56,8 @@ export const sound = {
   beep(now) { tone(now ? 1320 : 990, 0.05, 0.12, 'square'); },
   /** A missile going past, close. */
   whoosh() { burst(0.7, 1800, 0.3, 'bandpass', 300); },
+  /** A note on screen: a soft two-tone chime, brighter for good news. */
+  note(good) { tone(good ? 1568 : 1319, 0.12, 0.05, 'sine'); setTimeout(() => tone(good ? 2093 : 1760, 0.18, 0.04, 'sine'), 70); },
   level() { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => tone(f, 0.16, 0.2, 'triangle'), i * 110)); },
   coin() { tone(988, 0.07, 0.15, 'triangle'); setTimeout(() => tone(1319, 0.12, 0.15, 'triangle'), 70); },
 };
