@@ -480,6 +480,10 @@
     /* the feed out of the way: low on the left, above the gauges */
     #feed { top: auto; bottom: calc(max(14px, env(safe-area-inset-bottom)) + 44px); right: auto; left: 12px; align-items: flex-start; width: 52vw; }
   }
+  /* in the air with the phone on its side: the notes low in the middle, above the gauges, clear of the crosshair */
+  @media (orientation: landscape) and (max-height: 500px) {
+    #notes.air { top: auto; bottom: calc(max(14px, env(safe-area-inset-bottom)) + 44px); flex-direction: column-reverse; }
+  }
 </style>
 </head>
 <body>
