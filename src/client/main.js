@@ -1181,11 +1181,14 @@ function threat(dt) {
     const dd = Math.hypot(x.x - b.x, x.y - b.y, x.z - b.z);
     if (dd < d) d = dd, m = x;
   }
-  if (!m) { show(el, false); $('#warn').textContent = 'טיל ננעל עליך — נורים!'; S.beepT = 0; return; }
+  // the badge under the compass and the red edges: a lock, then the missile itself
+  const locked = !!b && (!!m || performance.now() < S.warnUntil), inWindow = !!m && d <= DODGE.far && d >= DODGE.near;
+  show('#al-missile', locked); show('#alarm', locked);
+  $('#al-missile').classList.toggle('now', inWindow); $('#alarm').classList.toggle('now', inWindow);
+  $('#al-m-t').textContent = inWindow ? 'שבור!' : 'טיל';
+  $('#al-m-d').textContent = m ? `${Math.round(d / 10) * 10}m` : '';
+  if (!m) { show(el, false); S.beepT = 0; return; }
   show(el);
-  const inWindow = d <= DODGE.far && d >= DODGE.near;
-  $('#warn').textContent = inWindow ? 'שבור עכשיו! פנייה חדה' : `טיל ${Math.round(d)}m — נורים או שבור ברגע האחרון`;
-  $('#warn').classList.toggle('now', inWindow);
   $('#threat-d').textContent = `${Math.round(d)}m`;
   // on screen: a ring on it. Behind: an arrow on the edge, pointing the way
   P.set(m.x, m.y, m.z).project(camera);
@@ -1240,7 +1243,6 @@ function hud(dt, now) {
   S.hitFlash = Math.max(0, S.hitFlash - dt);
   $('#cross').classList.toggle('hit', S.hitFlash > 0);
   show('#cross', !!me?.alive);
-  show('#warn', now < S.warnUntil && !!me?.alive);
   threat(dt);
   tail(dt);
   tags();
@@ -1502,7 +1504,7 @@ function feed(html, mine) {
  * three seconds. The same words again only keep their card up longer; four
  * at most, the oldest leaving first. `cls`: 'lvl' good news, 'bad' bad.
  */
-const NOTE = { hold: 2800, max: 4 };
+const NOTE = { hold: 2800, max: 3 };
 function toast(text, cls = '') {
   const box = $('#notes');
   for (const c of box.children) if (c.dataset.text === text && !c.classList.contains('gone')) return void keep(c);
