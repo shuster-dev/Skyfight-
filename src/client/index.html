@@ -183,6 +183,19 @@
   .friends .f-me b { color: #fff; font-size: 16px; letter-spacing: 0.5px; }
   .friends .f-me button { padding: 6px 12px; font-size: 12px; font-weight: 700; color: #dfe7f2; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; }
   .f-add { display: flex; gap: 8px; padding: 12px 0; }
+  .ad-card { display: grid; gap: 10px; padding: 14px; margin-bottom: 10px; border-radius: 14px; background: linear-gradient(180deg, rgba(241,210,122,0.1), rgba(241,210,122,0.02)); border: 1px solid rgba(241,210,122,0.35); }
+  .ad-who b { font-size: 18px; display: block; }
+  .ad-who span { font-size: 12.5px; color: var(--dim); }
+  .ad-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .ad-row .k { width: 40px; font-size: 13px; font-weight: 700; color: rgba(255,255,255,0.75); }
+  .ad-row input, .ad-row select { flex: 1 1 120px; min-width: 0; padding: 9px 10px; font: inherit; font-size: 14px; color: #fff; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.18); border-radius: 8px; outline: none; }
+  .ad-row select option { color: #000; }
+  .ad-row button { padding: 9px 12px; font-weight: 800; font-size: 13px; color: #1d1405; background: linear-gradient(180deg, #ffe08a, #e8b94a); border-radius: 8px; white-space: nowrap; }
+  .ad-row button:disabled { background: rgba(255,255,255,0.08); color: var(--dim); }
+  .ad-quick button { flex: 1 1 0; min-width: 0; padding: 9px 4px; font-size: 12px; color: #04201c; background: var(--teal); }
+  .ad-quick button:last-child { background: rgba(255,90,100,0.85); color: #fff; }
+  .ad-sub { font-size: 12px; font-weight: 800; letter-spacing: 1px; color: var(--teal); padding: 8px 0 2px; }
+  .ad-pick { width: 100%; background: none; text-align: right; color: inherit; }
   .f-add input { flex: 1; min-width: 0; padding: 10px 12px; font: inherit; font-size: 15px; color: #fff; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.18); border-radius: 6px; outline: none; }
   .f-add input:focus { border-color: var(--teal); }
   .f-add button { padding: 0 18px; font-weight: 800; color: #04201c; background: var(--teal); border-radius: 6px; }
@@ -468,6 +481,7 @@
     <button data-tab="market" type="button"><svg viewBox="0 0 24 24"><path d="M4 8h16l-1 12H5zM8 8V6a4 4 0 0 1 8 0v2"/></svg><span>שוק</span></button>
     <button data-tab="board" type="button"><svg viewBox="0 0 24 24"><path d="M5 20V12M12 20V5M19 20v-6"/></svg><span>דירוג</span></button>
     <button data-tab="friends" type="button"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3 19c0-3.5 3-5.5 6-5.5s6 2 6 5.5M16 5.5a3 3 0 0 1 0 5.6M18 13.8c2 .7 3 2.6 3 5.2"/></svg><span>חברים</span></button>
+    <button class="hidden" data-tab="admin" type="button"><svg viewBox="0 0 24 24"><path d="M12 2l3 6 6 .9-4.5 4.3 1.1 6.3L12 16.6 6.4 19.5l1.1-6.3L3 8.9 9 8z"/></svg><span>אדמין</span></button>
   </div>
   <div class="h-plane" id="tab-planes">
     <div class="era" id="hp-era"></div>
@@ -500,6 +514,12 @@
     <div class="f-me" id="f-me"></div>
     <form class="f-add" id="f-add" autocomplete="off"><input id="f-code" placeholder="שם#מספר של חבר" maxlength="24" dir="auto"><button type="submit">הוסף</button></form>
     <div id="f-list"></div>
+  </div>
+  <div class="h-panel admin hidden" id="tab-admin">
+    <div class="up-head"><b>אדמין</b><small>זהב, מטוסים ורמה לכל שחקן</small></div>
+    <form class="f-add" id="ad-find" autocomplete="off"><input id="ad-code" placeholder="שם#מספר של שחקן" maxlength="24" dir="auto"><button type="submit">חפש</button></form>
+    <div id="ad-card"></div>
+    <div id="ad-list"></div>
   </div>
   <div class="h-invite hidden" id="h-invite">הוזמנת לזירה של חבר — לחצו המראה</div>
   <div class="h-mode"><button type="button" data-mode="ffa" class="on">כולם נגד כולם</button><button type="button" data-mode="teams">קבוצות</button></div>

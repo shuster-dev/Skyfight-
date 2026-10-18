@@ -22,6 +22,7 @@ const ERR = {
   username_taken: 'השם הזה כבר תפוס', invalid_username: 'שם משתמש: 3–16 אותיות אנגלית קטנות ומספרים', invalid_password: 'סיסמה: לפחות 4 תווים',
   bad_code: 'כותבים שם#מספר, כמו מאיר#1', no_such_pilot: 'אין טייס כזה — בדקו את השם והמספר', self: 'אי אפשר להוסיף את עצמכם',
   already_friends: 'כבר חברים', friends_full: 'רשימת החברים מלאה',
+  not_admin: 'רק לאדמין', bad_gold: 'כמות זהב לא תקינה', bad_level: 'רמה בין 1 ל־30', no_such_plane: 'אין מטוס כזה', nothing_to_do: 'לא נבחר שינוי',
   gold: 'אין מספיק זהב', level: 'צריך רמה גבוהה יותר', too_many_requests: 'יותר מדי ניסיונות — חכו רגע', no_pilot: 'קודם בוחרים שם',
 };
 const err = (e) => ERR[e?.code] || 'משהו השתבש — נסו שוב';
@@ -126,7 +127,8 @@ async function boot() {
 
 function took(me) {
   S.pilot = me.pilot;
-  S.account = { guest: !!me.guest, username: me.username || '' };
+  S.account = { guest: !!me.guest, username: me.username || '', admin: !!me.admin };
+  show('.h-tabs [data-tab="admin"]', S.account.admin);
 }
 
 // ---- the front door -------------------------------------------------------
@@ -255,6 +257,7 @@ function renderHangar() {
   show('#tab-board', tab === 'board');
   show('#tab-market', tab === 'market');
   show('#tab-friends', tab === 'friends');
+  show('#tab-admin', tab === 'admin');
   // fight mode is chosen with the plane: it only gets in the way of the panels
   show('.h-mode', tab === 'planes');
   if (tab !== 'market') hangar.show(viewing || p.plane, paintView || p.paint, loadOf(viewing || p.plane));
@@ -263,6 +266,7 @@ function renderHangar() {
   if (tab === 'board') renderBoard();
   if (tab === 'market') renderMarket();
   if (tab === 'friends') renderFriends();
+  if (tab === 'admin') renderAdmin();
   $('#btn-launch').textContent = `המראה · ${PLANES[p.plane].he}`;
 }
 
@@ -524,6 +528,65 @@ async function renderBoard() {
 }
 
 // ---- friends ------------------------------------------------------------------
+// ---- the admin's desk --------------------------------------------------------
+// Only for the codes the server names as admins: look a pilot up (or pick
+// one from the list), then set or add gold, give planes, set the level.
+let adminCode = '';
+async function renderAdmin() {
+  if (!S.account.admin) return;
+  const list = $('#ad-list');
+  try {
+    const { rows } = await net.api('/api/admin/pilots');
+    list.innerHTML = '<div class="ad-sub">שחקנים</div>' + rows.map((r) => `<button type="button" class="f-row ad-pick" data-code="${esc(r.code)}"><div class="t"><b dir="auto">${esc(r.code)}</b><small>רמה ${r.level} · ${r.kills} הפלות · ${esc(PLANES[r.plane]?.he || '')}</small></div></button>`).join('');
+  } catch (x) { list.innerHTML = `<div class="note">${err(x)}</div>`; }
+  if (!adminCode && S.pilot.tag) adminCode = `${S.pilot.name}#${S.pilot.tag}`;
+  if (adminCode) adminLoad(adminCode);
+}
+async function adminLoad(code) {
+  adminCode = code;
+  $('#ad-code').value = code;
+  const card = $('#ad-card');
+  try {
+    const { pilot: a } = await net.api(`/api/admin/pilot?code=${encodeURIComponent(code)}`);
+    paintAdmin(a);
+  } catch (x) { card.innerHTML = `<div class="note">${err(x)}</div>`; }
+}
+function paintAdmin(a) {
+  const missing = PLANE_ORDER.filter((k) => !a.planes.includes(k));
+  $('#ad-card').innerHTML = `<div class="ad-card">
+    <div class="ad-who"><b dir="auto">${esc(a.code)}</b><span>רמה ${a.level} · <span class="num">${fmt(a.gold)}</span> זהב · ${a.planes.length}/${PLANE_ORDER.length} מטוסים</span></div>
+    <div class="ad-row"><span class="k">זהב</span><input id="ad-gold" type="number" inputmode="numeric" min="0" placeholder="${a.gold}">
+      <button type="button" data-ad="set-gold">קבע</button><button type="button" data-ad="add-gold">הוסף</button></div>
+    <div class="ad-row ad-quick">${[1000, 10000, 100000].map((g) => `<button type="button" data-add="${g}">+${fmt(g)}</button>`).join('')}<button type="button" data-add="-${a.gold}">אפס</button></div>
+    <div class="ad-row"><span class="k">מטוס</span><select id="ad-plane">${missing.map((k) => `<option value="${k}">${esc(PLANES[k].he)} · רמה ${PLANES[k].level}</option>`).join('') || '<option value="">יש לו את כולם</option>'}</select>
+      <button type="button" data-ad="plane" ${missing.length ? '' : 'disabled'}>תן</button><button type="button" data-ad="all" ${missing.length ? '' : 'disabled'}>תן הכול</button></div>
+    <div class="ad-row"><span class="k">רמה</span><input id="ad-level" type="number" inputmode="numeric" min="1" max="30" placeholder="${a.level}"><button type="button" data-ad="level">קבע רמה</button></div>
+  </div>`;
+}
+async function adminEdit(body) {
+  try {
+    const { pilot: a } = await net.api('/api/admin/edit', { code: adminCode, ...body });
+    paintAdmin(a);
+    sound.coin();
+    toast(`${a.code} · עודכן`);
+    // my own record changed: the hangar shows it now
+    if (S.pilot.tag && a.code === `${S.pilot.name}#${S.pilot.tag}`) took(await net.api('/api/me')), renderHangar();
+  } catch (x) { toast(err(x), 'bad'); }
+}
+$('#ad-find').addEventListener('submit', (e) => { e.preventDefault(); const c = $('#ad-code').value.trim(); c && adminLoad(c); });
+$('#ad-list').addEventListener('click', (e) => { const c = e.target.closest('[data-code]')?.dataset.code; c && adminLoad(c); });
+$('#ad-card').addEventListener('click', (e) => {
+  const add = e.target.closest('[data-add]')?.dataset.add;
+  if (add) return adminEdit({ addGold: Number(add) });
+  const op = e.target.closest('[data-ad]')?.dataset.ad;
+  const gold = Number($('#ad-gold')?.value);
+  if (op === 'set-gold' && $('#ad-gold').value !== '') adminEdit({ gold });
+  if (op === 'add-gold' && $('#ad-gold').value !== '') adminEdit({ addGold: gold });
+  if (op === 'plane' && $('#ad-plane').value) adminEdit({ plane: $('#ad-plane').value });
+  if (op === 'all') adminEdit({ plane: 'all' });
+  if (op === 'level' && $('#ad-level').value !== '') adminEdit({ level: Number($('#ad-level').value) });
+});
+
 // Who is flying now, and a button that puts you in the same sky as them.
 const MODE_HE = { ffa: 'כולם נגד כולם', teams: 'קבוצות' };
 let friendsT = 0;

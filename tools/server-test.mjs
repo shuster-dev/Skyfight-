@@ -187,6 +187,29 @@ try {
   const renamed = await api('/api/pilot/name', { name: 'נשר' }, twin.token);
   ok('a new name gets its own number', renamed.pilot?.name === 'נשר' && renamed.pilot.tag === 1, renamed.pilot);
 
+  console.log('\nthe admin');
+  {
+    // מאיר#1 is the admin (ADMIN_CODES unset): a saved pilot of that name and number
+    const a = await api('/api/guest', {});
+    await api('/api/pilot/name', { name: 'מאיר' }, a.token);
+    const adm = await api('/api/register', { username: 'meiradmin', password: 'pass9' }, a.token);
+    ok('מאיר#1, saved, is the admin', adm.admin === true && adm.pilot.tag === 1, { admin: adm.admin, tag: adm.pilot?.tag });
+    ok('anyone else is not', (await api('/api/me', null, back.token)).admin === false && (await api('/api/admin/pilots', null, back.token)).status === 403);
+    ok('nor can they give gold', (await api('/api/admin/edit', { code: 'צייד#1', gold: 999999 }, back.token)).status === 403);
+    const who = await api('/api/admin/pilot?code=' + encodeURIComponent('צייד#1'), null, adm.token);
+    ok('the admin looks a pilot up by code', who.pilot?.code === 'צייד#1', who);
+    ok('and lists the pilots', (await api('/api/admin/pilots', null, adm.token)).rows?.some((r) => r.code === 'צייד#1'));
+    const g1 = await api('/api/admin/edit', { code: 'צייד#1', gold: 50000 }, adm.token);
+    ok('sets gold', g1.pilot?.gold === 50000 && (await api('/api/me', null, back.token)).pilot.gold === 50000, g1);
+    ok('adds gold, never below nothing', (await api('/api/admin/edit', { code: 'צייד#1', addGold: 2500 }, adm.token)).pilot?.gold === 52500 && (await api('/api/admin/edit', { code: 'צייד#1', addGold: -1e9 }, adm.token)).pilot?.gold === 0);
+    ok('gives a plane, whatever the level', (await api('/api/admin/edit', { code: 'צייד#1', plane: 'phantom' }, adm.token)).pilot?.planes.includes('phantom') && (await api('/api/pilot/plane', { plane: 'phantom' }, back.token)).pilot?.plane === 'phantom');
+    ok('or all of them', (await api('/api/admin/edit', { code: 'צייד#1', plane: 'all' }, adm.token)).pilot?.planes.length === 10);
+    ok('sets the level', (await api('/api/admin/edit', { code: 'צייד#1', level: 12 }, adm.token)).pilot?.level === 12);
+    ok('nonsense is refused', (await api('/api/admin/edit', { code: 'צייד#1', plane: '__proto__' }, adm.token)).error === 'no_such_plane' && (await api('/api/admin/edit', { code: 'צייד#1', level: 99 }, adm.token)).error === 'bad_level' && (await api('/api/admin/edit', { code: 'nobody#9', gold: 1 }, adm.token)).status === 404);
+    await api('/api/admin/edit', { code: 'צייד#1', level: 1, plane: 'sparrow' }, adm.token);
+    await api('/api/pilot/plane', { plane: 'sparrow' }, back.token);
+  }
+
   console.log('\npaint');
   ok('a paint costs gold', (await api('/api/pilot/buy-paint', { paint: 'gold' }, back.token)).error === 'gold');
   ok('the stock paint is worn', (await api('/api/pilot/paint', { paint: 'stock' }, back.token)).pilot?.paint === 'stock');
