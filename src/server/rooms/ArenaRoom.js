@@ -78,6 +78,15 @@ export class ArenaRoom extends Room {
       const p = this.planeOf(client);
       p && this.launch(p);
     });
+    // the client felt it hit something: the room calls it if the plane is
+    // where the client says, against something solid (a roof the client
+    // stops on sits a metre or so above it: hence the slack)
+    this.onMessage('crash', (client) => {
+      const p = this.planeOf(client);
+      if (!p?.alive) return;
+      const into = hitsSolid(p.x, p.y, p.z, 4);
+      if (into) this.down(p, '', 'crash', into);
+    });
     this.onMessage('hello', (client) => this.hello(client));
     this.onMessage('ping', (client, t) => client.send('pong', t));
   }
@@ -116,6 +125,8 @@ export class ArenaRoom extends Room {
     p.greeted = true;
     client.send('welcome', { key: p.key, stats: p.stats, roster: this.roster(), pilot: view(p.pilot), mode: this.teams ? 'teams' : 'ffa', team: p.team, score: this.score, room: this.roomId, pads: this.healReady.map((t) => Math.max(0, Math.ceil((t - Date.now()) / 1000))) });
     this.spawn(p);
+    // the king's helicopter takes off: everyone in the sky is told
+    if (p.pilot?.plane === 'alfasi') this.broadcast('royal', { name: p.name, text: 'אלפסי המלך הצטרף לקרב' });
     // friends already in this sky hear that you came
     for (const q of this.planes.values()) if (q !== p && q.pilot?.friends?.includes(p.uid)) this.sendTo(q, 'friendIn', { name: p.name });
   }
@@ -294,7 +305,10 @@ export class ArenaRoom extends Room {
     p.flares--;
     let pulled = 0;
     for (const m of this.missiles) {
-      if (m.target !== p.key || Math.random() >= FLARE.decoy * (1 - (m.ccm || 0))) continue;
+      if (m.target !== p.key) continue;
+      // some seekers need more than one flare: each counts, the last may fool it
+      if ((m.flared = (m.flared || 0) + 1) < (m.shake || 1)) continue;
+      if (Math.random() >= FLARE.decoy * (m.shake > 1 ? 1 : 1 - (m.ccm || 0))) continue;
       // it goes for the flare, falling away behind, and bursts on it
       m.target = ''; m.ignore = p.key; pulled++;
       m.decoy = { x: p.x - p.vel.x * 0.15, y: p.y - 2, z: p.z - p.vel.z * 0.15, vx: p.vel.x * 0.25, vy: -4, vz: p.vel.z * 0.25, t: 0 };
@@ -350,7 +364,7 @@ export class ArenaRoom extends Room {
     // it leaves at the plane's own speed plus its motor's: always faster than whoever it is after
     const speed = st.mSpeed + Math.max(0, p.speed || 0);
     // (a bot's seeker is half as hard to fool: flares and a late break work better on a bot's missile)
-    const m = { id: (++this.seq).toString(36), owner: p.key, target: target?.key || '', t: 0, speed, turn: st.mTurn, dmg: st.mDmg, ccm: (st.mCcm || 0) * (p.bot ? 0.5 : 1), life: (st.mRange * 2.5) / speed, x: p.x + f.x * 4, y: p.y + f.y * 4 - 1, z: p.z + f.z * 4, yaw: p.yaw, pitch: p.pitch };
+    const m = { id: (++this.seq).toString(36), owner: p.key, target: target?.key || '', t: 0, speed, turn: st.mTurn, dmg: st.mDmg, ccm: (st.mCcm || 0) * (p.bot ? 0.5 : 1), shake: st.shake || 1, life: Math.min(16, (st.mRange * 2.5) / speed), x: p.x + f.x * 4, y: p.y + f.y * 4 - 1, z: p.z + f.z * 4, yaw: p.yaw, pitch: p.pitch };
     this.missiles.push(m);
     if (target?.sid) this.sendTo(target, 'incoming', { from: p.key });
     const me = p.sid && this.clients.find((c) => c.sessionId === p.sid);
@@ -448,7 +462,7 @@ export class ArenaRoom extends Room {
    * one it lost.
    */
   dodge(m, p) {
-    if (m.tried) return;
+    if (m.tried || m.shake > 1) return; // only flares shake a seeker like that
     const d = Math.hypot(p.x - m.x, p.y - m.y, p.z - m.z);
     if (d > DODGE.far || d < DODGE.near || this.broke(p) < DODGE.turn) return;
     m.tried = true;

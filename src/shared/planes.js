@@ -68,7 +68,19 @@ export const PLANES = {
     desc: 'ה־F-35I מהדור החמישי. הכל בו טוב יותר, וארבעה טילים.',
     hp: 480, speed: 90, boost: 146, turn: 2.25, climb: 2.0, rate: 13, dmg: 12.3, missiles: 4, flares: 4, reload: 5.5, fill: 0.2,
   },
+  // ---- by gift code only: never in the shop, never flown by a bot ----
+  alfasi: {
+    id: 'alfasi', he: 'אלפסי', role: 'מסוק קרב · מתנה', era: 'מתנה', kind: 'מסוק קרב', level: 1, price: 0, ace: true, gift: true, heli: true,
+    desc: 'מסוק הקרב של המלך: שני מקלעים כבדים בצדדים לטווח 1,000 מטר, טילים לטווח 5,000 מטר — ונגד טיל שלו צריך שני נורים.',
+    hp: 650, speed: 76, boost: 120, turn: 2.6, climb: 2.4, rate: 22, dmg: 7, missiles: 4, flares: 4, reload: 5, fill: 0.2,
+    // its own reach, whatever is fitted: the guns to 1 km, the missiles to 5 km
+    gunRange: 1000, mRange: 5000,
+    // flares a missile of its needs before it is fooled (and a break does not shake it)
+    shake: 2,
+  },
 };
+/** Planes that come only with a gift code: not on the ladder, not in the shop. */
+export const GIFT_PLANES = Object.keys(PLANES).filter((k) => PLANES[k].gift);
 /**
  * Paint: bought once with gold, worn on any plane. Looks only — no paint
  * flies better than another. 'stock' is each plane's own scheme.
@@ -176,11 +188,12 @@ export function statsOf(planeId, tiers = {}, arms = {}) {
     speed: up('engine', 'speed', p.speed), turn: up('engine', 'turn', p.turn), climb: up('engine', 'climb', p.climb),
     boost: up('engine', 'boost', p.boost), fill: up('engine', 'fill', p.fill),
     rate: p.rate * gunK * G.rate, dmg: p.dmg * gunK * G.dmg,
-    gun: G.id, gunRange: Math.round(up('weapons', 'gunRange', G.range)),
+    gun: G.id, gunRange: Math.round(up('weapons', 'gunRange', p.gunRange || G.range)),
     // the weapons tier trues the guns up too: less scatter, more help onto a target
     gunSpread: G.spread * (1 - 0.1 * t('weapons')), gunAssist: G.assist * (1 + 0.06 * t('weapons')),
-    missile: M.id, mRange: Math.round(up('weapons', 'mRange', M.range)), mDmg: M.dmg, mSpeed: M.speed, mTurn: M.turn,
+    missile: M.id, mRange: Math.round(up('weapons', 'mRange', p.mRange || M.range)), mDmg: M.dmg, mSpeed: M.speed, mTurn: M.turn,
     mCcm: Math.min(0.8, M.ccm + 0.03 * t('weapons')),
+    shake: p.shake || 1, heli: !!p.heli,
     missiles: p.missiles + (t('weapons') >= 3 ? 1 : 0),
     reload: up('weapons', 'reload', p.reload),
     flares: p.flares + (t('armor') >= 3 ? 1 : 0),

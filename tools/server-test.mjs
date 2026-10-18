@@ -4,7 +4,7 @@
 import { spawn } from 'node:child_process';
 import { Client } from 'colyseus.js';
 import { forward } from '../src/shared/flight.js';
-import { ARENA, HEAL, HEALS } from '../src/shared/arena.js';
+import { ARENA, BUILDINGS, HEAL, HEALS } from '../src/shared/arena.js';
 
 const PORT = 2700 + Math.floor(Math.random() * 200);
 const BASE = `http://127.0.0.1:${PORT}`;
@@ -34,7 +34,7 @@ async function pilot(token, room = 'arena') {
   const c = new Client(`ws://127.0.0.1:${PORT}`);
   const r = await c.joinOrCreate(room, { token });
   const s = { room: r, events: [], snap: null };
-  for (const type of ['welcome', 'spawn', 'fix', 'hit', 'hurt', 'down', 'reward', 'roster', 'fired', 'incoming', 'boom', 'pong', 'ram', 'flare', 'flared', 'score', 'bt', 'bossStart', 'bossDown', 'bossGone', 'friendIn', 'healed', 'pad', 'dodged', 'missed']) {
+  for (const type of ['welcome', 'spawn', 'fix', 'hit', 'hurt', 'down', 'reward', 'roster', 'fired', 'incoming', 'boom', 'pong', 'ram', 'flare', 'flared', 'score', 'bt', 'bossStart', 'bossDown', 'bossGone', 'friendIn', 'healed', 'pad', 'dodged', 'missed', 'royal']) {
     r.onMessage(type, (m) => { s.events.push({ type, m }); type === 'spawn' && (s.pose = { ...m }); type === 'welcome' && (s.key = m.key); });
   }
   r.onMessage('s', (m) => (s.snap = m));
@@ -163,8 +163,33 @@ try {
     send(b);
     await wait(50);
   }
-  const crash = got(b, 'down').at(-1)?.m;
+  const crash = got(b, 'down').at(-1)?.m, spawnsAtCrash = got(b, 'spawn').length;
   ok('flying into the sea is a crash', crash?.v === b.key && crash?.how === 'crash', { crash, downs: got(b, 'down').map((e) => e.m), hurt: got(b, 'hurt').slice(-3).map((e) => e.m), spawns: got(b, 'spawn').map((e) => e.m) });
+
+  console.log('\na roof');
+  {
+    // back in the air, then flown (at a speed the room believes) onto the
+    // roof of the tallest tower, stopping a metre above it, as a client does
+    await until(() => got(b, 'spawn').length > spawnsAtCrash, 9000);
+    await wait(500);
+    const t = BUILDINGS.reduce((a, o) => (o.h > a.h ? o : a)), top = t.base + t.h;
+    const downs = got(b, 'down').length;
+    b.room.send('crash');
+    await wait(300);
+    ok('a plane in open air that says it crashed does not', got(b, 'down').length === downs);
+    for (let i = 0; i < 600; i++) {
+      const dx = t.x - b.pose.x, dy = top + 1.2 - b.pose.y, dz = t.z - b.pose.z, d = Math.hypot(dx, dy, dz);
+      if (d < 0.5) break;
+      const k = Math.min(1, 3.5 / d);
+      b.pose.x += dx * k; b.pose.y += dy * k; b.pose.z += dz * k;
+      b.pose.yaw = Math.atan2(-dx, -dz);
+      send(b);
+      await wait(50);
+    }
+    for (let i = 0; i < 10 && got(b, 'down').length === downs; i++) { send(b); b.room.send('crash'); await wait(100); }
+    const roof = got(b, 'down').at(-1)?.m;
+    ok('stopped on a roof: a crash, not stuck there', got(b, 'down').length > downs && roof?.how === 'crash' && roof?.v === b.key, { roof, at: [b.pose.x, b.pose.y, b.pose.z], top });
+  }
 
   console.log('\nsaving');
   ok('guests are not on the board', ((await api('/api/leaderboard')).rows || []).length === 0);
@@ -203,11 +228,30 @@ try {
     ok('sets gold', g1.pilot?.gold === 50000 && (await api('/api/me', null, back.token)).pilot.gold === 50000, g1);
     ok('adds gold, never below nothing', (await api('/api/admin/edit', { code: 'צייד#1', addGold: 2500 }, adm.token)).pilot?.gold === 52500 && (await api('/api/admin/edit', { code: 'צייד#1', addGold: -1e9 }, adm.token)).pilot?.gold === 0);
     ok('gives a plane, whatever the level', (await api('/api/admin/edit', { code: 'צייד#1', plane: 'phantom' }, adm.token)).pilot?.planes.includes('phantom') && (await api('/api/pilot/plane', { plane: 'phantom' }, back.token)).pilot?.plane === 'phantom');
-    ok('or all of them', (await api('/api/admin/edit', { code: 'צייד#1', plane: 'all' }, adm.token)).pilot?.planes.length === 10);
+    ok('or all of them, the gift helicopter too', (await api('/api/admin/edit', { code: 'צייד#1', plane: 'all' }, adm.token)).pilot?.planes.length === 11);
     ok('sets the level', (await api('/api/admin/edit', { code: 'צייד#1', level: 12 }, adm.token)).pilot?.level === 12);
     ok('nonsense is refused', (await api('/api/admin/edit', { code: 'צייד#1', plane: '__proto__' }, adm.token)).error === 'no_such_plane' && (await api('/api/admin/edit', { code: 'צייד#1', level: 99 }, adm.token)).error === 'bad_level' && (await api('/api/admin/edit', { code: 'nobody#9', gold: 1 }, adm.token)).status === 404);
     await api('/api/admin/edit', { code: 'צייד#1', level: 1, plane: 'sparrow' }, adm.token);
     await api('/api/pilot/plane', { plane: 'sparrow' }, back.token);
+  }
+
+  console.log('\na gift code');
+  {
+    const k = await api('/api/guest', {});
+    await api('/api/pilot/name', { name: 'מלך' }, k.token);
+    const r = await api('/api/pilot/gift', { code: 'alfasi' }, k.token);
+    ok('ALFASI gives the helicopter, and it is flown', r.pilot?.planes.includes('alfasi') && r.pilot.plane === 'alfasi' && r.gift?.plane === 'alfasi', r);
+    ok('once', (await api('/api/pilot/gift', { code: 'ALFASI' }, k.token)).error === 'gift_used');
+    ok('a wrong code is refused', (await api('/api/pilot/gift', { code: 'XYZ' }, k.token)).error === 'no_such_gift');
+    ok('it cannot be bought', (await api('/api/pilot/buy-plane', { plane: 'alfasi' }, back.token)).error === 'gift_only');
+    // into the sky with it: everyone there is told the king has come
+    const watcher = await pilot(back.token, 'arena_gift_test');
+    const king = await pilot(k.token, 'arena_gift_test');
+    await until(() => got(watcher, 'royal').length && got(king, 'welcome').length, 4000);
+    const said = got(watcher, 'royal')[0]?.m, st = got(king, 'welcome')[0]?.m.stats;
+    ok('the king joins: the whole sky is told', said?.text === 'אלפסי המלך הצטרף לקרב', said);
+    ok('and his guns reach a kilometre', st?.gunRange === 1000 && st?.mRange === 5000, st);
+    await king.room.leave(); await watcher.room.leave();
   }
 
   console.log('\npaint');
