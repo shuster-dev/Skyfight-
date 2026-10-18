@@ -279,6 +279,45 @@ try {
     await ace.room.leave(); await watcher.room.leave();
   }
 
+  console.log('\na phone\'s network');
+  {
+    const n1 = await pilot(back.token, 'arena_duel');
+    await until(() => got(n1, 'spawn').length, 4000);
+    await wait(300);
+    // flying at full burner, its poses held back and let go in a bunch: the
+    // time between them was flown, so none is put back
+    const st = got(n1, 'welcome')[0].m.stats, f = forward(n1.pose.yaw, 0);
+    const fixes = got(n1, 'fix').length;
+    for (let burst = 0; burst < 6; burst++) {
+      await wait(300);
+      for (let i = 0; i < 6; i++) {
+        n1.pose.x += f.x * st.boost * 0.05; n1.pose.z += f.z * st.boost * 0.05;
+        n1.room.send('pose', [n1.pose.x, n1.pose.y, n1.pose.z, n1.pose.yaw, 0, 0, st.boost, 0]);
+      }
+    }
+    await wait(300);
+    ok('poses that come in bunches at full burner: none put back', got(n1, 'fix').length === fixes, got(n1, 'fix').length - fixes);
+    // a jump no plane could fly still is
+    n1.pose.x += 2000;
+    send(n1);
+    ok('a jump no plane could fly is still put back', await until(() => got(n1, 'fix').length > fixes, 2000));
+    // the line drops (no goodbye): the plane waits, and the pilot gets back into it
+    const key = n1.key, token = n1.room.reconnectionToken;
+    n1.room.connection.close();
+    await wait(800);
+    const w = await api('/api/guest', {});
+    await api('/api/pilot/name', { name: 'צופה' }, w.token);
+    const watcher = await pilot(w.token, 'arena_duel');
+    await until(() => watcher.snap?.p?.length, 3000);
+    ok('a dropped pilot\'s plane waits in the sky', watcher.snap.p.some((r) => r[0] === key));
+    const again = await new Client(`ws://127.0.0.1:${PORT}`).reconnect(token);
+    let snap = null;
+    again.onMessage('s', (m) => (snap = m));
+    ['fix', 'spawn', 'hit', 'hurt'].forEach((t) => again.onMessage(t, () => {}));
+    ok('back in, the same plane', await until(() => snap?.p?.some((r) => r[0] === key), 3000));
+    await again.leave(); await watcher.room.leave();
+  }
+
   console.log('\npaint');
   ok('a paint costs gold', (await api('/api/pilot/buy-paint', { paint: 'gold' }, back.token)).error === 'gold');
   ok('the stock paint is worn', (await api('/api/pilot/paint', { paint: 'stock' }, back.token)).pilot?.paint === 'stock');
