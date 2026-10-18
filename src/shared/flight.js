@@ -18,6 +18,12 @@ export function forward(yaw, pitch, out = { x: 0, y: 0, z: 0 }) {
 
 export const PITCH_MAX = 1.25;
 /** Afterburner tank: drains while lit, refills while not. */
+/**
+ * The air brake: held, the plane bleeds down to `slow` of its cruise and its
+ * nose comes round `turn` times as fast — a tight turn, a U-turn onto a plane
+ * chasing you, a way to let one overshoot.
+ */
+export const BRAKE = { slow: 0.55, turn: 1.35, bleed: 2.0 };
 /** The burner: run dry (`min`), it lights again only once the tank is back to `relight`. */
 export const BOOST = { drain: 0.32, fill: 0.14, min: 0.08, relight: 0.25 };
 
@@ -131,12 +137,15 @@ export function newBodyQ(at, stats) {
  */
 export function flyQ(b, input, stats, dt) {
   const turn = clamp(+input.turn || 0), climb = clamp(+input.climb || 0);
+  // the brake (not with the burner lit): slower, and the nose quicker
+  b.braking = !!input.brake && !input.boost;
+  const agile = b.braking ? BRAKE.turn : 1;
   let edge = '';
   let q = b.q;
   const right = Q.rot(q, 1, 0, 0), up = Q.rot(q, 0, 1, 0);
   // the stick: about the wings to pitch, about the plane's up to turn
-  if (climb) q = Q.mul(Q.axis(right.x, right.y, right.z, climb * stats.climb * dt), q);
-  if (turn) q = Q.mul(Q.axis(up.x, up.y, up.z, -turn * stats.turn * dt), q);
+  if (climb) q = Q.mul(Q.axis(right.x, right.y, right.z, climb * stats.climb * agile * dt), q);
+  if (turn) q = Q.mul(Q.axis(up.x, up.y, up.z, -turn * stats.turn * agile * dt), q);
   let f = Q.rot(q, 0, 0, -1);
   // hands off: roll back upright, then bring the nose to the horizon
   if (!climb && !turn && Math.abs(f.y) < 0.97) {
@@ -168,8 +177,8 @@ export function flyQ(b, input, stats, dt) {
   if (b.fuel <= BOOST.min) b.dry = true; else if (b.fuel >= BOOST.relight) b.dry = false;
   b.boosting = !!input.boost && !b.dry;
   b.fuel = clamp(b.fuel + (b.boosting ? -BOOST.drain : stats.fill || BOOST.fill) * dt, 0, 1);
-  const want = (b.boosting ? stats.boost : stats.speed) - f.y * stats.speed * 0.25;
-  b.speed += (want - b.speed) * Math.min(1, dt * (b.boosting ? 2.2 : 1.2));
+  const want = (b.boosting ? stats.boost : b.braking ? stats.speed * BRAKE.slow : stats.speed) - f.y * stats.speed * 0.25;
+  b.speed += (want - b.speed) * Math.min(1, dt * (b.boosting ? 2.2 : b.braking ? BRAKE.bleed : 1.2));
   b.x += f.x * b.speed * dt;
   b.y += f.y * b.speed * dt;
   b.z += f.z * b.speed * dt;

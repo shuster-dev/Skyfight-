@@ -2,7 +2,7 @@
 // and the hangar's prices. `npm run qa`
 import { GUNS, MISSILES, GUN_ORDER, MISSILE_ORDER, PLANES, PLANE_ORDER, UPGRADES, TIER_COST, TIER_LEVEL, statsOf, xpAt, xpStep, levelOf, levelProgress, killReward, cleanCallsign, nextTier, MAX_LEVEL } from '../src/shared/planes.js';
 import { ARENA, BRIDGE, BUILDINGS, HEAL, HEALS, groundAt, healAt, hitsSolid, inBay, spawnPoint, surfaceAt, terrainAt, underBridge } from '../src/shared/arena.js';
-import { fly, flyQ, forward, newBody, newBodyQ, plausibleMove, BOOST, Q } from '../src/shared/flight.js';
+import { fly, flyQ, forward, newBody, newBodyQ, plausibleMove, BOOST, BRAKE, Q } from '../src/shared/flight.js';
 import { GUN, MISSILE, RAM, aimDir, blastDamage, closestOn, DODGE, dodgeChance, offNose, pickTarget, ramDamage, segmentHit, steerMissile } from '../src/shared/combat.js';
 import { buyArm, equipArm, newPilot, normalize, buyPlane, buyUpgrade, choosePlane, payKill, view } from '../src/server/pilot.js';
 
@@ -22,16 +22,16 @@ ok('prices rise with level', PLANE_ORDER.every((k, i) => !i || PLANES[k].price >
   const base = statsOf('sparrow'), up = statsOf('sparrow', ALL5), best = statsOf('phantom'), third = statsOf('bulldog');
   ok('no upgrades: the plane as it is', base.hp === 100 && base.speed === 56 && base.missiles === 1);
   ok('the starter is heavy and slow to fire', base.turn < best.turn && base.speed < best.speed && base.rate * base.dmg < Math.min(...PLANE_ORDER.slice(1).map((k) => statsOf(k).rate * statsOf(k).dmg)));
-  ok('the starter\'s engine at 5 flies like the best plane', near(up.speed, best.speed) && near(up.turn, best.turn) && near(up.climb, best.climb));
-  ok('its turbo at 5 too', near(up.boost, best.boost) && near(up.fill, best.fill));
-  ok('its guns at 5 match the third best, not the best', near(up.rate * up.dmg, third.rate * third.dmg) && up.rate * up.dmg < best.rate * best.dmg);
-  ok('its armour at 5 matches the third best', up.hp === third.hp);
-  ok('each tier is a fifth of the way', near(statsOf('sparrow', { engine: 2 }).speed, base.speed + (best.speed - base.speed) * 0.4));
+  ok('movement 5: 40% faster, a third quicker to turn — about the best plane\'s pace', near(up.speed, base.speed * 1.4) && near(up.turn, base.turn * 1.35) && up.speed >= best.speed && up.turn > best.turn * 0.9);
+  ok('turbo 5: half again the burner, refilled much faster', near(up.boost, base.boost * 1.5) && near(up.fill, base.fill * 1.75) && up.boost >= best.boost);
+  ok('guns 5: 60% more damage a second, 40% more reach — near the third best, short of the best', near(up.rate * up.dmg, base.rate * base.dmg * 1.6) && up.gunRange === Math.round(base.gunRange * 1.4) && Math.abs(up.rate * up.dmg - third.rate * third.dmg) < third.rate * third.dmg * 0.1 && up.rate * up.dmg < best.rate * best.dmg);
+  ok('armour 5: three quarters more health', up.hp === Math.round(base.hp * 1.75));
+  ok('each tier a jump you feel (8% speed a tier), not a sliver', near(statsOf('sparrow', { engine: 2 }).speed, base.speed * 1.16) && statsOf('sparrow', { missiles: 1 }).reload < base.reload * 0.9);
   ok('the best plane still gains from an upgrade', statsOf('phantom', ALL5).speed > best.speed && statsOf('phantom', ALL5).rate * statsOf('phantom', ALL5).dmg > best.rate * best.dmg);
   ok('flares 3+: one more flare, and faster reload', up.flares === base.flares + 1 && up.flareReload < base.flareReload);
   ok('missiles 3+: one more missile, and faster reload', up.missiles === 2 && up.reload < base.reload);
   ok('nonsense tiers are clamped', statsOf('sparrow', { engine: 99 }).speed === up.speed && statsOf('sparrow', { engine: -4 }).speed === 56);
-  ok('the free gun reaches 300 m, the free missile 350 m', statsOf('sparrow').gunRange === 300 && statsOf('sparrow').mRange === 350);
+  ok('the free gun fights from 250 m, the free missile locks from 300 m', statsOf('sparrow').gunRange === 250 && statsOf('sparrow').mRange === 300);
   ok('a better gun reaches further', GUN_ORDER.every((k, i) => !i || GUNS[k].range > GUNS[GUN_ORDER[i - 1]].range));
   ok('a better missile reaches further and hits harder', MISSILE_ORDER.every((k, i) => !i || (MISSILES[k].range > MISSILES[MISSILE_ORDER[i - 1]].range && MISSILES[k].dmg > MISSILES[MISSILE_ORDER[i - 1]].dmg)));
   ok('a gun changes the plane\'s fire', near(statsOf('sparrow', {}, { gun: 'g4' }).rate, statsOf('sparrow').rate * GUNS.g4.rate) && near(statsOf('sparrow', {}, { gun: 'g5' }).dmg, statsOf('sparrow').dmg * GUNS.g5.dmg));
@@ -84,6 +84,25 @@ console.log('\nthe arena');
   ok('spawns are in the air, well clear of anything', pts.every((s) => s.y > surfaceAt(s.x, s.z) + 100), pts.map((s) => Math.round(s.y - surfaceAt(s.x, s.z))));
   ok('spawns face the middle', pts.every((s) => { const f = forward(s.yaw, 0); return f.x * -s.x + f.z * -s.z > 0.99 * Math.hypot(s.x, s.z); }));
   ok('the ground is the same every time', terrainAt(100, 33) === terrainAt(100, 33));
+}
+
+console.log('\nthe air brake');
+{
+  const st = statsOf('sparrow');
+  // a full-stick turn for four seconds, with and without the brake: how far
+  // the plane strays from where it began the turn is how wide it turned
+  const turnFor = (brake) => {
+    const b = newBodyQ({ x: 0, y: 300, z: 0, yaw: 0 }, st);
+    let far = 0;
+    for (let i = 0; i < 120; i++) { flyQ(b, { turn: 1, brake }, st, 1 / 30); far = Math.max(far, Math.hypot(b.x, b.z)); }
+    return { b, far };
+  };
+  const plain = turnFor(false), braked = turnFor(true);
+  ok('held, the brake slows the plane well down', braked.b.speed < st.speed * (BRAKE.slow + 0.12) && plain.b.speed > st.speed * 0.9, { braked: braked.b.speed, plain: plain.b.speed });
+  ok('and the turn is much tighter', braked.far < plain.far * 0.75, { braked: braked.far, plain: plain.far });
+  const lit = newBodyQ({ x: 0, y: 300, z: 0 }, st);
+  for (let i = 0; i < 30; i++) flyQ(lit, { boost: true, brake: true }, st, 1 / 30);
+  ok('with the burner lit, no brake', !lit.braking && lit.speed > st.speed);
 }
 
 console.log('\nrepair pads');
@@ -192,7 +211,7 @@ ok('a break at the edge of the window rarely does', near(dodgeChance(DODGE.far),
 ok('too early, or too late, it does not at all', dodgeChance(DODGE.far + 1) === 0 && dodgeChance(DODGE.near - 1) === 0);
 ok('the later, the better', dodgeChance(60) > dodgeChance(120));
 ok('a graze side by side takes a bite', ramDamage(5) === RAM.min);
-ok('a head-on at speed brings down even the heaviest plane', ramDamage(60 + 70) >= 100 && ramDamage(120 + 120) >= statsOf('bulldog', { armor: 5 }).hp, ramDamage(240));
+ok('a head-on at speed brings down even the heaviest plane', ramDamage(60 + 70) >= 100 && ramDamage(2 * statsOf('sparrow', { turbo: 5 }).boost) >= statsOf('bulldog', { armor: 5 }).hp, ramDamage(240));
 ok('more speed, more damage', ramDamage(80) > ramDamage(40));
 
 console.log('\nthe hangar');
