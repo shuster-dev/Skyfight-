@@ -19,7 +19,7 @@ export const BOSS = {
   speed: 38, alt: 300,
   cx: BRIDGE.x - 80, cz: BRIDGE.cz, R: 560,
   r: 13, len: 16,           // three spheres along the fuselage, and the wings
-  turret: { range: 420, every: 0.32, dmg: 3, spread: 0.035 },
+  turret: { range: 420, every: 0.32, dmg: 7, spread: 0.035 },
   pay: { gold: 1600, xp: 900, topGold: 1000, topXp: 350, minShare: 0.03 },
 };
 const q = (v, k = 10) => Math.round(v * k);

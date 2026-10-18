@@ -158,6 +158,13 @@ export const sound = {
     tone(t, close ? 1500 : 1100, 0.045, 0.13, 'square');
     if (close) tone(t + 0.055, 1500, 0.045, 0.13, 'square');
   },
+  /** Someone on my tail: a low, short two-note warning. */
+  tail() {
+    if (!live()) return;
+    const t = now();
+    tone(t, 420, 0.09, 0.09, 'square');
+    tone(t + 0.12, 330, 0.12, 0.09, 'square');
+  },
   /** A missile tearing past, close: a rush that drops in pitch as it goes. */
   whoosh() {
     if (!live()) return;

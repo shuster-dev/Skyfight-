@@ -63,7 +63,7 @@ try {
   console.log('\nthe sky with bots');
   {
     const solo = await pilot(g.token);
-    ok('welcome: a key and the plane\'s numbers', await until(() => !!solo.key && got(solo, 'welcome')[0]?.m.stats?.hp === 100));
+    ok('welcome: a key and the plane\'s numbers', await until(() => !!solo.key && got(solo, 'welcome')[0]?.m.stats?.hp === 250));
     ok('in the air at a spawn point', await until(() => solo.pose && solo.pose.y > 100));
     ok('bots fill the sky to ten planes', await until(() => solo.snap?.p?.length === 10, 4000), solo.snap?.p?.length);
     ok('the roster marks them as bots: nine, and me', await until(() => got(solo, 'roster').at(-1)?.m.filter((r) => r.bot).length === 9));
@@ -120,7 +120,7 @@ try {
   await wait(2500);
   const fire = setInterval(() => send(a, 1), 50);
   ok('rounds hit: a sees hits, b feels them', await until(() => got(a, 'hit').length > 3 && got(b, 'hurt').length > 3, 6000), { hits: got(a, 'hit').length });
-  ok('b goes down to a\'s guns', await until(() => got(b, 'down').some((e) => e.m.v === b.key && e.m.k === a.key && e.m.how === 'guns'), 8000));
+  ok('b goes down to a\'s guns', await until(() => got(b, 'down').some((e) => e.m.v === b.key && e.m.k === a.key && e.m.how === 'guns'), 25000));
   clearInterval(fire);
   send(a, 0);
   const hitsAtStop = got(a, 'hit').length;
@@ -237,7 +237,7 @@ try {
   console.log('\nrepair pads');
   const rp = await pilot(back.token, 'arena_pad_test');
   await until(() => rp.pose, 3000);
-  ok('it starts hurt (the test room)', got(rp, 'spawn')[0]?.m.hp < 100);
+  ok('it starts hurt (the test room)', got(rp, 'spawn')[0]?.m.hp < 250);
   ok('the pads are told on arrival, all ready', (got(rp, 'welcome')[0]?.m.pads || []).length === HEALS.length && got(rp, 'welcome')[0].m.pads.every((t) => t === 0));
   // over the first pad, high, then straight down through it
   const pad = HEALS[0];
@@ -256,7 +256,7 @@ try {
   await go(pad.x, pad.y + HEAL.h * 0.5, pad.z);
   await until(() => got(rp, 'healed').length > 0, 1500);
   const healed = got(rp, 'healed')[0]?.m;
-  ok('flying low through a pad patches the plane up to full', healed && healed.gain > 0 && healed.hp >= 100, { healed, fixes: got(rp, 'fix').length });
+  ok('flying low through a pad patches the plane up to full', healed && healed.gain > 0 && healed.hp >= 250, { healed, fixes: got(rp, 'fix').length });
   ok('and the pad is spent for a while, for everyone', got(rp, 'pad').some((e) => e.m.i === 0 && e.m.s === HEAL.every));
   await rp.room.leave();
 
