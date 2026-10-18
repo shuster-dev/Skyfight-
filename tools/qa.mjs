@@ -4,7 +4,7 @@ import { GUNS, MISSILES, GUN_ORDER, MISSILE_ORDER, PLANES, PLANE_ORDER, UPGRADES
 import { ARENA, BRIDGE, BUILDINGS, HEAL, HEALS, groundAt, healAt, hitsSolid, inBay, spawnPoint, surfaceAt, terrainAt, underBridge } from '../src/shared/arena.js';
 import { fly, flyQ, forward, newBody, newBodyQ, plausibleMove, BOOST, BRAKE, Q } from '../src/shared/flight.js';
 import { GUN, MISSILE, RAM, aimDir, blastDamage, closestOn, missileHurt, DODGE, dodgeChance, gunTarget, leadPoint, offNose, pickTarget, ramDamage, segmentHit, steerMissile } from '../src/shared/combat.js';
-import { buyArm, equipArm, newPilot, normalize, buyPlane, buyUpgrade, choosePlane, payKill, view } from '../src/server/pilot.js';
+import { buyArm, equipArm, newPilot, normalize, buyPlane, buyUpgrade, choosePlane, payKill, redeemGift, view } from '../src/server/pilot.js';
 
 let pass = 0, fail = 0;
 const ok = (name, cond, info) => {
@@ -50,6 +50,21 @@ ok('three upgrades', Object.keys(UPGRADES).join() === 'engine,weapons,armor');
   ok('the missile carried sets its flight and punch', statsOf('phantom', {}, { missile: 'm5' }).mDmg === MISSILES.m5.dmg && statsOf('phantom', {}, { missile: 'm5' }).mSpeed === MISSILES.m5.speed);
   ok('the market opens by level and costs more as it goes', [GUNS, MISSILES].every((shelf) => Object.values(shelf).every((w, i, a) => !i || (w.level > a[i - 1].level && w.price > a[i - 1].price))));
   ok('an unknown plane flies as the first', statsOf('nope').plane === 'sparrow');
+}
+
+console.log('\nthe gift helicopter');
+{
+  const h = statsOf('alfasi'), hu = statsOf('alfasi', { weapons: 5 });
+  ok('not on the ladder, not in the shop', !PLANE_ORDER.includes('alfasi') && PLANES.alfasi.gift && buyPlane(normalize({ id: 'q', xp: 1e9, gold: 1e9 }), 'alfasi').error === 'gift_only');
+  ok('its guns reach a kilometre, its missiles five', h.gunRange === 1000 && h.mRange === 5000 && hu.gunRange > 1000, [h.gunRange, h.mRange]);
+  ok('two heavy guns that hit like the best plane\'s', h.rate * h.dmg >= statsOf('phantom').rate * statsOf('phantom').dmg * 0.9);
+  ok('a missile of its needs two flares', h.shake === 2 && statsOf('phantom').shake === 1);
+  const g = newPilot('gift');
+  const r = redeemGift(g, '  alfasi ');
+  ok('the code ALFASI gives it, in any case, and puts it on the table', r.ok && g.planes.includes('alfasi') && g.plane === 'alfasi' && g.loadout.alfasi && g.upgrades.alfasi, r);
+  ok('once only', redeemGift(g, 'ALFASI').error === 'gift_used');
+  ok('a made-up code gives nothing', redeemGift(g, 'NOPE').error === 'no_such_gift' && redeemGift(g, '__proto__').error === 'no_such_gift');
+  ok('it stays after the record is read back', normalize(JSON.parse(JSON.stringify(g))).planes.includes('alfasi') && normalize(JSON.parse(JSON.stringify(g))).gifts.includes('ALFASI'));
 }
 
 console.log('\nlevels');

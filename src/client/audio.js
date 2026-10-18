@@ -57,7 +57,7 @@ export const sound = {
 
   /** Which engine to hear: the piston fighter's, or a jet's. */
   setPlane(kind) {
-    const want = kind === 'sparrow' || kind === 'gull' ? 'prop' : 'jet';
+    const want = kind === 'sparrow' || kind === 'gull' || kind === 'alfasi' ? 'prop' : 'jet';
     if (want === plane) return;
     plane = want;
     if (engine) { engine.stop(); engine = null; }

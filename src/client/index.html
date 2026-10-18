@@ -108,20 +108,34 @@
   .h-plane .pname.ace { background: linear-gradient(180deg, #fff 30%, #f1d27a); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 0 14px rgba(241,210,122,0.35)); text-shadow: none; }
   .h-plane .role { font-size: 15px; color: rgba(255,255,255,0.7); }
   .h-plane .row { display: flex; align-items: center; gap: 12px; margin-top: 14px; justify-content: flex-start; }
-  .h-dots { display: flex; gap: 4px; }
-  .h-dots i { width: 13px; height: 3px; background: rgba(255,255,255,0.2); }
+  .h-dots { display: flex; gap: 3px; min-width: 0; flex-shrink: 1; }
+  .h-dots i { width: 10px; height: 3px; flex-shrink: 1; min-width: 4px; background: rgba(255,255,255,0.2); }
   .h-dots i.on { background: #fff; }
   .h-dots i.own { background: rgba(47,211,189,0.6); }
   .h-dots i.on.own { background: #fff; }
   .h-dots i { border-radius: 2px; }
   .h-dots i.ace { background: rgba(241,210,122,0.45); }
   .h-dots i.ace.own { background: #f1d27a; }
-  .h-dots i.on, .h-dots i.ace.on { background: #fff; width: 22px; box-shadow: 0 0 8px rgba(255,255,255,0.6); }
+  .h-dots i.on, .h-dots i.ace.on, .h-dots i.gift.on { background: #fff; width: 18px; flex-shrink: 0; box-shadow: 0 0 8px rgba(255,255,255,0.6); }
   .chev { width: 44px; height: 44px; display: grid; place-items: center; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.16); border-radius: 50%; }
   .chev svg { width: 18px; height: 18px; stroke: #fff; fill: none; stroke-width: 2.2; }
   .h-act { white-space: nowrap; padding: 11px 22px; border-radius: 999px; font-size: 15px; font-weight: 800; letter-spacing: 0.5px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.25); }
   .h-act.small { padding: 8px 14px; font-size: 13px; }
   .paints { display: flex; gap: 8px; }
+  .gift-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 5px 5px 5px 12px; max-width: 320px; align-self: flex-end; border-radius: 999px; background: rgba(241,210,122,0.08); border: 1px solid rgba(241,210,122,0.4); }
+  .gift-row svg { width: 20px; height: 20px; flex: none; fill: none; stroke: #f1d27a; stroke-width: 1.7; stroke-linejoin: round; }
+  .gift-row input { flex: 1; min-width: 0; padding: 6px 2px; font: inherit; font-size: 14px; font-weight: 700; letter-spacing: 2px; color: #fff; background: none; border: 0; outline: none; text-transform: uppercase; }
+  .gift-row input::placeholder { letter-spacing: 0.5px; font-weight: 500; color: rgba(255,255,255,0.45); text-transform: none; }
+  .gift-row button { padding: 7px 16px; border-radius: 999px; font-weight: 800; font-size: 13px; color: #1d1405; background: linear-gradient(180deg, #ffe08a, #e8b94a); }
+  .h-dots i.gift { background: rgba(241,210,122,0.25); height: 5px; }
+  .h-dots i.gift.own { background: linear-gradient(90deg, #ffe08a, #ff9a3d); }
+  /* the king takes off: a banner for everyone in the sky */
+  #royal { position: fixed; left: 50%; top: 22%; transform: translateX(-50%); z-index: 30; pointer-events: none; text-align: center; padding: 14px 30px; border-radius: 16px;
+    background: linear-gradient(180deg, rgba(40,30,6,0.88), rgba(20,14,2,0.82)); border: 2px solid #f1d27a; box-shadow: 0 0 40px rgba(241,210,122,0.55), inset 0 0 20px rgba(241,210,122,0.2);
+    animation: royal 4.5s ease forwards; white-space: nowrap; }
+  #royal b { display: block; font-size: clamp(22px, 6vw, 40px); font-weight: 900; letter-spacing: 1px; background: linear-gradient(180deg, #fff6d0, #f1c040 60%, #d08a1a); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  #royal small { display: block; margin-top: 4px; font-size: 13px; color: #f1d27a; letter-spacing: 2px; }
+  @keyframes royal { 0% { opacity: 0; transform: translateX(-50%) scale(0.6); } 10% { opacity: 1; transform: translateX(-50%) scale(1.08); } 16% { transform: translateX(-50%) scale(1); } 85% { opacity: 1; } 100% { opacity: 0; transform: translateX(-50%) translateY(-20px); } }
   .sw { width: 22px; height: 22px; border-radius: 50%; background: var(--c); border: 2px solid rgba(255,255,255,0.15); padding: 0; }
   .sw.own { border-color: rgba(255,255,255,0.45); }
   .sw.on { outline: 2px solid #fff; outline-offset: 2px; }
@@ -494,6 +508,7 @@
       <button class="h-act" id="hp-act" type="button"></button>
     </div>
     <div class="row paints-row"><div class="paints" id="hp-paints"></div><button class="h-act small" id="hp-paint-act" type="button"></button></div>
+    <form class="gift-row" id="gift-form" autocomplete="off"><svg viewBox="0 0 24 24"><path d="M4 11h16v9H4zM3 7h18v4H3zM12 7v13M12 7c-1.5-3-5-3.5-5-1.2C7 7 9 7 12 7zm0 0c1.5-3 5-3.5 5-1.2C17 7 15 7 12 7z"/></svg><input id="gift-code" placeholder="קוד מתנה" maxlength="24" autocapitalize="characters" spellcheck="false" dir="ltr"><button type="submit">קבל</button></form>
   </div>
   <div class="h-panel ups hidden" id="tab-ups"></div>
   <div class="h-plane market hidden" id="tab-market">
