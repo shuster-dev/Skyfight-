@@ -174,6 +174,16 @@ const SCHEMES = {
   alfasi: { top: '#3f4a2c', blot: ['#343d24', '#4a5634'], under: '#4b5636', metal: 0.25, rough: 0.55, band: '#e8c04a', low: false, num: '1', ace: '#f2c230' },
   // olive drab over neutral grey, yellow nose band — late war
   sparrow: { top: '#4d5730', blot: ['#3d4526', '#5b6438'], under: '#9fa197', metal: 0.15, rough: 0.6, nose: '#e2b52c', low: false, num: '17' },
+  // the Mustang: bare metal, an olive glare panel, a blue-and-white rudder band
+  mustang: { top: '#bfc4ca', blot: [], under: '#b4b9bf', metal: 0.62, rough: 0.3, nose: '#2f5fb3', band: '#2f5fb3', glare: true, low: false, num: '41' },
+  // the Ouragan: silver, with the black-and-yellow Suez stripes
+  ouragan: { top: '#b7bcc2', blot: [], under: '#adb2b8', metal: 0.55, rough: 0.34, band: '#e5bd2b', low: false, num: '05' },
+  // the Mystère: desert camouflage of 1967, light blue under
+  mystere: { top: '#b39566', blot: ['#6c6b45', '#7f5e3c'], under: '#9fb5c6', metal: 0.18, rough: 0.55, low: false, num: '61' },
+  // the Super Mystère: three-tone desert, a red nose
+  smystere: { top: '#b49c6c', blot: ['#5e6a49', '#8a6b47'], under: '#a2b6c6', metal: 0.18, rough: 0.55, nose: '#c4262e', low: false, num: '17' },
+  // the Nesher: sand, brown and green, the yellow-and-black triangles
+  nesher: { top: '#c3a26c', blot: ['#7d6a46', '#5f6b4a'], under: '#a8bac7', metal: 0.2, rough: 0.5, band: '#f2c230', low: false, num: '510' },
   // bare polished aluminium, black glare panel, a yellow band
   hornet: { top: '#c4c8cd', blot: [], under: '#b9bdc2', metal: 0.6, rough: 0.32, band: '#e5bd2b', glare: true, low: false, num: '43' },
   // two greys in splinters, low-vis markings
@@ -628,6 +638,138 @@ const BUILD = {
     missiles.forEach((m) => g.add(m));
     const guns = [-1.6, -1.9, -2.2, 1.6, 1.9, 2.2].map((x) => new Vector3(x, -0.4, -1.3));
     g.userData = { props: [prop], flames: [], guns, tips: [new Vector3(-5.6, 0, 0), new Vector3(5.6, 0, 0)], missiles, len: 9.6 };
+    return g;
+  },
+  // the P-51 Mustang: a slim nose, the big scoop under the belly well aft, a bubble canopy, square-tipped wings
+  mustang() {
+    const M = mats('mustang'), g = new Group();
+    g.add(new Mesh(loft(smooth([
+      { z: -4.9, w: 0.9, h: 1.0, y: 0.05 }, { z: -4.5, w: 1.1, h: 1.3, y: 0.05 }, { z: -2.6, w: 1.1, h: 1.45 }, { z: -0.6, w: 1.05, h: 1.6, y: 0.05 },
+      { z: 1.2, w: 0.85, h: 1.45, y: 0.05 }, { z: 3.0, w: 0.5, h: 1.0, y: 0.15 }, { z: 4.8, w: 0.12, h: 0.4, y: 0.25 },
+    ], 3)), M.body));
+    const scoop = new Mesh(loft([{ z: -0.2, w: 0.55, h: 0.12, y: -0.78 }, { z: 0.3, w: 0.7, h: 0.55, y: -1.0 }, { z: 1.9, w: 0.7, h: 0.6, y: -1.0 }, { z: 2.9, w: 0.4, h: 0.2, y: -0.8 }], 14), M.body);
+    g.add(scoop);
+    const lipM = new MeshStandardMaterial({ color: 0x111214, roughness: 1 });
+    const mouth = new Mesh(new BoxGeometry(0.6, 0.45, 0.05), lipM);
+    mouth.position.set(0, -1.0, 0.28);
+    g.add(mouth);
+    for (const w of wings({ x0: 0.45, span: 5.3, chord: (t) => 2.6 - 1.45 * t, le: (t) => -1.3 + 0.55 * t, y0: -0.5, dihedral: 0.08, thick: 0.15 })) g.add(new Mesh(w, M.wing));
+    for (const w of wings({ x0: 0.15, span: 2.0, chord: (t) => 1.2 - 0.5 * t, le: (t) => 3.7 + 0.25 * t, y0: 0.2, thick: 0.09 })) g.add(new Mesh(w, M.wing));
+    g.add(new Mesh(fin({ y0: 0.35, height: 1.75, chord: (t) => 1.7 - 0.95 * t, le: (t) => 3.2 + 0.85 * t }), M.fin));
+    g.add(canopy(-0.4, 0.74, 1.15, 0.45, 0.6, false));
+    const prop = propeller(-5.0, 0.05, 4, 1.75, 0x2f5fb3);
+    g.add(prop);
+    const missiles = [store(2.8, -0.85, -0.6, LOAD.missile), store(-2.8, -0.85, -0.6, LOAD.missile)];
+    missiles.forEach((m) => g.add(m));
+    const guns = [1.8, 2.05, 2.3, -1.8, -2.05, -2.3].map((x) => new Vector3(x, -0.45, -1.4));
+    g.userData = { props: [prop], flames: [], guns, tips: [new Vector3(-5.75, 0, -0.1), new Vector3(5.75, 0, -0.1)], missiles, len: 9.8 };
+    return g;
+  },
+  // the Ouragan: a stubby round body, the intake in the nose, a straight wing with tanks on the tips
+  ouragan() {
+    const M = mats('ouragan'), g = new Group();
+    g.add(new Mesh(loft(smooth([
+      { z: -4.9, w: 1.05, h: 1.05 }, { z: -4.4, w: 1.4, h: 1.4 }, { z: -2.4, w: 1.55, h: 1.6, y: 0.05 }, { z: 0.2, w: 1.5, h: 1.55 },
+      { z: 2.6, w: 1.15, h: 1.15 }, { z: 4.4, w: 0.75, h: 0.75 },
+    ], 3)), M.body));
+    const mouth = new Mesh(new CylinderGeometry(0.46, 0.46, 0.3, 20).rotateX(Math.PI / 2), new MeshStandardMaterial({ color: 0x0c0c0d, roughness: 1 }));
+    mouth.position.z = -4.85;
+    g.add(mouth);
+    for (const w of wings({ x0: 0.65, span: 5.0, chord: (t) => 2.7 - 0.9 * t, le: (t) => -1.0 + 0.35 * t, y0: -0.3, dihedral: 0.03, thick: 0.12 })) g.add(new Mesh(w, M.wing));
+    // the tip tanks
+    for (const s of [-1, 1]) {
+      const tank = new Mesh(loft(smooth([{ z: -1.9, w: 0.05, h: 0.05 }, { z: -1.2, w: 0.5, h: 0.5 }, { z: 0.6, w: 0.55, h: 0.55 }, { z: 1.8, w: 0.08, h: 0.08 }], 3), 14), M.body);
+      tank.position.set(s * 5.7, -0.15, -0.1);
+      g.add(tank);
+    }
+    for (const w of wings({ x0: 0.25, span: 1.9, chord: (t) => 1.3 - 0.5 * t, le: (t) => 3.5 + 0.5 * t, y0: 0.9, thick: 0.08 })) g.add(new Mesh(w, M.wing));
+    g.add(new Mesh(fin({ y0: 0.4, height: 2.0, chord: (t) => 2.1 - 1.1 * t, le: (t) => 2.6 + 1.5 * t }), M.fin));
+    g.add(canopy(-2.6, 0.72, 1.2, 0.5, 0.6, true));
+    g.add(nozzle(0, 0, 4.5, 0.38, 0.5));
+    const f = flame(0, 0, 4.7, 0.34);
+    g.add(f);
+    const missiles = [store(2.9, -0.7, -0.1, LOAD.missile), store(-2.9, -0.7, -0.1, LOAD.missile)];
+    missiles.forEach((m) => g.add(m));
+    const guns = [new Vector3(-0.5, -0.5, -3.6), new Vector3(0.5, -0.5, -3.6), new Vector3(-0.35, -0.65, -3.4), new Vector3(0.35, -0.65, -3.4)];
+    g.userData = { props: [], flames: [f], guns, tips: [new Vector3(-5.7, -0.15, 1.7), new Vector3(5.7, -0.15, 1.7)], missiles, len: 9.6 };
+    return g;
+  },
+  // the Mystère IV: a nose intake, a thin swept wing, the tailplane high on a swept fin
+  mystere() {
+    const M = mats('mystere'), g = new Group();
+    g.add(new Mesh(loft(smooth([
+      { z: -5.8, w: 1.0, h: 1.05 }, { z: -5.2, w: 1.3, h: 1.4 }, { z: -3.0, w: 1.45, h: 1.6, y: 0.05 }, { z: -0.4, w: 1.5, h: 1.65 },
+      { z: 2.2, w: 1.3, h: 1.4 }, { z: 4.6, w: 0.9, h: 0.95 }, { z: 5.6, w: 0.75, h: 0.75 },
+    ], 3)), M.body));
+    const mouth = new Mesh(new CylinderGeometry(0.44, 0.44, 0.3, 20).rotateX(Math.PI / 2), new MeshStandardMaterial({ color: 0x0c0c0d, roughness: 1 }));
+    mouth.position.z = -5.75;
+    const lip = new Mesh(new TorusGeometry(0.5, 0.05, 8, 24), new MeshStandardMaterial({ color: 0x9aa0a8, roughness: 0.35, metalness: 0.7 }));
+    lip.position.z = -5.82;
+    g.add(mouth, lip);
+    for (const w of wings({ x0: 0.65, span: 4.7, chord: (t) => 3.2 - 1.75 * t, le: (t) => -1.3 + 3.1 * t, y0: -0.25, dihedral: -0.02, thick: 0.08 })) g.add(new Mesh(w, M.wing));
+    // the fin, and the tailplane a third of the way up it
+    g.add(new Mesh(fin({ y0: 0.45, height: 2.4, chord: (t) => 2.4 - 1.25 * t, le: (t) => 2.4 + 2.4 * t }), M.fin));
+    for (const w of wings({ x0: 0.08, span: 1.9, chord: (t) => 1.3 - 0.6 * t, le: (t) => 4.0 + 1.1 * t, y0: 1.2, thick: 0.07 })) g.add(new Mesh(w, M.wing));
+    g.add(canopy(-3.0, 0.72, 1.25, 0.48, 0.58, true));
+    g.add(nozzle(0, 0, 5.7, 0.38, 0.5));
+    const f = flame(0, 0, 5.9, 0.35);
+    g.add(f);
+    const missiles = [store(2.8, -0.6, 0.6, LOAD.missile), store(-2.8, -0.6, 0.6, LOAD.missile)];
+    missiles.forEach((m) => g.add(m));
+    const guns = [new Vector3(-0.55, -0.55, -3.4), new Vector3(0.55, -0.55, -3.4)];
+    g.userData = { props: [], flames: [f], guns, tips: [new Vector3(-5.3, -0.2, 3.0), new Vector3(5.3, -0.2, 3.0)], missiles, len: 11.4 };
+    return g;
+  },
+  // the Super Mystère: a long pointed nose over an oval chin intake, a sharply swept wing, the burner
+  smystere() {
+    const M = mats('smystere'), g = new Group();
+    g.add(new Mesh(loft(smooth([
+      { z: -7.0, w: 0.06, h: 0.06, y: 0.2 }, { z: -6.2, w: 0.6, h: 0.55, y: 0.2 }, { z: -4.6, w: 1.15, h: 1.3, y: 0.05 }, { z: -2.6, w: 1.45, h: 1.7 },
+      { z: 0.2, w: 1.5, h: 1.65 }, { z: 3.0, w: 1.25, h: 1.3 }, { z: 5.2, w: 0.95, h: 0.95 }, { z: 6.0, w: 0.85, h: 0.85 },
+    ], 3)), M.body));
+    // the oval chin intake under the nose
+    const chin = new Mesh(new CylinderGeometry(0.42, 0.42, 0.25, 20).rotateX(Math.PI / 2), new MeshStandardMaterial({ color: 0x0c0c0d, roughness: 1 }));
+    chin.scale.set(1.25, 0.75, 1);
+    chin.position.set(0, -0.35, -4.7);
+    g.add(chin);
+    for (const w of wings({ x0: 0.7, span: 4.5, chord: (t) => 3.6 - 2.2 * t, le: (t) => -1.2 + 3.9 * t, y0: -0.2, dihedral: -0.03, thick: 0.065 })) g.add(new Mesh(w, M.wing));
+    for (const w of wings({ x0: 0.3, span: 2.0, chord: (t) => 1.5 - 0.75 * t, le: (t) => 4.2 + 1.3 * t, y0: 0.05, thick: 0.06 })) g.add(new Mesh(w, M.wing));
+    g.add(new Mesh(fin({ y0: 0.5, height: 2.4, chord: (t) => 2.6 - 1.5 * t, le: (t) => 2.8 + 2.4 * t }), M.fin));
+    g.add(canopy(-3.4, 0.82, 1.3, 0.48, 0.55, true));
+    g.add(nozzle(0, 0, 6.1, 0.42, 0.7));
+    const f = flame(0, 0, 6.4, 0.4, 0xff8a3a);
+    g.add(f);
+    const missiles = [store(3.1, -0.55, 1.2, LOAD.missile), store(-3.1, -0.55, 1.2, LOAD.missile)];
+    missiles.forEach((m) => g.add(m));
+    const guns = [new Vector3(-0.6, -0.6, -2.6), new Vector3(0.6, -0.6, -2.6)];
+    g.userData = { props: [], flames: [f], guns, tips: [new Vector3(-5.2, -0.2, 3.4), new Vector3(5.2, -0.2, 3.4)], missiles, len: 13.0 };
+    return g;
+  },
+  // the Nesher: the Mirage delta with a longer, slimmer nose and no radar bulge
+  nesher() {
+    const M = mats('nesher'), g = new Group();
+    g.add(new Mesh(loft(smooth([
+      { z: -8.8, w: 0.04, h: 0.04 }, { z: -7.4, w: 0.45, h: 0.45 }, { z: -5.2, w: 0.9, h: 1.0 }, { z: -3.0, w: 1.2, h: 1.4, y: 0.12 },
+      { z: -0.4, w: 1.35, h: 1.4, y: 0.05 }, { z: 2.6, w: 1.25, h: 1.25 }, { z: 5.0, w: 1.05, h: 1.05 }, { z: 5.8, w: 0.95, h: 0.95 },
+    ], 3)), M.body));
+    for (const s of [-1, 1]) {
+      const it = new Mesh(loft([{ z: -3.2, w: 0.1, h: 0.4 }, { z: -2.8, w: 0.5, h: 0.85 }, { z: 0.4, w: 0.55, h: 0.85 }, { z: 1.6, w: 0.2, h: 0.5 }], 14), M.body);
+      it.position.set(s * 0.8, 0, 0);
+      g.add(it);
+      const cone = new Mesh(new ConeGeometry(0.2, 0.55, 12).rotateX(-Math.PI / 2), new MeshStandardMaterial({ color: 0x2a2c30, roughness: 0.4, metalness: 0.6 }));
+      cone.position.set(s * 0.8, 0, -3.2);
+      g.add(cone);
+    }
+    for (const w of wings({ x0: 0.55, span: 3.95, chord: (t) => 7.9 - 7.0 * t, le: (t) => -2.7 + 6.7 * t, y0: -0.2, thick: 0.045, n: 5 })) g.add(new Mesh(w, M.wing));
+    g.add(new Mesh(fin({ y0: 0.45, height: 2.75, chord: (t) => 3.8 - 2.7 * t, le: (t) => 1.4 + 3.0 * t }), M.fin));
+    g.add(canopy(-3.6, 0.72, 1.3, 0.48, 0.56, true));
+    g.add(nozzle(0, 0, 6.0, 0.48, 0.8));
+    const f = flame(0, 0, 6.4, 0.44, 0xff8a3a);
+    g.add(f);
+    const missiles = [store(3.4, -0.45, 1.6, LOAD.missile), store(-3.4, -0.45, 1.6, LOAD.missile)];
+    missiles.forEach((m) => g.add(m));
+    const guns = [new Vector3(-0.75, -0.4, -2.4), new Vector3(0.75, -0.4, -2.4)];
+    g.userData = { props: [], flames: [f], guns, tips: [new Vector3(-4.5, 0, 3.6), new Vector3(4.5, 0, 3.6)], missiles, len: 14.6 };
     return g;
   },
   // the first swept-wing jets: nose intake, bubble canopy, bare metal

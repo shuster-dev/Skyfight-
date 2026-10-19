@@ -12,10 +12,20 @@ import {
   SpriteMaterial, TubeGeometry, Vector3, WebGLRenderer, ClampToEdgeWrapping, RingGeometry, CircleGeometry,
 } from 'three';
 import { makeStreets } from './streets.js';
-import { ARENA, BRIDGE, BUILDINGS, GRID, ISLANDS, cityAt, noise, terrainAt, inBay } from '../../shared/arena.js';
+import { makeSites } from './sites.js';
+import { AIRFIELD, ARENA, BRIDGE, BUILDINGS, GRID, ISLANDS, PORT, cityAt, noise, siteAt, terrainAt, inBay } from '../../shared/arena.js';
 
 export const SKY = { top: 0x3b78c9, horizon: 0xd4e6f2, sun: 0xfff2d6, fog: 0xcfe2ef };
 export const SUN_DIR = { x: -0.42, y: 0.5, z: -0.76 };
+/**
+ * Times of day: the bright noon the game was made in, and evening — the sun
+ * low over the sea in the west, the sky going orange to deep blue, warm light
+ * on everything and the windows of the city coming on.
+ */
+const TIMES = {
+  day: { ...SKY, sunDir: SUN_DIR, glow: 0.12, light: 0xfff0dc, lightI: 2.6, hemiSky: 0xdcecff, hemiGround: 0x6a7a5a, hemiI: 1.0, cloud: 0xffffff, cloudShade: 0xd5dde6, eve: 0, exposure: 1.05 },
+  sunset: { top: 0x24386e, horizon: 0xf0a271, sun: 0xffc48a, fog: 0xd99f84, sunDir: { x: -0.86, y: 0.1, z: -0.5 }, glow: 0.75, light: 0xffaa6a, lightI: 2.1, hemiSky: 0xffc6a2, hemiGround: 0x4a3c44, hemiI: 0.75, cloud: 0xffd3b4, cloudShade: 0xb497a6, eve: 1, exposure: 1.0 },
+};
 const MOBILE = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
 
 function rng(seed) { let s = seed >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); }
@@ -37,21 +47,14 @@ export function makeWorld(renderer) {
   scene.fog = new Fog(SKY.fog, 1300, 4400);
   const camera = new PerspectiveCamera(62, 1, 0.5, 7000);
 
-  scene.add(new HemisphereLight(0xdcecff, 0x6a7a5a, 1.0));
+  const hemi = new HemisphereLight(0xdcecff, 0x6a7a5a, 1.0);
+  scene.add(hemi);
   const sun = new DirectionalLight(0xfff0dc, 2.6);
   sun.position.set(SUN_DIR.x * 1000, SUN_DIR.y * 1000, SUN_DIR.z * 1000);
   scene.add(sun);
 
   const sky = makeSky();
   scene.add(sky);
-  // the sky, as light: everything shiny (glass, paint, the sea) reflects it
-  if (renderer) {
-    const pm = new PMREMGenerator(renderer);
-    const skyScene = new Scene();
-    skyScene.add(makeSky());
-    scene.environment = pm.fromScene(skyScene, 0.02).texture;
-    pm.dispose();
-  }
 
   const heights = sampleHeights();
   const land = makeLand(heights);
@@ -72,6 +75,42 @@ export function makeWorld(renderer) {
   scene.add(ships.group);
   const streets = makeStreets();
   scene.add(streets.group);
+  const sites = makeSites();
+  scene.add(sites);
+
+  /** The time of day: 'day' or 'sunset'. Recolours the sky, the light, the sea, the haze and the clouds. */
+  let time = '';
+  function setSky(t) {
+    const T = TIMES[t] || TIMES.day;
+    if (time === t) return;
+    time = TIMES[t] ? t : 'day';
+    const dir = new Vector3(T.sunDir.x, T.sunDir.y, T.sunDir.z).normalize();
+    for (const m of [sky.material, skyLight.material]) {
+      m.uniforms.top.value.set(T.top); m.uniforms.horizon.value.set(T.horizon); m.uniforms.sunC.value.set(T.sun);
+      m.uniforms.sunDir.value.copy(dir); m.uniforms.glow.value = T.glow;
+    }
+    scene.background.set(T.horizon);
+    scene.fog.color.set(T.fog);
+    sun.color.set(T.light); sun.intensity = T.lightI;
+    sun.position.copy(dir).multiplyScalar(1000);
+    hemi.color.set(T.hemiSky); hemi.groundColor.set(T.hemiGround); hemi.intensity = T.hemiI;
+    const su = sea.material.uniforms;
+    su.skyC.value.set(T.horizon); su.fogColor.value.set(T.fog); su.sunDir.value.copy(dir);
+    clouds.userData.mats[0].color.set(T.cloud); clouds.userData.mats[1].color.set(T.cloudShade);
+    city.userData.eve.value = T.eve;
+    if (renderer) {
+      renderer.toneMappingExposure = T.exposure;
+      // the sky, as light: everything shiny (glass, paint, the sea) reflects it
+      const pm = new PMREMGenerator(renderer);
+      const old = scene.environment;
+      scene.environment = pm.fromScene(skyScene, 0.02).texture;
+      old?.dispose();
+      pm.dispose();
+    }
+  }
+  const skyScene = new Scene(), skyLight = makeSky();
+  skyScene.add(skyLight);
+  setSky('day');
 
   /**
    * How much to draw. 'high' is everything; 'med' drops the small things you
@@ -97,7 +136,7 @@ export function makeWorld(renderer) {
   }
 
   return {
-    scene, camera, sky, sea, clouds, setQuality,
+    scene, camera, sky, sea, clouds, setQuality, setSky, get time() { return time; },
     /** Per frame: the sky follows the camera, the sea and the traffic move. */
     tick(t, dt = 0.016) {
       sky.position.copy(camera.position);
@@ -118,12 +157,12 @@ function makeSky() {
     side: BackSide, depthWrite: false, fog: false,
     uniforms: {
       top: { value: new Color(SKY.top) }, horizon: { value: new Color(SKY.horizon) }, sunC: { value: new Color(SKY.sun) },
-      sunDir: { value: new Vector3(SUN_DIR.x, SUN_DIR.y, SUN_DIR.z).normalize() },
+      sunDir: { value: new Vector3(SUN_DIR.x, SUN_DIR.y, SUN_DIR.z).normalize() }, glow: { value: 0.12 },
     },
     // pinned to the far plane: however short the view distance (the quality
     // setting shortens it), the dome is never clipped into a pale disc
     vertexShader: `varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); gl_Position.z = gl_Position.w * 0.99999; }`,
-    fragmentShader: `uniform vec3 top; uniform vec3 horizon; uniform vec3 sunC; uniform vec3 sunDir; varying vec3 vDir;
+    fragmentShader: `uniform vec3 top; uniform vec3 horizon; uniform vec3 sunC; uniform vec3 sunDir; uniform float glow; varying vec3 vDir;
       void main(){
         vec3 d = normalize(vDir);
         float h = d.y;
@@ -131,7 +170,9 @@ function makeSky() {
         c = mix(c, horizon * 0.96, smoothstep(0.0, -0.15, h));
         float s = max(dot(d, sunDir), 0.0);
         // the disc, its glow, and a warm haze round the sun near the horizon
-        c += sunC * (pow(s, 1400.0) * 3.0 + pow(s, 60.0) * 0.35 + pow(s, 6.0) * 0.12 * (1.0 - clamp(h * 2.0, 0.0, 1.0)));
+        c += sunC * (pow(s, 1400.0) * 3.0 + pow(s, 60.0) * 0.35 + pow(s, 6.0) * glow * (1.0 - clamp(h * 2.0, 0.0, 1.0)));
+        // in the evening the whole western horizon burns, fading up and away from the sun
+        c = mix(c, sunC * 1.05, glow * 0.35 * pow(dot(normalize(vec3(d.x, 0.0, d.z) + 1e-4), normalize(vec3(sunDir.x, 0.0, sunDir.z))) * 0.5 + 0.5, 3.0) * (1.0 - smoothstep(0.0, 0.35, abs(h))));
         gl_FragColor = vec4(c, 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
@@ -173,6 +214,16 @@ function paintGround(H) {
       const x = -SPAN / 2 + (i + 0.5) / N * SPAN, k = (j * N + i) * 4;
       const h = H.at(x, z), n1 = noise(x * 0.02, z * 0.02), n2 = noise(x * 0.11, z * 0.11);
       if (h < 0.8) { const w = 0.6 + 0.4 * n2; set(k, 200 * w, 186 * w, 150 * w); continue; } // wet sand and the seabed
+      const site = siteAt(x, z, 8);
+      if (site === 'airfield') { paintField(x, z, n1, n2, set, k); continue; }
+      if (site === 'port') {
+        // paving, the quay's yellow edge, lanes between the stacks
+        if (x < PORT.x0 + 1.6) { set(k, 214, 176, 52); continue; }
+        const lane = Math.abs(((x - PORT.x0 - 44) % 16 + 16) % 16 - 14) < 0.9;
+        const a = 138 + n2 * 16;
+        if (lane) set(k, 205, 190, 120); else set(k, a, a - 1, a - 5);
+        continue;
+      }
       if (cityAt(x, z)) {
         const u = ((x % step) + step) % step, v = ((z % step) + step) % step, s2 = GRID.street / 2;
         const street = u < s2 || u > step - s2 || v < s2 || v > step - s2;
@@ -209,6 +260,39 @@ function paintGround(H) {
   tex.anisotropy = 8;
   tex.minFilter = LinearMipmapLinearFilter;
   return tex;
+}
+
+/** The airfield from above: runway with its markings, taxiway, apron, mown grass. */
+function paintField(x, z, n1, n2, set, k) {
+  const A = AIRFIELD, R = A.runway, dz = z - R.z;
+  const asphalt = (d = 0) => { const a = 54 + n2 * 10 + d; set(k, a, a + 1, a + 4); };
+  if (x > R.x0 && x < R.x1 && Math.abs(dz) < R.w / 2) {
+    const ends = Math.min(x - R.x0, R.x1 - x);
+    // the edge lines, the threshold bars, the dashed centre line
+    if (Math.abs(dz) > R.w / 2 - 1.3) return set(k, 232, 232, 226);
+    if (ends < 18 && ends > 3 && Math.abs(dz) > 2 && Math.floor((dz + R.w / 2) / 2.6) % 2 === 0) return set(k, 232, 232, 226);
+    if (ends > 40 && ends < 70 && Math.abs(Math.abs(dz) - 7) < 3) return set(k, 232, 232, 226);
+    if (Math.abs(dz) < 0.9 && Math.floor(x / 12) % 2 === 0 && ends > 20) return set(k, 232, 232, 226);
+    return asphalt();
+  }
+  // the taxiway and its links to the runway, with a yellow line down the middle
+  const onTaxi = Math.abs(z - A.taxi) < 8 && x > R.x0 + 20 && x < R.x1 - 10;
+  const onLink = [215, 400, 585].some((lx) => Math.abs(x - lx) < 7) && z > R.z && z < A.taxi;
+  if (onTaxi || onLink) {
+    if ((onTaxi && Math.abs(z - A.taxi) < 0.6) || (onLink && [215, 400, 585].some((lx) => Math.abs(x - lx) < 0.6))) return set(k, 222, 182, 52);
+    return asphalt(6);
+  }
+  // the apron and the forecourts of the hangars and the terminal: concrete
+  const P = A.apron;
+  if ((x > P.x0 && x < P.x1 && z > P.z0 && z < 952) || (x > 520 && x < 616 && z > 846 && z < 958) || (z > A.taxi && z < P.z0 && x > 250 && x < 530)) {
+    const a = 150 + n2 * 14;
+    // parking boxes painted on the apron
+    if (z > P.z0 && z < P.z1 && Math.abs(((x - P.x0 - 25) % 50 + 50) % 50 - 25) < 0.7) return set(k, 222, 182, 52);
+    return set(k, a, a - 1, a - 4);
+  }
+  // mown grass, in stripes
+  const w = (0.8 + 0.2 * n2) * (Math.floor(x / 14) % 2 ? 1 : 0.92);
+  set(k, 98 * w, 146 * w, 70 * w);
 }
 
 function makeLand(H) {
@@ -316,11 +400,22 @@ function makeSea(H) {
  */
 function makeCity() {
   const group = new Group();
-  const n = BUILDINGS.length;
+  // a stepped tower is two boxes: the full footprint to the step, the narrower top above
+  const parts = [];
+  for (const b of BUILDINGS) {
+    if (!b.step) { parts.push({ b, y: b.base - 1, h: b.h + 1, w: b.w, d: b.d }); continue; }
+    parts.push({ b, y: b.base - 1, h: b.step.at + 1, w: b.w, d: b.d });
+    parts.push({ b, y: b.base + b.step.at - 0.5, h: b.h - b.step.at + 0.5, w: b.w * b.step.k, d: b.d * b.step.k });
+  }
+  const n = parts.length;
   const box = new BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
   const kinds = new Float32Array(n);
   const mat = new MeshStandardMaterial({ color: 0xffffff, roughness: 0.75, metalness: 0.05 });
+  // evening: 1 lights the windows
+  const eve = { value: 0 };
+  group.userData.eve = eve;
   mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uEve = eve;
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aKind;\nvarying float vKind;\nvarying vec3 vBW;\nvarying vec3 vBN;')
       .replace('#include <begin_vertex>', `#include <begin_vertex>
         vec4 bw = vec4(transformed, 1.0);
@@ -333,7 +428,7 @@ function makeCity() {
         vBN = normalize(bn);
         vKind = aKind;`);
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
-      varying float vKind; varying vec3 vBW; varying vec3 vBN;
+      varying float vKind; varying vec3 vBW; varying vec3 vBN; uniform float uEve; float gLit; float gWin;
       float bh(vec2 p){ return fract(sin(dot(p, vec2(41.3, 289.1))) * 23758.5453); }`)
       .replace('#include <color_fragment>', `#include <color_fragment>
         float wall = 1.0 - step(0.5, abs(vBN.y));
@@ -355,9 +450,12 @@ function makeCity() {
         float lit = step(0.9, bh(floor(cell) + floor(vBW.xz * 0.01))) * aa;
         vec3 glass = mix(vec3(0.16, 0.24, 0.32), vec3(0.62, 0.58, 0.48), lit * 0.55);
         diffuseColor.rgb = mix(diffuseColor.rgb, glass, win);
+        // in the evening a good share of the windows are lit, warm
+        gLit = step(0.62, bh(floor(cell) * 1.7 + floor(vBW.xz * 0.013))) * aa; gWin = win;
         // roofs a little darker, the street level darker still
         diffuseColor.rgb *= mix(1.0, 0.72, step(0.5, vBN.y));
         diffuseColor.rgb *= mix(0.62, 1.0, smoothstep(2.0, 4.5, vBW.y));`)
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(1.0, 0.72, 0.42) * gLit * gWin * uEve * 0.9;')
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.06, win);')
       .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = mix(metalnessFactor, 0.65, win);');
   };
@@ -368,9 +466,9 @@ function makeCity() {
     office: [0xc9c2b6, 0xb7b2aa, 0xd8d0c0, 0x9c9a96],
     flat: [0xd9c7a8, 0xc8a98a, 0xe2d7c4, 0xb9a48f, 0xcfbfb0],
   };
-  BUILDINGS.forEach((b, i) => {
-    o.position.set(b.x, b.base - 1, b.z);
-    o.scale.set(b.w, b.h + 1, b.d);
+  parts.forEach(({ b, y, h, w, d }, i) => {
+    o.position.set(b.x, y, b.z);
+    o.scale.set(w, h, d);
     o.updateMatrix();
     mesh.setMatrixAt(i, o.matrix);
     const list = tints[b.kind];
@@ -382,12 +480,38 @@ function makeCity() {
   // on the roofs: plant rooms and water tanks, so they are not bare slabs
   const r = rng(77), roofBits = [];
   for (const b of BUILDINGS) {
-    const k = 1 + Math.floor(r() * 3);
-    for (let i = 0; i < k; i++) roofBits.push([b.x + (r() - 0.5) * b.w * 0.6, b.base + b.h, b.z + (r() - 0.5) * b.d * 0.6, 3 + r() * 6, 2 + r() * 3.5, 3 + r() * 6]);
+    const k = b.pad ? 0 : 1 + Math.floor(r() * 3), f = b.step ? b.step.k : 1;
+    for (let i = 0; i < k; i++) roofBits.push([b.x + (r() - 0.5) * b.w * f * 0.6, b.base + b.h, b.z + (r() - 0.5) * b.d * f * 0.6, 3 + r() * 6, 2 + r() * 3.5, 3 + r() * 6]);
+    // on the terrace of a stepped tower, a low parapet of plant along its edge
+    if (b.step) roofBits.push([b.x, b.base + b.step.at, b.z + (b.d * (1 + b.step.k)) / 4, b.w * 0.8, 1.6, 1.2]);
   }
   const roof = new InstancedMesh(new BoxGeometry(1, 1, 1).translate(0, 0.5, 0), new MeshStandardMaterial({ color: 0x8d9094, roughness: 0.8 }), roofBits.length);
   roofBits.forEach(([x, y, z, w, h, d], i) => { o.position.set(x, y, z); o.scale.set(w, h, d); o.updateMatrix(); roof.setMatrixAt(i, o.matrix); });
   group.add(roof);
+  // spires on the tallest, with a red light at the tip
+  const spires = BUILDINGS.filter((b) => b.spire);
+  if (spires.length) {
+    const sp = new InstancedMesh(new CylinderGeometry(0.25, 1.4, 1, 8).translate(0, 0.5, 0), new MeshStandardMaterial({ color: 0xb9c0c8, roughness: 0.3, metalness: 0.85 }), spires.length);
+    const tip = new InstancedMesh(new SphereGeometry(0.7, 8, 6), new MeshBasicMaterial({ color: 0xff3b2b }), spires.length);
+    spires.forEach((b, i) => {
+      o.position.set(b.x, b.base + b.h, b.z); o.scale.set(1, b.spire, 1); o.updateMatrix(); sp.setMatrixAt(i, o.matrix);
+      o.position.y += b.spire; o.scale.setScalar(1); o.updateMatrix(); tip.setMatrixAt(i, o.matrix);
+    });
+    group.add(sp, tip);
+  }
+  // helipads on some flat roofs: a ring and an H
+  const pads = BUILDINGS.filter((b) => b.pad);
+  if (pads.length) {
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const g = c.getContext('2d');
+    g.fillStyle = '#3d4247'; g.beginPath(); g.arc(64, 64, 62, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = '#f2c230'; g.lineWidth = 6; g.beginPath(); g.arc(64, 64, 52, 0, Math.PI * 2); g.stroke();
+    g.fillStyle = '#f4f4f0'; g.fillRect(40, 34, 12, 60); g.fillRect(76, 34, 12, 60); g.fillRect(40, 58, 48, 12);
+    const t = new CanvasTexture(c); t.colorSpace = SRGBColorSpace;
+    const pm = new InstancedMesh(new CircleGeometry(0.5, 32).rotateX(-Math.PI / 2), new MeshStandardMaterial({ map: t, roughness: 0.8, polygonOffset: true, polygonOffsetFactor: -2 }), pads.length);
+    pads.forEach((b, i) => { o.position.set(b.x, b.base + b.h + 0.08, b.z); o.scale.setScalar(Math.min(b.w, b.d) * 0.78); o.updateMatrix(); pm.setMatrixAt(i, o.matrix); });
+    group.add(pm);
+  }
   return group;
 }
 
@@ -570,7 +694,7 @@ function makeTrees(H) {
   for (let tries = 0; spots.length < target && tries < target * 12; tries++) {
     const x = -1300 + r() * 2600, z = -1300 + r() * 2600;
     const h = H.at(x, z);
-    if (h < 5 || h > 170 || cityAt(x, z) || inBay(x, z) > 0) continue;
+    if (h < 5 || h > 170 || cityAt(x, z) || inBay(x, z) > 0 || siteAt(x, z, 25)) continue;
     if (Math.abs(x - BRIDGE.x) < 20 && z > BRIDGE.z0 - 230 && z < BRIDGE.z1 + 230) continue;
     const slope = Math.abs(H.at(x + 6, z) - H.at(x - 6, z)) + Math.abs(H.at(x, z + 6) - H.at(x, z - 6));
     if (slope > 14) continue;
@@ -634,6 +758,7 @@ function makeClouds() {
     }
   }
   group.userData.puffs = puffs;
+  group.userData.mats = [mat, shade];
   return group;
 }
 

@@ -1,7 +1,7 @@
 // The rules, checked without a server or a browser: flying, shooting, paying,
 // and the hangar's prices. `npm run qa`
 import { GUNS, MISSILES, GUN_ORDER, MISSILE_ORDER, PLANES, PLANE_ORDER, UPGRADES, TIER_COST, TIER_LEVEL, statsOf, xpAt, xpStep, levelOf, levelProgress, killReward, cleanCallsign, nextTier, MAX_LEVEL } from '../src/shared/planes.js';
-import { ARENA, BRIDGE, BUILDINGS, HEAL, HEALS, groundAt, healAt, hitsSolid, inBay, spawnPoint, surfaceAt, terrainAt, underBridge } from '../src/shared/arena.js';
+import { AIRFIELD, ARENA, BRIDGE, BUILDINGS, PORT, STRUCTURES, HEAL, HEALS, groundAt, healAt, hitsSolid, inBay, spawnPoint, surfaceAt, terrainAt, underBridge } from '../src/shared/arena.js';
 import { fly, flyQ, forward, newBody, newBodyQ, plausibleMove, BOOST, BRAKE, Q } from '../src/shared/flight.js';
 import { GUN, MISSILE, RAM, aimDir, blastDamage, closestOn, missileHurt, DODGE, dodgeChance, gunTarget, leadPoint, offNose, pickTarget, ramDamage, segmentHit, steerMissile } from '../src/shared/combat.js';
 import { buyArm, buyPaint, choosePaint, equipArm, newPilot, normalize, buyPlane, buyUpgrade, choosePlane, payKill, redeemGift, setNeon, view } from '../src/server/pilot.js';
@@ -13,11 +13,11 @@ const ok = (name, cond, info) => {
 const near = (a, b, e = 1e-6) => Math.abs(a - b) <= e;
 
 console.log('\nplanes');
-ok('ten planes, in order of level', PLANE_ORDER.length === 10 && PLANE_ORDER.every((k, i) => !i || PLANES[k].level > PLANES[PLANE_ORDER[i - 1]].level));
+ok('fifteen planes, in order of level', PLANE_ORDER.length === 15 && PLANE_ORDER.every((k, i) => !i || PLANES[k].level > PLANES[PLANE_ORDER[i - 1]].level));
 ok('the first plane is free and open at level 1', PLANES.sparrow.price === 0 && PLANES.sparrow.level === 1);
 ok('every plane has a Hebrew name and a description', PLANE_ORDER.every((k) => PLANES[k].he && PLANES[k].desc));
 const ACES = PLANE_ORDER.filter((k) => PLANES[k].ace), REG = PLANE_ORDER.filter((k) => !PLANES[k].ace);
-ok('three regulars, then a strong one; the last is the strongest', ACES.join() === 'shahak,sufa,phantom' && PLANE_ORDER.at(-1) === 'phantom');
+ok('a strong one every few; the last is the strongest', ACES.join() === 'shahak,sufa,phantom' && PLANE_ORDER.at(-1) === 'phantom');
 ok('prices rise along the regulars, and along the strong ones', [REG, ACES].every((l) => l.every((k, i) => !i || PLANES[k].price > PLANES[l[i - 1]].price)));
 {
   const pow = (k) => { const s = statsOf(k); return s.speed * s.rate * s.dmg * s.hp; };
@@ -165,7 +165,7 @@ console.log('\nthe arena');
   const B = BRIDGE;
   ok('the sea is to the west, at zero', groundAt(-600, 0) === 0 && terrainAt(-600, 0) < 0);
   ok('mountains rise in the east', terrainAt(1100, 0) > 150, terrainAt(1100, 0));
-  ok('the city is flat ground by the bay', BUILDINGS.length > 120 && BUILDINGS.every((b) => b.base > 2 && b.base < 15), BUILDINGS.length);
+  ok('the city is flat ground by the bay', BUILDINGS.length > 100 && BUILDINGS.every((b) => b.base > 2 && b.base < 15), BUILDINGS.length);
   ok('downtown has towers', BUILDINGS.some((b) => b.h > 120) && BUILDINGS.every((b) => b.h <= 185));
   ok('no building stands in the bay or on the bridge', BUILDINGS.every((b) => inBay(b.x, b.z) === 0 && !(Math.abs(b.x - B.x) < 40 && b.z > B.z0 - 20 && b.z < B.z1 + 20)));
   ok('the bridge stands over water', terrainAt(B.x, B.cz) < 0 && B.towers.every((z) => terrainAt(B.x, z) < 0));
@@ -181,6 +181,19 @@ console.log('\nthe arena');
   ok('spawns are in the air, well clear of anything', pts.every((s) => s.y > surfaceAt(s.x, s.z) + 100), pts.map((s) => Math.round(s.y - surfaceAt(s.x, s.z))));
   ok('spawns face the middle', pts.every((s) => { const f = forward(s.yaw, 0); return f.x * -s.x + f.z * -s.z > 0.99 * Math.hypot(s.x, s.z); }));
   ok('the ground is the same every time', terrainAt(100, 33) === terrainAt(100, 33));
+}
+
+console.log('\nthe airfield and the port');
+{
+  const R = AIRFIELD.runway, S = (k) => STRUCTURES.filter((s) => s.kind === k);
+  ok('the airfield is level ground', [R.x0, (R.x0 + R.x1) / 2, R.x1].every((x) => Math.abs(terrainAt(x, R.z) - 5) < 0.5));
+  ok('the runway is open: a plane can fly down it a few metres up', Array.from({ length: 40 }, (_, i) => R.x0 + (i / 39) * (R.x1 - R.x0)).every((x) => !hitsSolid(x, 9, R.z)));
+  ok('no city building on the airfield or the port', BUILDINGS.every((b) => !(b.x > AIRFIELD.x0 - 20 && b.x < AIRFIELD.x1 + 20 && b.z > AIRFIELD.z0 - 20 && b.z < AIRFIELD.z1 + 20) && !(b.x > PORT.x0 - 20 && b.x < PORT.x1 + 20 && b.z > PORT.z0 - 20 && b.z < PORT.z1 + 20)));
+  ok('the hangars, the tower and the tanks are solid', ['hangar', 'tower', 'tank'].every((k) => S(k).length && S(k).every((h) => hitsSolid(h.x, h.base + h.h - 1, h.z) === 'building')));
+  ok('the cranes are solid, legs and boom, and you can fly under the boom', S('craneBoom').length === 3 && S('craneBoom').every((b) => hitsSolid(b.x - 20, b.base + 3, b.z) === 'building' && !hitsSolid(b.x - 20, b.base - 14, b.z)));
+  ok('the freighter at the quay is solid, over deep water', S('hull').every((h) => hitsSolid(h.x, 8, h.z) === 'building' && terrainAt(h.x, h.z) < -5));
+  ok('the quay is flat paving, the sea off it deep', Math.abs(terrainAt(PORT.x0 + 40, -770) - 4.5) < 0.3 && terrainAt(PORT.x0 - 30, -770) < -5);
+  ok('a stepped tower narrows above its step', BUILDINGS.some((b) => b.step) && BUILDINGS.filter((b) => b.step).every((b) => hitsSolid(b.x + b.w / 2 - 1, b.base + b.step.at + 3, b.z) === '' && hitsSolid(b.x, b.base + b.step.at + 3, b.z) === 'building'));
 }
 
 console.log('\nhow long a fight lasts');

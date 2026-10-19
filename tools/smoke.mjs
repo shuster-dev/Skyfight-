@@ -47,7 +47,7 @@ async function run(label, viewport, mobile) {
   await page.waitForSelector('#screen-hangar:not(.hidden)');
   await wait(1200);
   await snap('2-hangar');
-  ok('the hangar is its own 3D scene, ten planes in the row', await page.evaluate(() => window.__sky.mode === 'hangar') && (await page.$$('#hp-dots i')).length === 10);
+  ok('the hangar is its own 3D scene, fifteen planes in the row', await page.evaluate(() => window.__sky.mode === 'hangar') && (await page.$$('#hp-dots i')).length === 15);
   ok('the first plane is on the table, in use', (await page.textContent('#hp-name')) === 'סער' && (await page.textContent('#hp-act')) === 'בשימוש');
   ok('no pictures and no emoji in the hangar', await page.evaluate(() => !/[\u{1F300}-\u{1FAFF}\u2600-\u27BF]/u.test(document.querySelector('#screen-hangar').innerText)));
   ok('seven paints to choose from, the stock one worn', (await page.$$('#hp-paints .sw')).length === 7 && await page.evaluate(() => document.querySelector('#hp-paints .sw.on')?.dataset.paint === 'stock'));
@@ -58,7 +58,7 @@ async function run(label, viewport, mobile) {
   await page.click('#hp-next');
   await wait(800);
   await snap('2b-next');
-  ok('the next plane is locked to a level', (await page.textContent('#hp-name')) === 'שחף' && /נפתח ברמה 3/.test(await page.textContent('#hp-act')));
+  ok('the next plane is locked to a level', (await page.textContent('#hp-name')) === 'מוסטנג' && /נפתח ברמה 2/.test(await page.textContent('#hp-act')));
   await page.click('#hp-prev');
   await page.click('[data-tab="ups"]');
   await wait(400);
@@ -136,16 +136,24 @@ async function run(label, viewport, mobile) {
     // way, a plane that can loop just loops
     await page.evaluate(() => {
       const key = (t) => dispatchEvent(new KeyboardEvent(t, { code: 'ArrowDown', key: 'ArrowDown' }));
-      window.__dive = setInterval(() => key((window.__sky.me?.body?.pitch ?? 0) > -1.0 ? 'keydown' : 'keyup'), 20);
+      // steep, and on the burner: software rendering is slow, the sea far
+      dispatchEvent(new KeyboardEvent('keydown', { code: 'ShiftLeft', key: 'Shift' }));
+      window.__dive = setInterval(() => key((window.__sky.me?.body?.pitch ?? 0) > -1.3 ? 'keydown' : 'keyup'), 20);
     });
     const died = await page.waitForSelector('#death:not(.hidden)', { timeout: 180000 }).then(() => true, () => false);
-    await page.evaluate(() => { clearInterval(window.__dive); dispatchEvent(new KeyboardEvent('keyup', { code: 'ArrowDown', key: 'ArrowDown' })); });
+    await page.evaluate(() => { clearInterval(window.__dive); dispatchEvent(new KeyboardEvent('keyup', { code: 'ArrowDown', key: 'ArrowDown' })); dispatchEvent(new KeyboardEvent('keyup', { code: 'ShiftLeft', key: 'Shift' })); });
     ok('diving into the sea brings the death screen', died);
     await wait(600);
     await snap('6-down');
     ok('it says how you went down', /התרסקת|הופלת|התנגשת/.test(await page.textContent('#death-title')));
     ok('and you are flying again after the countdown', await page.waitForFunction(() => window.__sky.me?.alive && document.querySelector('#death').classList.contains('hidden'), null, { timeout: 8000 }).then(() => true, () => false));
   }
+  // the evening sky: the sun goes down, the windows come on, nothing breaks
+  await page.evaluate(() => window.__sky.world.setSky('sunset'));
+  await wait(1500);
+  await snap('7-sunset');
+  ok('the sky can be set to sunset', await page.evaluate(() => window.__sky.world.time === 'sunset'));
+  await page.evaluate(() => window.__sky.world.setSky('day'));
   ok('the board in the air is short: the top three and you', [3, 4].includes((await page.$$('#score .r')).length));
   // back to the hangar
   await page.click('#menu-btn');
