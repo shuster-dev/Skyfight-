@@ -503,8 +503,15 @@ const BUILD = {
     const cnp = canopy(-4.6, 0.6, 1.9, 0.58, 0.6, false);
     cnp.children[0].material = new MeshPhysicalMaterial({ color: 0x8a6a20, roughness: 0.02, metalness: 1, clearcoat: 1, transparent: true, opacity: 0.9 });
     g.add(cnp);
-    // twin engines burning blue
-    const flames = [];
+    // twin engines burning blue; in a hover, jets of light straight down
+    // under the engines and the wing roots instead
+    const flames = [], lift = [];
+    for (const [lx, lz] of [[-0.62, 5.6], [0.62, 5.6], [-1.6, -0.6], [1.6, -0.6]]) {
+      const j = flame(lx, -0.6, lz, 0.42, 0x7fe8ff);
+      j.rotation.set(Math.PI / 2, 0, 0);
+      j.visible = false;
+      g.add(j); lift.push(j);
+    }
     for (const sx of [-1, 1]) {
       g.add(nozzle(sx * 0.62, -0.05, 6.6, 0.5, 0.9));
       const f = flame(sx * 0.62, -0.05, 7.0, 0.46, 0x5fd8ff);
@@ -523,7 +530,7 @@ const BUILD = {
     missiles.forEach((m) => g.add(m));
     // two guns, one in each wing root
     const guns = [new Vector3(-1.5, 0.05, -2.2), new Vector3(1.5, 0.05, -2.2)];
-    g.userData = { props: [], flames, guns, tips: [new Vector3(-6.2, -0.02, 3.1), new Vector3(6.2, -0.02, 3.1)], missiles, len: 15.4, ace: true };
+    g.userData = { props: [], flames, lift, guns, tips: [new Vector3(-6.2, -0.02, 3.1), new Vector3(6.2, -0.02, 3.1)], missiles, len: 15.4, ace: true };
     return g;
   },
 
@@ -975,8 +982,13 @@ export function buildPlane(kind, paint = 'stock', load = {}) {
 }
 
 /** Per frame: props turn, flames burn with the burner, missiles hang while they are there. */
-export function animatePlane(g, dt, { boost = false, speed = 60, time = 0, ammo = null, ammoMax = 1 } = {}) {
+export function animatePlane(g, dt, { boost = false, speed = 60, time = 0, ammo = null, ammoMax = 1, hover = false } = {}) {
   const u = g.userData;
+  // a hover: the jets down roar, the ones behind idle
+  if (u.lift) {
+    for (const j of u.lift) { j.visible = hover; j.scale.z = 2.6 + Math.sin(time * 37 + j.position.x) * 0.4; }
+    for (const f of u.flames) f.visible = !hover;
+  }
   for (const p of u.props || []) p.rotation.z += dt * (40 + speed * 0.4);
   // neon breathes
   if (u.neon) { const k = 1.3 + Math.sin(time * 3) * 0.35; for (const m of u.neon) m.emissiveIntensity = k; }

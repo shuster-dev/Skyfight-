@@ -91,6 +91,8 @@ export const PLANES = {
     oneShot: true,
     // a missile every half second, the rack refilled as fast
     launchGap: 0.5,
+    // it can stand in the air, nozzles down (a switch in the cockpit)
+    vtol: true,
     banner: 'שוסטר הצטרף לקרב',
   },
 };
@@ -208,7 +210,7 @@ export function statsOf(planeId, tiers = {}, arms = {}) {
     gunSpread: G.spread * (1 - 0.1 * t('weapons')), gunAssist: G.assist * (1 + 0.06 * t('weapons')),
     missile: M.id, mRange: Math.round(up('weapons', 'mRange', p.mRange || M.range)), mDmg: M.dmg, mSpeed: M.speed, mTurn: M.turn,
     mCcm: Math.min(0.8, M.ccm + 0.03 * t('weapons')),
-    shake: p.shake || 1, shakeSure: p.shakeSure || 0, oneShot: !!p.oneShot, launchGap: p.launchGap || 0, heli: !!p.heli,
+    shake: p.shake || 1, shakeSure: p.shakeSure || 0, oneShot: !!p.oneShot, launchGap: p.launchGap || 0, vtol: !!p.vtol, heli: !!p.heli,
     missiles: p.missiles + (t('weapons') >= 3 ? 1 : 0),
     reload: up('weapons', 'reload', p.reload),
     flares: p.flares + (t('armor') >= 3 ? 1 : 0),

@@ -260,6 +260,7 @@ export class ArenaRoom extends Room {
     p.speed = sp;
     p.firing = !!(flags & 1);
     p.boosting = !!(flags & 2);
+    p.hovering = !!(flags & 4) && !!p.stats.vtol;
     // into something solid (a little slack: the client's own check is first)
     const into = hitsSolid(x, y + 1.5, z, 0.5);
     if (into) this.down(p, '', 'crash', into);
@@ -612,7 +613,7 @@ export class ArenaRoom extends Room {
   snapshot() {
     const ps = [];
     for (const p of this.planes.values()) {
-      const flags = (p.alive ? 1 : 0) | (p.firing ? 2 : 0) | (p.boosting ? 4 : 0) | (this.now < p.shieldUntil ? 8 : 0);
+      const flags = (p.alive ? 1 : 0) | (p.firing ? 2 : 0) | (p.boosting ? 4 : 0) | (this.now < p.shieldUntil ? 8 : 0) | (p.hovering ? 16 : 0);
       const a = p.q || Q.euler(p.yaw, p.pitch, p.roll);
       ps.push([p.key, q(p.x), q(p.y), q(p.z), q(p.yaw, 1000), q(p.pitch, 1000), q(p.roll, 1000), Math.round(Math.max(0, p.hp) / p.stats.hp * 100), flags, q(p.speed), q(a.x, 1000), q(a.y, 1000), q(a.z, 1000), q(a.w, 1000)]);
     }
