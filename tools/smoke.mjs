@@ -102,7 +102,9 @@ async function run(label, viewport, mobile) {
     await page.keyboard.down('ArrowUp');
     await page.keyboard.down('Space');
   }
-  await wait(1200);
+  // (the turn and the pull build up over a fraction of a second, and software
+  // rendering draws a frame or two a second: give the nose time to come up)
+  await page.waitForFunction(() => !window.__sky.me?.alive || window.__sky.me.body.pitch > 0.15, null, { timeout: 8000 }).catch(() => {});
   await snap('5-firing');
   const st = await page.evaluate(() => ({ y: window.__sky.me.body.y, pitch: window.__sky.me.body.pitch, alive: window.__sky.me.alive }));
   // the nose up (or, if a bot got us in that second, at least we were up when it did)

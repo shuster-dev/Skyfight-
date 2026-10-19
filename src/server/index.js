@@ -258,6 +258,7 @@ gameServer.define('arena_teams', ArenaRoom, { store, mode: 'teams', noBots: proc
 if (TESTING) {
   gameServer.define('arena_duel', ArenaRoom, { store, noBots: true, boss: false });
   gameServer.define('arena_teams_test', ArenaRoom, { store, mode: 'teams', noBots: true, boss: false });
+  gameServer.define('arena_mix_test', ArenaRoom, { store, boss: false });
   gameServer.define('arena_gift_test', ArenaRoom, { store, noBots: true, boss: false });
   gameServer.define('arena_pad_test', ArenaRoom, { store, noBots: true, boss: false, startHp: 0.4 });
   gameServer.define('arena_boss_test', ArenaRoom, { store, noBots: true, bossFirst: 300, bossHp: 60 });

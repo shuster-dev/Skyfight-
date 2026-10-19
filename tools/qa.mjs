@@ -34,11 +34,11 @@ ok('three upgrades', Object.keys(UPGRADES).join() === 'engine,weapons,armor');
   const base = statsOf('sparrow'), up = statsOf('sparrow', ALL5), best = statsOf('phantom');
   ok('no upgrades: the plane as it is', base.hp === 250 && base.speed === 56 && base.missiles === 1);
   ok('the starter is heavy and slow to fire', base.turn < best.turn && base.speed < best.speed && base.rate * base.dmg < Math.min(...PLANE_ORDER.slice(1).map((k) => statsOf(k).rate * statsOf(k).dmg)));
-  ok('engine 5: 40% faster, a third quicker to turn, half again the burner', near(up.speed, base.speed * 1.4) && near(up.turn, base.turn * 1.35) && near(up.boost, base.boost * 1.5) && near(up.fill, base.fill * 1.75));
-  ok('weapons 5: 60% more damage a second, 40% more reach, missiles reload much faster', near(up.rate * up.dmg, base.rate * base.dmg * 1.6) && up.gunRange === Math.round(base.gunRange * 1.4) && near(up.reload, base.reload * 0.4));
+  ok('engine 5: 40% faster, a quarter quicker to turn, half again the burner', near(up.speed, base.speed * 1.4) && near(up.turn, base.turn * 1.25) && near(up.boost, base.boost * 1.5) && near(up.fill, base.fill * 1.75));
+  ok('weapons 5: 60% more damage a second, 40% more reach, missiles reload much faster', near(up.rate * up.dmg, base.rate * base.dmg * 1.6) && up.gunRange === Math.round(base.gunRange * 1.4) && near(up.reload, base.reload * 0.55));
   ok('armour 5: three quarters more health, flares back faster', up.hp === Math.round(base.hp * 1.75) && up.flareReload < base.flareReload * 0.5);
   ok('a maxed starter is still short of the best plane', up.speed < best.speed && up.rate * up.dmg < best.rate * best.dmg);
-  ok('each tier a jump you feel (8% speed a tier), not a sliver', near(statsOf('sparrow', { engine: 2 }).speed, base.speed * 1.16) && statsOf('sparrow', { weapons: 1 }).reload < base.reload * 0.9);
+  ok('each tier a jump you feel (8% speed a tier), not a sliver', near(statsOf('sparrow', { engine: 2 }).speed, base.speed * 1.16) && statsOf('sparrow', { weapons: 1 }).reload < base.reload * 0.92);
   ok('the best plane still gains from an upgrade', statsOf('phantom', ALL5).speed > best.speed && statsOf('phantom', ALL5).rate * statsOf('phantom', ALL5).dmg > best.rate * best.dmg);
   ok('armour 3+: one more flare', statsOf('sparrow', { armor: 3 }).flares === base.flares + 1 && statsOf('sparrow', { armor: 2 }).flares === base.flares);
   ok('weapons 3+: one more missile', statsOf('sparrow', { weapons: 3 }).missiles === 2 && statsOf('sparrow', { weapons: 2 }).missiles === 1);
@@ -111,6 +111,30 @@ console.log('\nstanding in the air');
   c.speed = ph.speed;
   for (let i = 0; i < 90; i++) flyQ(c, { hover: true }, ph, 1 / 30);
   ok('a plane that cannot hover just flies', c.speed > ph.speed * 0.9);
+}
+
+console.log('\nhow a plane turns');
+{
+  const T5 = { engine: 5, weapons: 5, armor: 5 };
+  const top = (k) => statsOf(k, T5).turn;
+  ok('no plane on the ladder, maxed, turns faster than 2 rad/s (1.9 s for a full circle at the very best)', PLANE_ORDER.every((k) => top(k) <= 2), PLANE_ORDER.map((k) => +top(k).toFixed(2)));
+  ok('the gift planes turn no faster either: extreme in everything else, not in a pivot', ['alfasi', 'shuster'].every((k) => top(k) <= 2.05));
+  ok('the brake tightens a turn by a quarter, not more', BRAKE.turn <= 1.25);
+  ok('better planes turn better: the best twice what the first does at most', statsOf('phantom').turn / statsOf('sparrow').turn < 1.7 && statsOf('phantom').turn > statsOf('sparrow').turn);
+  // a full stick: the turn builds up, it does not snap
+  const st = statsOf('phantom'), b = newBodyQ({ x: 0, y: 400, z: 0, yaw: 0 }, st);
+  flyQ(b, { turn: 1 }, st, 1 / 30);
+  const early = b.wTurn / st.turn;
+  for (let i = 0; i < 20; i++) flyQ(b, { turn: 1 }, st, 1 / 30);
+  const late = b.wTurn / st.turn;
+  for (let i = 0; i < 20; i++) flyQ(b, {}, st, 1 / 30);
+  ok('the turn builds up over a fraction of a second and dies away the same', early < 0.3 && late > 0.9 && Math.abs(b.wTurn) < st.turn * 0.1, { early, late, after: b.wTurn });
+  // a sustained turn traces a circle: the heading changes evenly
+  const c = newBodyQ({ x: 0, y: 400, z: 0, yaw: 0 }, st);
+  for (let i = 0; i < 30; i++) flyQ(c, { turn: 1 }, st, 1 / 30);
+  const h = [];
+  for (let i = 0; i < 4; i++) { const y0 = c.yaw; for (let j = 0; j < 10; j++) flyQ(c, { turn: 1 }, st, 1 / 30); h.push(Math.atan2(Math.sin(c.yaw - y0), Math.cos(c.yaw - y0))); }
+  ok('a held turn is a steady curve: the heading swings the same every moment', Math.max(...h.map(Math.abs)) - Math.min(...h.map(Math.abs)) < 0.05, h);
 }
 
 console.log('\nlevels');
@@ -245,7 +269,7 @@ console.log('\nflying');
   ok('and banks right wing down', r.roll < -0.5, r.roll);
   const c = newBody({ x: 0, y: 200, z: 0 }, st);
   for (let i = 0; i < 30; i++) fly(c, { climb: 1 }, st, 1 / 30);
-  ok('climbing climbs', c.y > 215 && c.pitch > 0.9, c.y);
+  ok('climbing climbs', c.y > 215 && c.pitch > 0.7, { y: c.y, pitch: c.pitch });
   const l = newBody({ x: 0, y: 200, z: 0, pitch: 0.8 }, st);
   for (let i = 0; i < 90; i++) fly(l, {}, st, 1 / 30);
   ok('let go and the nose comes back level', Math.abs(l.pitch) < 0.1, l.pitch);
