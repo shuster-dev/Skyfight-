@@ -15,13 +15,15 @@ import { Bomber } from '../boss.js';
 import { normalize, payKill, view } from '../pilot.js';
 import { GUNS, GUN_ORDER, MISSILES, MISSILE_ORDER, PAINT_ORDER, PLANES, PLANE_ORDER, UPGRADE_ORDER, displayName, levelOf, statsOf, tiersOf, killReward } from '../../shared/planes.js';
 import { ARENA, hitsSolid, spawnPoint, surfaceAt, HEAL, HEALS, healAt } from '../../shared/arena.js';
-import { Q, fly, forward, newBody, plausibleMove } from '../../shared/flight.js';
+import { Q, fly, forward, newBody } from '../../shared/flight.js';
 import { ASSIST_SHARE, CREDIT_MS, FLARE, GUN, MISSILE, RAM, REPAIR, RESPAWN, ramDamage, aimDir, closestOn, DODGE, dodgeChance, gunTarget, missileHurt, offNose, pickTarget, segmentHit, steerMissile } from '../../shared/combat.js';
 
 const TICK_MS = 1000 / 30;
 const SNAP_EVERY = 2;          // 15 snapshots a second
 const MAX_POSES_PER_SEC = 40;
 const IDLE_MS = 20000;
+/** Seconds a dropped pilot's plane waits for them to reconnect. */
+const RECONNECT_S = 20;
 const BOT_NAMES = ['נץ', 'עיט', 'ברק', 'סערה', 'שחף', 'רעם', 'Falcon', 'Ghost', 'Raven', 'Blaze', 'Nomad', 'Hawk', 'Comet', 'Storm'];
 /** How many planes the room wants in the air; bots make up the difference. */
 /** Every sky has this many planes: bots fill what people do not. Teams are half each. */
@@ -132,7 +134,18 @@ export class ArenaRoom extends Room {
     for (const q of this.planes.values()) if (q !== p && q.pilot?.friends?.includes(p.uid)) this.sendTo(q, 'friendIn', { name: p.name });
   }
 
-  onLeave(client) {
+  async onLeave(client, consented) {
+    const key0 = this.bySession.get(client.sessionId), p0 = key0 && this.planes.get(key0);
+    // dropped, not gone (a phone between masts, a tunnel): the plane waits a
+    // little for its pilot to come back to it
+    if (p0 && !consented && !p0.kicked) {
+      try {
+        p0.away = true;
+        await this.allowReconnection(client, RECONNECT_S);
+        p0.away = false; p0.poseAt = Date.now(); p0.moveBudget = undefined;
+        return;
+      } catch { p0.away = false; /* not back in time: it leaves */ }
+    }
     const key = this.bySession.get(client.sessionId);
     this.bySession.delete(client.sessionId);
     const p = key && this.planes.get(key);
@@ -198,7 +211,7 @@ export class ArenaRoom extends Room {
     p.shieldUntil = this.now + RESPAWN.shield * 1000;
     p.ammo = p.stats.missiles; p.reloadT = 0; p.flares = p.stats.flares; p.flareT = 0;
     p.damagers.clear(); p.lastHurt = 0;
-    p.poseAt = Date.now();
+    p.poseAt = Date.now(); p.moveBudget = undefined;
     if (p.bot) p.bot.target = '', p.bot.think = 0;
     const c = p.sid && this.clients.find((x) => x.sessionId === p.sid);
     c && c.send('spawn', { x: p.x, y: p.y, z: p.z, yaw: p.yaw, pitch: 0, shield: RESPAWN.shield, hp: p.hp, ammo: p.ammo, flares: p.flares });
@@ -217,27 +230,36 @@ export class ArenaRoom extends Room {
     if (![x, y, z, yaw, pitch, roll, speed].every(Number.isFinite)) return;
     // the wall clock, not the tick's: two poses can land within one tick
     const now = Date.now();
-    const dt = Math.max(1 / 30, (now - p.poseAt) / 1000);
-    const next = { x, y, z };
-    if (!plausibleMove(p, next, Math.min(dt, 1.5), p.stats) || Math.hypot(x, z) > ARENA.radius + 160 || y > ARENA.ceiling + 5) {
+    // how far it may have come: a budget of distance that fills while time
+    // passes (at its top speed and a third, plus the 12 m a pose the old
+    // per-pose check allowed at 20 a second) and that each pose spends. A
+    // phone's network holds poses back and lets them go in a bunch; the time
+    // between them was still flown, so a bunch is not a cheat.
+    const fast = p.stats.boost * 1.35 + 240, cap = fast * 1.5;
+    p.moveBudget = Math.min(cap, (p.moveBudget ?? cap) + fast * Math.min(1.5, (now - p.poseAt) / 1000));
+    p.poseAt = now;
+    const d = Math.hypot(x - p.x, y - p.y, z - p.z);
+    if (d > p.moveBudget + 12 || Math.hypot(x, z) > ARENA.radius + 160 || y > ARENA.ceiling + 5) {
       // not something that plane could have flown: put it back where it was
-      if (process.env.DEBUG_POSE) console.log('[fix]', p.key, { from: [p.x, p.y, p.z], to: [x, y, z], dt });
-      if (++p.strikes > 30) return client.leave(4001);
+      if (process.env.DEBUG_POSE) console.log('[fix]', p.key, { from: [p.x, p.y, p.z], to: [x, y, z], d, budget: p.moveBudget });
+      if (++p.strikes > 60) return p.kicked = true, client.leave(4001);
       client.send('fix', { x: p.x, y: p.y, z: p.z, yaw: p.yaw, pitch: p.pitch });
-      p.poseAt = now;
       return;
     }
-    p.strikes = Math.max(0, p.strikes - 0.2);
-    const k = 1 / dt;
-    p.vel.x = (x - p.x) * k; p.vel.y = (y - p.y) * k; p.vel.z = (z - p.z) * k;
+    p.moveBudget -= d;
+    p.strikes = Math.max(0, p.strikes - 0.5);
+    // its velocity from the way it points and its speed, not from the jump
+    // between two poses (a bunch of them would make it look like a rocket,
+    // and every gun leading it would miss)
+    const sp = Math.max(0, Math.min(p.stats.boost * 1.1, speed)), fv = forward(yaw, pitch);
+    p.vel.x = fv.x * sp; p.vel.y = fv.y * sp; p.vel.z = fv.z * sp;
     p.x = x; p.y = y; p.z = z;
     p.yaw = yaw; p.pitch = Math.max(-1.58, Math.min(1.58, pitch)); p.roll = roll;
     // the attitude, any way up (loops): as sent, or from the angles
     p.q = [qx, qy, qz, qw].every(Number.isFinite) && Math.abs(Math.hypot(qx, qy, qz, qw) - 1) < 0.05 ? { x: qx, y: qy, z: qz, w: qw } : null;
-    p.speed = Math.max(0, Math.min(p.stats.boost * 1.1, speed));
+    p.speed = sp;
     p.firing = !!(flags & 1);
     p.boosting = !!(flags & 2);
-    p.poseAt = now;
     // into something solid (a little slack: the client's own check is first)
     const into = hitsSolid(x, y + 1.5, z, 0.5);
     if (into) this.down(p, '', 'crash', into);
@@ -258,7 +280,7 @@ export class ArenaRoom extends Room {
         // a pilot whose screen has gone quiet stops shooting, and after a
         // while is sent back to the hangar rather than left hanging there
         p.firing = false;
-        if (this.now - p.poseAt > IDLE_MS) { this.clients.find((c) => c.sessionId === p.sid)?.leave(4002); continue; }
+        if (!p.away && this.now - p.poseAt > IDLE_MS) { const c = this.clients.find((c) => c.sessionId === p.sid); if (c) p.kicked = true, c.leave(4002); continue; }
       }
       this.heading(p);
       this.repair(p);

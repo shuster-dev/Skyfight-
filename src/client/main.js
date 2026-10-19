@@ -835,9 +835,42 @@ function hook(room) {
   room.onMessage('down', onDown);
   room.onMessage('reward', onReward);
   room.onLeave((code) => {
-    const why = code === 4002 ? 'נותקת מהזירה כי לא טסת זמן מה' : code === 4000 ? 'נכנסת מחלון אחר' : '';
+    if (room !== S.room) return; // an old room, already replaced
+    const why = code === 4002 ? 'נותקת מהזירה כי לא טסת זמן מה' : code === 4000 ? 'נכנסת מחלון אחר' : code === 4001 ? 'נותקת: המיקום שלך לא הסתנכרן' : '';
+    // the line dropped (not us, not the room sending us off): back in, not out
+    if (!S.leaving && !why && code !== 1000) return void rejoin(room);
     leaveSky(S.leaving ? '' : why || (code > 1000 ? 'החיבור לשרת נפל' : ''));
   });
+}
+
+/**
+ * The connection dropped mid-fight. First, back into the same room: the
+ * plane waits there for us (20 s). If the room is gone (the server
+ * restarted), into a fresh one, straight back in the air. Only if neither
+ * works, the hangar.
+ */
+async function rejoin(old) {
+  if (S.rejoining) return;
+  S.rejoining = true;
+  S.room = null; // nothing more to send on a dead line
+  toast('החיבור נפל — מתחברים מחדש…', 'bad', 'net');
+  const token = old.reconnectionToken;
+  for (let i = 0; i < 8 && S.mode === 'air' && !S.leaving; i++) {
+    try {
+      const room = await net.client.reconnect(token);
+      S.room = room;
+      hook(room);
+      S.rejoining = false;
+      toast('חזרת לקרב', 'lvl', 'net');
+      return;
+    } catch { await new Promise((r) => setTimeout(r, 2000)); }
+  }
+  S.rejoining = false;
+  if (S.mode !== 'air' || S.leaving) return;
+  // the room is gone: a new one, and up again
+  await leaveSky('');
+  toast('השרת התחדש — ממריאים שוב', 'lvl', 'net');
+  launch();
 }
 
 const near = (p) => Math.max(0.15, 1 - camera.position.distanceTo(p) / 900);
