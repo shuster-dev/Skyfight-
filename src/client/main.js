@@ -21,7 +21,7 @@ const ERR = {
   offline: 'אין חיבור לשרת — בדקו את האינטרנט', bad_name: 'שם בין 2 ל־14 תווים, אותיות ומספרים בלבד', bad_login: 'שם משתמש או סיסמה שגויים',
   username_taken: 'השם הזה כבר תפוס', invalid_username: 'שם משתמש: 3–16 אותיות אנגלית קטנות ומספרים', invalid_password: 'סיסמה: לפחות 4 תווים',
   bad_code: 'כותבים שם#מספר, כמו מאיר#1', no_such_pilot: 'אין טייס כזה — בדקו את השם והמספר', self: 'אי אפשר להוסיף את עצמכם',
-  already_friends: 'כבר חברים', friends_full: 'רשימת החברים מלאה',
+  already_friends: 'כבר חברים', friends_full: 'רשימת החברים מלאה', name_fixed: 'השם כבר קבוע — הוא הקוד שלך לחברים',
   no_neon: 'צריך את קוד הניאון', no_such_gift: 'אין קוד כזה', gift_used: 'כבר מימשת את הקוד הזה', gift_only: 'המטוס הזה רק בקוד מתנה',
   not_admin: 'רק לאדמין', bad_gold: 'כמות זהב לא תקינה', bad_level: 'רמה בין 1 ל־30', no_such_plane: 'אין מטוס כזה', nothing_to_do: 'לא נבחר שינוי',
   gold: 'אין מספיק זהב', level: 'צריך רמה גבוהה יותר', too_many_requests: 'יותר מדי ניסיונות — חכו רגע', no_pilot: 'קודם בוחרים שם',
@@ -128,23 +128,27 @@ async function boot() {
 }
 
 /**
- * The front door: a newcomer (a guest) makes a pilot and an account in one go
- * — a name for the sky, a username and a password — and goes straight to the
- * hangar with a code of their own. A saved pilot just goes in.
+ * The front door: a newcomer gives a name, and that is the pilot for good —
+ * name#number, a code friends can add, kept on this device with nothing to
+ * log in to. A pilot who has one just goes in.
  */
 function titleForm() {
-  const guest = S.account.guest;
-  show('#title-acct', guest);
-  show('#btn-have', guest);
-  $('#btn-go').textContent = guest ? 'יצירת טייס והמשך' : 'להאנגר';
-  if (S.pilot.name) $('#in-name').value = S.pilot.name;
+  const named = !!(S.pilot.name && S.pilot.tag);
+  const inp = $('#in-name');
+  if (S.pilot.name) inp.value = S.pilot.name;
+  inp.readOnly = named;
+  inp.classList.toggle('fixed', named);
+  $('#title-code').innerHTML = named ? `הקוד שלך לחברים: <b dir="auto">${esc(displayName(S.pilot))}</b>` : '';
+  show('#title-code', named);
+  show('#btn-have', S.account.guest);
+  $('#btn-go').textContent = named ? 'להאנגר' : 'המראה';
 }
 
 // a friend's link (?f=name#number): once in, the two of you are friends
 S.pendingFriend = new URLSearchParams(location.search).get('f') || '';
 async function addPendingFriend() {
   const code = S.pendingFriend;
-  if (!code || S.account.guest) return;
+  if (!code || !S.pilot.tag) return;
   S.pendingFriend = '';
   const q = new URLSearchParams(location.search); q.delete('f');
   history.replaceState(null, '', location.pathname + (q.toString() ? `?${q}` : ''));
@@ -173,15 +177,10 @@ $('#title-form').addEventListener('submit', async (e) => {
   const name = cleanCallsign($('#in-name').value);
   $('#title-err').textContent = '';
   if (!name) return ($('#title-err').textContent = ERR.bad_name);
-  const guest = S.account.guest;
-  const username = $('#in-newuser').value.trim().toLowerCase(), password = $('#in-newpass').value;
-  if (guest && !/^[a-z][a-z0-9_]{2,15}$/.test(username)) return ($('#title-err').textContent = ERR.invalid_username), $('#in-newuser').focus();
-  if (guest && password.length < 4) return ($('#title-err').textContent = ERR.invalid_password), $('#in-newpass').focus();
   const btn = $('#btn-go');
   btn.disabled = true;
   try {
-    if (name !== S.pilot.name) S.pilot = (await net.api('/api/pilot/name', { name })).pilot;
-    if (guest) took(await net.api('/api/register', { username, password })), $('#in-newpass').value = '';
+    if (name !== S.pilot.name || !S.pilot.tag) S.pilot = (await net.api('/api/pilot/name', { name })).pilot, titleForm();
     showHangar();
     addPendingFriend();
   } catch (x) {
@@ -195,12 +194,12 @@ $('#btn-have').addEventListener('click', () => openLogin('login'));
 let loginMode = 'login';
 function openLogin(mode) {
   loginMode = mode;
-  $('#login-title').textContent = mode === 'login' ? 'התחברות לטייס שמור' : 'שמירת ההתקדמות';
+  $('#login-title').textContent = mode === 'login' ? 'התחברות לטייס שמור' : 'גיבוי לכל מכשיר';
   $('#btn-login').textContent = mode === 'login' ? 'התחבר' : 'שמור';
   $('#in-pass').setAttribute('autocomplete', mode === 'login' ? 'current-password' : 'new-password');
   $('#login-note').textContent = mode === 'login'
     ? 'אחרי ההתחברות תמשיכו בדיוק מאיפה שעצרתם.'
-    : 'בוחרים שם משתמש וסיסמה — וההתקדמות נשמרת. כך אפשר להמשיך מכל מכשיר.';
+    : 'הטייס כבר שמור במכשיר הזה. שם משתמש וסיסמה — רק אם רוצים להמשיך גם ממכשיר אחר.';
   $('#login-err').textContent = '';
   show('#sheet-login');
   setTimeout(() => $('#in-user').focus(), 50);
@@ -228,7 +227,7 @@ function openSettings() {
   $('#set-invert').checked = controls.invert;
   $('#set-quality').value = Q.pick;
   $('#set-sky').value = world.time;
-  $('#set-account').textContent = S.account.guest ? 'הטייס עדיין לא שמור — שמרו אותו בהאנגר.' : `מחובר כ־${S.account.username}`;
+  $('#set-account').textContent = S.account.guest ? 'הטייס שמור במכשיר הזה. כדי להמשיך גם ממכשיר אחר — בחרו שם משתמש וסיסמה בהאנגר.' : `מחובר כ־${S.account.username}`;
   show('#btn-logout', !S.account.guest);
   show('#sheet-settings');
 }
@@ -600,8 +599,7 @@ async function renderBoard() {
     const { rows } = await net.api('/api/leaderboard');
     const mine = displayName(S.pilot);
     // only saved pilots are on the board: a guest is told how to get there
-    const hint = S.account.guest ? '<div class="note" style="text-align:right">רק טייסים שמורים מופיעים בדירוג. שמרו את ההתקדמות כדי להיכנס אליו — עם מספר משלכם, כמו מאיר#1.</div>' : '';
-    el.innerHTML = hint + `<table>${rows.map((r) => `<tr class="${r.name === mine ? 'me' : ''}"><td class="num">${r.rank}</td><td>${esc(r.name)}</td><td>רמה <span class="num">${r.level}</span></td><td><span class="num">${r.kills}</span> הפלות</td></tr>`).join('') || '<tr><td>עוד אין אף אחד — תהיו הראשונים</td></tr>'}</table>`;
+    el.innerHTML = `<table>${rows.map((r) => `<tr class="${r.name === mine ? 'me' : ''}"><td class="num">${r.rank}</td><td>${esc(r.name)}</td><td>רמה <span class="num">${r.level}</span></td><td><span class="num">${r.kills}</span> הפלות</td></tr>`).join('') || '<tr><td>עוד אין אף אחד — תהיו הראשונים</td></tr>'}</table>`;
   } catch (x) { el.innerHTML = `<div class="note">${err(x)}</div>`; }
 }
 

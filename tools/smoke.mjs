@@ -45,11 +45,6 @@ async function run(label, viewport, mobile) {
   await page.click('#btn-go');
   ok('a one-letter name is refused', (await page.textContent('#title-err')).length > 0);
   await page.fill('#in-name', label === 'phone' ? 'טייס' : 'Ace');
-  ok('a newcomer makes an account at the door: a username and a password', await page.isVisible('#in-newuser') && await page.isVisible('#in-newpass') && /יצירת טייס/.test(await page.textContent('#btn-go')));
-  await page.click('#btn-go');
-  ok('no username, no way in', /שם משתמש/.test(await page.textContent('#title-err')) && await page.isVisible('#screen-title'));
-  await page.fill('#in-newuser', `smoke${label}${Date.now() % 1e6}`);
-  await page.fill('#in-newpass', 'pass1234');
   await page.click('#btn-go');
   await page.waitForSelector('#screen-hangar:not(.hidden)');
   await wait(1200);
@@ -83,7 +78,8 @@ async function run(label, viewport, mobile) {
   await page.click('[data-tab="planes"]');
   await wait(1500);
   ok('back on the planes, no weapon left standing on the pad', await page.evaluate(() => window.__sky.hangarArms()) === 0);
-  ok('the new pilot is saved, with a code of their own: nothing left to save', await page.evaluate(() => !window.__sky.account.guest && !!window.__sky.pilot.tag) && !(await page.isVisible('#btn-save')));
+  ok('a name, and nothing else: the pilot has a code of their own at once', await page.evaluate(() => !!window.__sky.pilot.tag));
+  ok('a username and a password are only a backup, offered but not asked', await page.isVisible('#btn-save'));
   await page.click('[data-tab="friends"]');
   ok('the friends page: your code, and a link to the game to share', await page.waitForFunction(() => /#\d+/.test(document.querySelector('#f-me')?.textContent || '') && !document.querySelector('#f-share').classList.contains('hidden'), null, { timeout: 10000 }).then(() => true, () => false));
   await snap('3d-friends');
@@ -172,6 +168,12 @@ async function run(label, viewport, mobile) {
   await page.click('#menu-btn');
   await page.waitForSelector('#screen-hangar:not(.hidden)');
   ok('back in the hangar', true);
+  // come back another day: the same pilot, the name fixed, straight in
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForSelector('#btn-go:not([disabled])');
+  ok('back on this device: the same pilot, the name fixed, the code shown, no login', await page.evaluate(() => document.querySelector('#in-name').readOnly && /#\d+/.test(document.querySelector('#title-code').textContent)) && (await page.textContent('#btn-go')) === 'להאנגר');
+  await page.click('#btn-go');
+  await page.waitForSelector('#screen-hangar:not(.hidden)');
   ok('no console errors', errors.length === 0, errors);
   await ctx.close();
 }

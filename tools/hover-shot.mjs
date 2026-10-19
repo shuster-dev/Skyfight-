@@ -18,7 +18,6 @@ for (const [name, vp] of [['landscape', { width: 844, height: 390 }], ['portrait
   await page.waitForSelector('#btn-go:not([disabled])', { timeout: 60000 });
   await page.evaluate(() => localStorage.setItem('sky.coached', '9'));
   await page.fill('#in-name', 'שוסטר');
-  await page.evaluate(() => { const u = document.querySelector('#in-newuser'); if (u) u.value = 'p' + Math.random().toString(36).slice(2, 10); const p = document.querySelector('#in-newpass'); if (p) p.value = 'pass1234'; });
   await page.click('#btn-go');
   await page.waitForSelector('#screen-hangar:not(.hidden)', { timeout: 60000 });
   await page.fill('#gift-code', 'SHUSTER');

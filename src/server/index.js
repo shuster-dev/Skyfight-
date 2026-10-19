@@ -59,12 +59,12 @@ const pilotOf = async (id) => {
   return normalize(p);
 };
 /**
- * A saved pilot's number: given the first time a saved account has a name,
- * and again when the name changes (מאיר#1 who becomes דני is a new דני#n).
- * Guests have none, and are not on the board.
+ * A pilot's number: given the moment the pilot first has a name, guest or
+ * saved, so מאיר is מאיר#1 from the start and friends can add them at once.
+ * The name is for good after that: the code does not change under friends.
  */
 async function tagPilot(user, p) {
-  if (user.guest || !p.name || (p.registered && p.tag && p.tagName === p.name)) return p;
+  if (!p.name || (p.registered && p.tag && p.tagName === p.name)) return p;
   p.registered = true;
   if (!p.tag || p.tagName !== p.name) p.tag = await store.nextTag(p.name), p.tagName = p.name;
   p.nameKey = tagKey(p.name);
@@ -87,9 +87,10 @@ const me = async (user) => {
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 
 // --- accounts ---------------------------------------------------------------
-// No form to start: a guest account is made on the first visit and kept by a
-// token on the device. Choosing a username and a password later keeps the
-// same pilot — that is "saving".
+// No form to start: an account is made on the first visit and kept by a
+// token on the device; the first name given makes the pilot name#number for
+// good. Choosing a username and a password later keeps the same pilot — for
+// coming in from another device.
 app.post('/api/guest', newcomer.mw(), async (req, res) => {
   const user = await store.createUser({ id: crypto.randomUUID(), guest: true, created: Date.now() });
   await store.savePilot(newPilot(user.id));
@@ -138,6 +139,8 @@ app.post('/api/pilot/name', requireAuth, async (req, res) => {
   const name = cleanCallsign(req.body?.name);
   if (!name) return res.status(400).json({ error: 'bad_name' });
   const p = await pilotOf(req.user.id);
+  // a pilot keeps the name it was given: it is their code, friends know them by it
+  if (p.tag && p.name && p.name !== name) return res.status(409).json({ error: 'name_fixed' });
   p.name = name;
   await store.savePilot(p);
   await tagPilot(req.user, p);

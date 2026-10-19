@@ -53,7 +53,10 @@ try {
   ok('a guest is made with a token and a fresh pilot', g.token && g.guest && g.pilot.level === 1 && g.pilot.plane === 'sparrow', g);
   ok('without a name the arena says no', await (async () => { try { await pilot(g.token); return false; } catch { return true; } })());
   ok('a bad callsign is refused', (await api('/api/pilot/name', { name: '<x>' }, g.token)).error === 'bad_name');
-  ok('a callsign is set', (await api('/api/pilot/name', { name: 'צייד' }, g.token)).pilot?.name === 'צייד');
+  const named = await api('/api/pilot/name', { name: 'צייד' }, g.token);
+  ok('a callsign is set, and with it a number: a code friends can add at once', named.pilot?.name === 'צייד' && named.pilot.tag === 1, named.pilot);
+  ok('the name is for good: no renaming once you have a code', (await api('/api/pilot/name', { name: 'אחר' }, g.token)).error === 'name_fixed');
+  ok('naming it the same again is fine', (await api('/api/pilot/name', { name: 'צייד' }, g.token)).pilot?.tag === 1);
   ok('a plane above the level is refused', (await api('/api/pilot/buy-plane', { plane: 'hornet' }, g.token)).error === 'level');
   ok('no token, no hangar', (await api('/api/me')).status === 401);
 
@@ -192,7 +195,7 @@ try {
   }
 
   console.log('\nsaving');
-  ok('guests are not on the board', ((await api('/api/leaderboard')).rows || []).length === 0);
+  ok('pilots are on the board from the start, by name and number', ((await api('/api/leaderboard')).rows || []).some((r) => r.name === 'צייד#1'));
   const saved = await api('/api/register', { username: 'hunter1', password: 'pass1' }, g.token);
   ok('a guest saves with a username and keeps the pilot', saved.pilot?.kills === 1);
   ok('a saved pilot gets a number for the name', saved.pilot?.tag === 1, saved.pilot);
@@ -201,7 +204,7 @@ try {
   const back = await api('/api/login', { username: 'hunter1', password: 'pass1' });
   ok('a login from scratch finds the same pilot', back.pilot?.name === 'צייד' && back.pilot.kills === 1 && back.pilot.xp === pay.xp, back);
   const lb = await api('/api/leaderboard?kind=kills');
-  ok('the leaderboard has them, by name and number', lb.rows?.[0]?.name === 'צייד#1' && lb.rows.length === 1, lb);
+  ok('the leaderboard has them, by name and number', lb.rows?.[0]?.name === 'צייד#1', lb);
   // a second צייד: the next number, and both on the board
   const g2 = await api('/api/guest', {});
   await api('/api/pilot/name', { name: 'צייד' }, g2.token);
@@ -209,8 +212,7 @@ try {
   ok('the same name saved again is #2', twin.pilot?.tag === 2, twin.pilot);
   const lb2 = await api('/api/leaderboard');
   ok('two pilots of one name are told apart', ['צייד#1', 'צייד#2'].every((n) => lb2.rows.some((r) => r.name === n)), lb2.rows);
-  const renamed = await api('/api/pilot/name', { name: 'נשר' }, twin.token);
-  ok('a new name gets its own number', renamed.pilot?.name === 'נשר' && renamed.pilot.tag === 1, renamed.pilot);
+  ok('saving keeps the code it had', twin.pilot?.name === 'צייד' && twin.pilot.tag === 2);
 
   console.log('\nthe admin');
   {
@@ -366,12 +368,12 @@ try {
   console.log('\nfriends');
   ok('a code must be name#number', (await api('/api/friends/add', { code: 'צייד' }, twin.token)).error === 'bad_code');
   ok('a pilot who is not there is not found', (await api('/api/friends/add', { code: 'אין#77' }, twin.token)).status === 404);
-  ok('you are not your own friend', (await api('/api/friends/add', { code: 'נשר#1' }, twin.token)).error === 'self');
+  ok('you are not your own friend', (await api('/api/friends/add', { code: 'צייד#2' }, twin.token)).error === 'self');
   const add = await api('/api/friends/add', { code: 'צייד#1' }, twin.token);
   ok('a friend is added by name and number', add.ok && add.friend?.code === 'צייד#1', add);
   ok('and only once', (await api('/api/friends/add', { code: 'צייד#1' }, twin.token)).error === 'already_friends');
   const mine = await api('/api/friends', null, back.token);
-  ok('both ways: the other has them too, and their own code', mine.me === 'צייד#1' && mine.rows?.[0]?.code === 'נשר#1', mine);
+  ok('both ways: the other has them too, and their own code', mine.me === 'צייד#1' && mine.rows?.[0]?.code === 'צייד#2', mine);
   ok('someone in the hangar shows as there', mine.rows?.[0]?.state === 'hangar', mine.rows);
   const fa = await pilot(back.token, 'arena_duel');
   await until(() => fa.key, 3000);
@@ -383,7 +385,7 @@ try {
   for (const type of ['welcome', 'spawn', 's', 'roster']) fj.onMessage(type, () => {});
   fj.send('hello');
   ok('join puts you in their room', fj.roomId === row.room);
-  ok('and they hear that you came', await until(() => got(fa, 'friendIn').some((e) => e.m.name === 'נשר#1'), 3000), got(fa, 'friendIn'));
+  ok('and they hear that you came', await until(() => got(fa, 'friendIn').some((e) => e.m.name === 'צייד#2'), 3000), got(fa, 'friendIn'));
   await fj.leave(); await fa.room.leave();
   await wait(200);
   ok('landed again: back in the hangar', (await api('/api/friends', null, twin.token)).rows?.[0]?.state === 'hangar');
