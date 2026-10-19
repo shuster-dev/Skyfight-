@@ -86,6 +86,33 @@ console.log('\nthe gift fighter, and neon');
   ok('kept through a save and a load', back.neon && back.neonOf.sparrow && !back.neonOf.shuster);
 }
 
+console.log('\nstanding in the air');
+{
+  const st = statsOf('shuster');
+  const b = newBodyQ({ x: 0, y: 300, z: 0, yaw: 0 }, st);
+  b.speed = st.speed;
+  for (let i = 0; i < 120; i++) flyQ(b, { hover: true }, st, 1 / 30);
+  const x0 = b.x, z0 = b.z, y0 = b.y;
+  for (let i = 0; i < 90; i++) flyQ(b, { hover: true }, st, 1 / 30);
+  ok('switched to hover, its speed bleeds away and it stands still', b.speed < 2 && Math.hypot(b.x - x0, b.z - z0) < 5 && Math.abs(b.y - y0) < 1, { speed: b.speed, moved: Math.hypot(b.x - x0, b.z - z0) });
+  for (let i = 0; i < 60; i++) flyQ(b, { hover: true, boost: true }, st, 1 / 30);
+  ok('the burner lifts it straight up', b.y > y0 + 20 && Math.hypot(b.x - x0, b.z - z0) < 6, b.y - y0);
+  const y1 = b.y;
+  for (let i = 0; i < 60; i++) flyQ(b, { hover: true, brake: true }, st, 1 / 30);
+  ok('the brake lets it down', b.y < y1 - 10);
+  const yaw0 = b.yaw;
+  for (let i = 0; i < 30; i++) flyQ(b, { hover: true, turn: 1 }, st, 1 / 30);
+  ok('the stick turns it where it stands', Math.abs(b.yaw - yaw0) > 1 && Math.hypot(b.x - x0, b.z - z0) < 8);
+  for (let i = 0; i < 60; i++) flyQ(b, { hover: true, climb: 1 }, st, 1 / 30);
+  ok('and tilts the nose to aim, not past a limit', b.pitch > 0.5 && b.pitch <= 0.76);
+  for (let i = 0; i < 90; i++) flyQ(b, {}, st, 1 / 30);
+  ok('switched off, it flies on again', b.speed > st.speed * 0.6);
+  const ph = statsOf('phantom'), c = newBodyQ({ x: 0, y: 300, z: 0, yaw: 0 }, ph);
+  c.speed = ph.speed;
+  for (let i = 0; i < 90; i++) flyQ(c, { hover: true }, ph, 1 / 30);
+  ok('a plane that cannot hover just flies', c.speed > ph.speed * 0.9);
+}
+
 console.log('\nlevels');
 ok('level 1 starts at 0', xpAt(1) === 0 && levelOf(0) === 1);
 ok('level 2 at the first step', levelOf(xpStep(1)) === 2 && levelOf(xpStep(1) - 1) === 1);

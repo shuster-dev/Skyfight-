@@ -136,6 +136,8 @@ export function newBodyQ(at, stats) {
  * b.roll as the bank to draw on top of it.
  */
 export function flyQ(b, input, stats, dt) {
+  if (stats.vtol && input.hover) return hoverQ(b, input, stats, dt);
+  b.hoverV = 0;
   const turn = clamp(+input.turn || 0), climb = clamp(+input.climb || 0);
   // the brake (not with the burner lit): slower, and the nose quicker
   b.braking = !!input.brake && !input.boost;
@@ -188,6 +190,36 @@ export function flyQ(b, input, stats, dt) {
   const hit = hitsSolid(b.x, b.y, b.z);
   if (hit) { b.hit = hit; return 'crash'; }
   return edge;
+}
+
+/**
+ * Standing in the air, nozzles down (a plane that has it: stats.vtol). The
+ * stick turns it where it stands and tilts the nose up and down to aim; the
+ * burner lifts it, the brake lets it down; what speed it had bleeds away.
+ */
+export const HOVER = { turn: 1.5, aim: 1.1, maxAim: 0.75, lift: 30, ease: 2.5, bleed: 1.6 };
+function hoverQ(b, input, stats, dt) {
+  const turn = clamp(+input.turn || 0), climb = clamp(+input.climb || 0);
+  b.braking = false; b.boosting = false;
+  b.yaw -= turn * HOVER.turn * dt;
+  b.pitch = clamp(b.pitch + climb * HOVER.aim * dt, -HOVER.maxAim, HOVER.maxAim);
+  b.q = Q.euler(b.yaw, b.pitch, 0);
+  b.roll += (-turn * 0.25 - b.roll) * Math.min(1, dt * 4);
+  // up on the burner, down on the brake, still between
+  const want = (input.boost ? HOVER.lift : 0) - (input.brake ? HOVER.lift : 0);
+  b.hoverV = (b.hoverV || 0) + (want - (b.hoverV || 0)) * Math.min(1, dt * HOVER.ease);
+  b.speed += (0 - b.speed) * Math.min(1, dt * HOVER.bleed);
+  b.fuel = clamp(b.fuel + (stats.fill || BOOST.fill) * dt, 0, 1);
+  const fx = -Math.sin(b.yaw), fz = -Math.cos(b.yaw);
+  b.x += fx * b.speed * dt;
+  b.z += fz * b.speed * dt;
+  b.y += b.hoverV * dt;
+  if (b.y > ARENA.ceiling) b.y = ARENA.ceiling;
+  const r2 = Math.hypot(b.x, b.z), wall = ARENA.radius + 150;
+  if (r2 > wall) { b.x *= wall / r2; b.z *= wall / r2; }
+  const hit = hitsSolid(b.x, b.y, b.z);
+  if (hit) { b.hit = hit; return 'crash'; }
+  return 'hover';
 }
 
 /** The attitude to draw: the flight attitude with the bank on top. */

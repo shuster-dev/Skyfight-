@@ -21,6 +21,7 @@ export class Controls {
       this.keys.add(e.code);
       if (e.code === 'KeyE' || e.code === 'KeyF') this.missileQueued = true;
       if (e.code === 'KeyQ' || e.code === 'KeyR') this.flareQueued = true;
+      if (e.code === 'KeyH' && this.canHover) this.setHover(!this.hover);
       if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
     });
     addEventListener('keyup', (e) => this.keys.delete(e.code));
@@ -78,6 +79,15 @@ export class Controls {
     hold('#btn-brake', 'brakeHeld');
     $('#btn-missile').addEventListener('pointerdown', (e) => { e.preventDefault(); this.missileQueued = true; });
     $('#btn-flare').addEventListener('pointerdown', (e) => { e.preventDefault(); this.flareQueued = true; });
+    // hover (a plane that can): a switch, not a hold
+    $('#btn-hover').addEventListener('pointerdown', (e) => { e.preventDefault(); this.setHover(!this.hover); });
+  }
+
+  /** Standing in the air, or flying: the plane says whether it can (canHover). */
+  setHover(on) {
+    this.hover = !!on && !!this.canHover;
+    $('#btn-hover').classList.toggle('on', this.hover);
+    this.onHover?.(this.hover);
   }
 
   lookStart(e) {
@@ -150,6 +160,7 @@ export class Controls {
       boost: this.boostHeld || k('ShiftLeft') || k('ShiftRight'),
       brake: this.brakeHeld || k('KeyB') || k('KeyC') || k('ControlLeft'),
       fire: this.fireHeld || k('Space'),
+      hover: !!this.hover,
       missile, flare,
     };
   }

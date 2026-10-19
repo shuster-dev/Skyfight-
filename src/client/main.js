@@ -30,6 +30,8 @@ const err = (e) => ERR[e?.code] || 'משהו השתבש — נסו שוב';
 
 const net = new Net();
 const controls = new Controls();
+// the hover switch: a word on the screen when it flips
+controls.onHover = (on) => S.mode === 'air' && toast(on ? 'ריחוף — טורבו למעלה, בלימה למטה' : 'טיסה', 'lvl', 'hover');
 const renderer = makeRenderer($('#game'));
 const world = makeWorld(renderer);
 const { scene, camera } = world;
@@ -730,6 +732,9 @@ function hook(room) {
     for (const r of m.roster) S.roster.set(r.key, r);
     const mesh = buildPlane(S.pilot.plane, S.pilot.paint, { gun: m.stats.gun, missile: m.stats.missile, neon: !!S.pilot.neonOf?.[S.pilot.plane] });
     scene.add(mesh);
+    controls.canHover = !!m.stats.vtol;
+    show('#btn-hover', controls.canHover);
+    controls.setHover(false);
     S.me = { stats: m.stats, alive: false, hp: m.stats.hp, ammo: m.stats.missiles, shieldUntil: 0, gunT: 0, gun: 0, mesh, body: null, reloadT: 0 };
     $('#hud-name').textContent = displayName(S.pilot);
     paintScore();
@@ -741,6 +746,7 @@ function hook(room) {
     S.camUp = new Vector3(0, 1, 0);
     me.alive = true; me.hp = m.hp; me.ammo = m.ammo; me.reloadT = 0; me.crashed = false; me.flares = m.flares ?? me.stats.flares; me.flareT = 0;
     me.shieldUntil = performance.now() + m.shield * 1000;
+    controls.setHover(false);
     coach();
     me.mesh.visible = true;
     // the camera starts behind, not wherever the last life ended
@@ -899,7 +905,7 @@ function onSnapshot(s) {
     const qa = qw !== undefined ? new Quaternion(qx / 1000, qy / 1000, qz / 1000, qw / 1000).normalize() : new Quaternion().setFromEuler(new Euler(pitch / 1000, yaw / 1000, roll / 1000, 'YXZ'));
     o.buf.push({ t: now, x: x / 10, y: y / 10, z: z / 10, q: qa, speed: spd / 10 });
     if (o.buf.length > 8) o.buf.shift();
-    o.hp = hp; o.alive = !!(flags & 1); o.firing = !!(flags & 2); o.boost = !!(flags & 4); o.shield = !!(flags & 8);
+    o.hp = hp; o.alive = !!(flags & 1); o.firing = !!(flags & 2); o.boost = !!(flags & 4); o.shield = !!(flags & 8); o.hover = !!(flags & 16);
   }
   for (const [k, o] of S.others) if (!seen.has(k)) { scene.remove(o.mesh); o.tag?.remove(); S.others.delete(k); }
   S.missiles = s.m.map(([id, x, y, z, yaw, pitch, target, speed]) => ({ id, x: x / 10, y: y / 10, z: z / 10, yaw: yaw / 1000, pitch: pitch / 1000, target, speed }));
@@ -1062,7 +1068,7 @@ function air(dt, time) {
     o.yaw = Math.atan2(-fv.x, -fv.z); o.pitch = Math.asin(MathUtils.clamp(fv.y, -1, 1)); o.speed = c.speed;
     const f = forward(o.yaw, o.pitch);
     o.vel = { x: f.x * c.speed, y: f.y * c.speed, z: f.z * c.speed };
-    animatePlane(o.mesh, dt, { boost: o.boost, speed: c.speed, time });
+    animatePlane(o.mesh, dt, { boost: o.boost, speed: c.speed, time, hover: o.hover });
     if (o.alive && o.firing) guns(o, o.mesh, PLANES[o.kind].rate, dt, false);
     if (o.alive && o.hp < 35) smoke(o, dt);
     // the shield after a respawn: a blink
@@ -1077,7 +1083,7 @@ function air(dt, time) {
     const dq = drawnQ(b);
     me.mesh.quaternion.set(dq.x, dq.y, dq.z, dq.w);
     me.mesh.visible = now > me.shieldUntil || Math.floor(time * 8) % 2 === 0;
-    animatePlane(me.mesh, dt, { boost: b.boosting, speed: b.speed, time, ammo: me.ammo, ammoMax: me.stats.missiles });
+    animatePlane(me.mesh, dt, { boost: b.boosting, speed: b.speed, time, ammo: me.ammo, ammoMax: me.stats.missiles, hover: input.hover });
     $('#btn-brake').classList.toggle('on', !!b.braking);
     if (input.missile && me.ammo > 0) S.room?.send('missile');
     if (input.flare && me.flares > 0) S.room?.send('flare');
@@ -1101,7 +1107,7 @@ function air(dt, time) {
     S.sendT += dt;
     if (S.sendT >= 0.05) {
       S.sendT = 0;
-      S.room?.send('pose', [r2(b.x), r2(b.y), r2(b.z), r3(b.yaw), r3(b.pitch), r3(b.roll), r2(b.speed), (input.fire ? 1 : 0) | (b.boosting ? 2 : 0), r3(dq.x), r3(dq.y), r3(dq.z), r3(dq.w)]);
+      S.room?.send('pose', [r2(b.x), r2(b.y), r2(b.z), r3(b.yaw), r3(b.pitch), r3(b.roll), r2(b.speed), (input.fire ? 1 : 0) | (b.boosting ? 2 : 0) | (input.hover ? 4 : 0), r3(dq.x), r3(dq.y), r3(dq.z), r3(dq.w)]);
       // stopped against something: say so with every pose until the room calls
       // it (its own check wants the plane inside the thing, and one stopped on
       // a roof sits a metre above it)
