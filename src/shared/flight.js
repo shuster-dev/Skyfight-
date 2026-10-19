@@ -23,7 +23,9 @@ export const PITCH_MAX = 1.25;
  * nose comes round `turn` times as fast — a tight turn, a U-turn onto a plane
  * chasing you, a way to let one overshoot.
  */
-export const BRAKE = { slow: 0.55, turn: 1.35, bleed: 2.0 };
+export const BRAKE = { slow: 0.55, turn: 1.25, bleed: 2.0 };
+/** How fast the turn and the pull build up and die away (1/s): a round turn, not a snap. */
+export const RAMP = 6;
 /** The burner: run dry (`min`), it lights again only once the tank is back to `relight`. */
 export const BOOST = { drain: 0.32, fill: 0.14, min: 0.08, relight: 0.25 };
 
@@ -145,9 +147,14 @@ export function flyQ(b, input, stats, dt) {
   let edge = '';
   let q = b.q;
   const right = Q.rot(q, 1, 0, 0), up = Q.rot(q, 0, 1, 0);
-  // the stick: about the wings to pitch, about the plane's up to turn
-  if (climb) q = Q.mul(Q.axis(right.x, right.y, right.z, climb * stats.climb * agile * dt), q);
-  if (turn) q = Q.mul(Q.axis(up.x, up.y, up.z, -turn * stats.turn * agile * dt), q);
+  // the stick: about the wings to pitch, about the plane's up to turn. The
+  // rates build up and die away over a fraction of a second, the way a
+  // plane rolls into a turn and out of it: a curve, not a pivot.
+  const k = Math.min(1, dt * RAMP);
+  b.wClimb = (b.wClimb || 0) + (climb * stats.climb * agile - (b.wClimb || 0)) * k;
+  b.wTurn = (b.wTurn || 0) + (turn * stats.turn * agile - (b.wTurn || 0)) * k;
+  if (Math.abs(b.wClimb) > 1e-4) q = Q.mul(Q.axis(right.x, right.y, right.z, b.wClimb * dt), q);
+  if (Math.abs(b.wTurn) > 1e-4) q = Q.mul(Q.axis(up.x, up.y, up.z, -b.wTurn * dt), q);
   let f = Q.rot(q, 0, 0, -1);
   // hands off: roll back upright, then bring the nose to the horizon
   if (!climb && !turn && Math.abs(f.y) < 0.97) {

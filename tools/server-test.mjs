@@ -81,7 +81,7 @@ try {
     Object.assign(solo.pose, got(solo, 'fix').at(-1).m);
     // the bots fight: in a while someone goes down (solo keeps its screen awake)
     const awake = setInterval(() => solo.pose && send(solo), 100);
-    ok('the bots fight (someone goes down)', await until(() => got(solo, 'down').length > 0, 40000));
+    ok('the bots fight (someone goes down)', await until(() => got(solo, 'down').length > 0, 60000));
     clearInterval(awake);
     await solo.room.leave();
   }
@@ -233,6 +233,30 @@ try {
     ok('nonsense is refused', (await api('/api/admin/edit', { code: 'צייד#1', plane: '__proto__' }, adm.token)).error === 'no_such_plane' && (await api('/api/admin/edit', { code: 'צייד#1', level: 99 }, adm.token)).error === 'bad_level' && (await api('/api/admin/edit', { code: 'nobody#9', gold: 1 }, adm.token)).status === 404);
     await api('/api/admin/edit', { code: 'צייד#1', level: 1, plane: 'sparrow' }, adm.token);
     await api('/api/pilot/plane', { plane: 'sparrow' }, back.token);
+  }
+
+  console.log('\nbots for everyone');
+  {
+    // a veteran (level 30) and someone who just started share a sky: each
+    // gets bots of their own level, and the bots pick fights their own size
+    const admin = (await api('/api/login', { username: 'meiradmin', password: 'pass9' })).token;
+    await api('/api/admin/edit', { code: 'צייד#1', level: 30 }, admin);
+    const fresh = await api('/api/guest', {}); await api('/api/pilot/name', { name: 'חדש' }, fresh.token);
+    const vet = await pilot(back.token, 'arena_mix_test');
+    const nw = await pilot(fresh.token, 'arena_mix_test');
+    await wait(4500); // the bots rearrange as the second person comes in
+    const rosterNow = () => got(nw, 'roster').at(-1)?.m || got(nw, 'welcome')[0]?.m.roster || [];
+    await until(() => rosterNow().filter((r) => r.bot).length === 8, 6000);
+    // a few more rounds of rearranging, a bot at a time as each goes down
+    for (let i = 0; i < 12; i++) {
+      const bl = rosterNow().filter((r) => r.bot).map((r) => r.level);
+      if (bl.filter((l) => l <= 4).length >= 3 && bl.filter((l) => l >= 25).length >= 3) break;
+      await wait(1000);
+    }
+    const lv = rosterNow().filter((r) => r.bot).map((r) => r.level).sort((x, y) => x - y);
+    ok('the newcomer has bots their own level, the veteran theirs', lv.filter((l) => l <= 4).length >= 3 && lv.filter((l) => l >= 25).length >= 3, lv);
+    await vet.room.leave(); await nw.room.leave();
+    await api('/api/admin/edit', { code: 'צייד#1', level: 1 }, admin);
   }
 
   console.log('\na gift code');
@@ -424,7 +448,8 @@ try {
   console.log('\nanother tab');
   const a2 = await pilot(back.token, 'arena_duel');
   ok('the same pilot joining again closes the older one', await until(() => a.left !== undefined, 3000) && a2.key !== a.key, { left: a.left });
-  await a2.room.leave(); await b.room.leave();
+  // (b has long since been sent home for sitting still: a closed room is not left twice)
+  await a2.room.leave(); if (b.left === undefined) await b.room.leave();
 } catch (e) {
   fail++;
   console.log('  FAIL (threw)', e.stack || e);
