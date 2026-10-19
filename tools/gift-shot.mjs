@@ -18,6 +18,7 @@ page.on('pageerror', (e) => errors.push(e.message));
 await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: 'load' });
 await page.waitForSelector('#btn-go:not([disabled])', { timeout: 60000 });
 await page.fill('#in-name', 'מאיר');
+await page.evaluate(() => { const u = document.querySelector('#in-newuser'); if (u) u.value = 'p' + Math.random().toString(36).slice(2, 10); const p = document.querySelector('#in-newpass'); if (p) p.value = 'pass1234'; });
 await page.click('#btn-go');
 await page.waitForSelector('#screen-hangar:not(.hidden)', { timeout: 60000 });
 await wait(1500);

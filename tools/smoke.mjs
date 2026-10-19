@@ -25,6 +25,7 @@ for (let i = 0; i < 100 && !log.includes('listening'); i++) await wait(100);
 const CHROME = ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome', '/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell'].find((p) => fs.existsSync(p));
 const browser = await chromium.launch({ executablePath: CHROME, args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox', '--autoplay-policy=no-user-gesture-required'] });
 
+const CODES = {};
 async function run(label, viewport, mobile) {
   console.log(`\n${label}`);
   const ctx = await browser.newContext({ viewport, deviceScaleFactor: mobile ? 2 : 1, isMobile: mobile, hasTouch: mobile });
@@ -34,7 +35,8 @@ async function run(label, viewport, mobile) {
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => { if (m.type() === 'error' && !/fonts\.g|ERR_|net::/.test(m.text())) errors.push(m.text()); });
   const snap = (n) => page.screenshot({ path: `${OUT}/${label}-${n}.png` });
-  await page.goto(URL, { waitUntil: 'load' });
+  // the second comes in by the first one's shared link: they should end up friends
+  await page.goto(URL + (CODES.phone && label !== 'phone' ? `?f=${encodeURIComponent(CODES.phone)}` : ''), { waitUntil: 'load' });
   await page.waitForSelector('#btn-go:not([disabled])');
   await wait(1500);
   await snap('1-title');
@@ -43,6 +45,11 @@ async function run(label, viewport, mobile) {
   await page.click('#btn-go');
   ok('a one-letter name is refused', (await page.textContent('#title-err')).length > 0);
   await page.fill('#in-name', label === 'phone' ? 'טייס' : 'Ace');
+  ok('a newcomer makes an account at the door: a username and a password', await page.isVisible('#in-newuser') && await page.isVisible('#in-newpass') && /יצירת טייס/.test(await page.textContent('#btn-go')));
+  await page.click('#btn-go');
+  ok('no username, no way in', /שם משתמש/.test(await page.textContent('#title-err')) && await page.isVisible('#screen-title'));
+  await page.fill('#in-newuser', `smoke${label}${Date.now() % 1e6}`);
+  await page.fill('#in-newpass', 'pass1234');
   await page.click('#btn-go');
   await page.waitForSelector('#screen-hangar:not(.hidden)');
   await wait(1200);
@@ -76,7 +83,13 @@ async function run(label, viewport, mobile) {
   await page.click('[data-tab="planes"]');
   await wait(1500);
   ok('back on the planes, no weapon left standing on the pad', await page.evaluate(() => window.__sky.hangarArms()) === 0);
-  ok('a guest is offered to save', await page.isVisible('#btn-save'));
+  ok('the new pilot is saved, with a code of their own: nothing left to save', await page.evaluate(() => !window.__sky.account.guest && !!window.__sky.pilot.tag) && !(await page.isVisible('#btn-save')));
+  await page.click('[data-tab="friends"]');
+  ok('the friends page: your code, and a link to the game to share', await page.waitForFunction(() => /#\d+/.test(document.querySelector('#f-me')?.textContent || '') && !document.querySelector('#f-share').classList.contains('hidden'), null, { timeout: 10000 }).then(() => true, () => false));
+  await snap('3d-friends');
+  CODES[label] = await page.evaluate(() => window.__sky.myCode);
+  if (label !== 'phone' && CODES.phone) ok('came in by a friend\'s link: already friends', await page.waitForFunction((c) => [...document.querySelectorAll('#f-list b')].some((b) => b.textContent === c), CODES.phone, { timeout: 10000 }).then(() => true, () => false));
+  await page.click('[data-tab="planes"]');
   await page.click('#btn-launch');
   await page.waitForFunction(() => window.__sky?.me?.alive === true, null, { timeout: 20000 });
   ok('in the air', true);

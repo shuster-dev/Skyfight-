@@ -119,14 +119,36 @@ async function boot() {
   try {
     const me = await net.session((i) => { $('#btn-go').textContent = i < 2 ? 'מתחבר…' : 'השרת מתעורר — עוד רגע…'; });
     took(me);
-    const btn = $('#btn-go');
-    btn.disabled = false;
-    btn.textContent = S.pilot.name ? 'להאנגר' : 'המראה';
-    if (S.pilot.name) $('#in-name').value = S.pilot.name;
+    $('#btn-go').disabled = false;
+    titleForm();
   } catch (e) {
     $('#title-err').textContent = err(e);
     $('#btn-go').textContent = 'נסו לרענן את הדף';
   }
+}
+
+/**
+ * The front door: a newcomer (a guest) makes a pilot and an account in one go
+ * — a name for the sky, a username and a password — and goes straight to the
+ * hangar with a code of their own. A saved pilot just goes in.
+ */
+function titleForm() {
+  const guest = S.account.guest;
+  show('#title-acct', guest);
+  show('#btn-have', guest);
+  $('#btn-go').textContent = guest ? 'יצירת טייס והמשך' : 'להאנגר';
+  if (S.pilot.name) $('#in-name').value = S.pilot.name;
+}
+
+// a friend's link (?f=name#number): once in, the two of you are friends
+S.pendingFriend = new URLSearchParams(location.search).get('f') || '';
+async function addPendingFriend() {
+  const code = S.pendingFriend;
+  if (!code || S.account.guest) return;
+  S.pendingFriend = '';
+  const q = new URLSearchParams(location.search); q.delete('f');
+  history.replaceState(null, '', location.pathname + (q.toString() ? `?${q}` : ''));
+  try { const r = await net.api('/api/friends/add', { code }); toast(`${r.friend.code} נוסף לחברים שלך`, 'lvl'); } catch (x) { if (x.code !== 'already_friends' && x.code !== 'self') toast(err(x), 'bad'); }
 }
 
 function took(me) {
@@ -151,11 +173,17 @@ $('#title-form').addEventListener('submit', async (e) => {
   const name = cleanCallsign($('#in-name').value);
   $('#title-err').textContent = '';
   if (!name) return ($('#title-err').textContent = ERR.bad_name);
+  const guest = S.account.guest;
+  const username = $('#in-newuser').value.trim().toLowerCase(), password = $('#in-newpass').value;
+  if (guest && !/^[a-z][a-z0-9_]{2,15}$/.test(username)) return ($('#title-err').textContent = ERR.invalid_username), $('#in-newuser').focus();
+  if (guest && password.length < 4) return ($('#title-err').textContent = ERR.invalid_password), $('#in-newpass').focus();
   const btn = $('#btn-go');
   btn.disabled = true;
   try {
     if (name !== S.pilot.name) S.pilot = (await net.api('/api/pilot/name', { name })).pilot;
+    if (guest) took(await net.api('/api/register', { username, password })), $('#in-newpass').value = '';
     showHangar();
+    addPendingFriend();
   } catch (x) {
     $('#title-err').textContent = err(x);
   } finally { btn.disabled = false; }
@@ -187,9 +215,9 @@ $('#login-form').addEventListener('submit', async (e) => {
     show('#sheet-login', false);
     $('#in-pass').value = '';
     if (S.mode === 'title') {
-      if (S.pilot.name) $('#in-name').value = S.pilot.name, showHangar();
-      else $('#btn-go').textContent = 'המראה';
-    } else renderHangar(), toast(loginMode === 'login' ? 'מחובר!' : 'נשמר! ✔');
+      titleForm();
+      if (S.pilot.name) showHangar(), addPendingFriend();
+    } else renderHangar(), addPendingFriend(), toast(loginMode === 'login' ? 'מחובר!' : 'נשמר! ✔');
   } catch (x) { $('#login-err').textContent = err(x); }
 });
 
@@ -646,6 +674,8 @@ async function renderFriends(quiet = false) {
   if (!quiet) list.innerHTML = '<div class="note">טוען…</div>';
   try {
     const { me, rows } = await net.api('/api/friends');
+    S.myCode = me;
+    show('#f-share', !!me);
     $('#f-me').innerHTML = me
       ? `<span>הקוד שלך <b dir="auto">${esc(me)}</b></span><button type="button" id="f-copy">העתק</button>`
       : '<span>שמרו את ההתקדמות כדי לקבל קוד משלכם — כך חברים יוכלו להוסיף אתכם</span>';
@@ -670,6 +700,16 @@ $('#f-add').addEventListener('submit', async (e) => {
     renderFriends(true);
   } catch (x) { toast(err(x), 'bad'); }
 });
+/** A link to the game to send anyone: whoever opens it and comes in is your friend. */
+async function shareGame() {
+  const url = `${location.origin}/${S.myCode ? `?f=${encodeURIComponent(S.myCode)}` : ''}`;
+  const text = S.myCode ? `בואו לטוס איתי ב־Skyfight! הקוד שלי: ${S.myCode}` : 'בואו לטוס איתי ב־Skyfight!';
+  try {
+    if (navigator.share) return await navigator.share({ title: 'Skyfight', text, url });
+  } catch { return; }
+  try { await navigator.clipboard.writeText(`${text}\n${url}`); toast('הקישור הועתק — שלחו לחברים'); } catch { prompt('הקישור למשחק:', url); }
+}
+$('#f-share').addEventListener('click', shareGame);
 $('#tab-friends').addEventListener('click', async (e) => {
   if (e.target.id === 'f-copy') {
     const code = $('#f-me b')?.textContent || '';
