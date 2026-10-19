@@ -1,4 +1,4 @@
-// The ten planes, one by one over the sea, from the front quarter and from above.
+// The planes, one by one over the sea, from the front quarter and from above.
 //   npm run build && node tools/planes-shot.mjs [outDir]
 // ONLY=a,b to pick planes; PAINT=sea for a paint; NEON=1 for the glow.
 import { chromium } from 'playwright';
@@ -19,7 +19,7 @@ page.on('pageerror', (e) => errors.push(e.message));
 await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: 'load' });
 await page.waitForSelector('#btn-go:not([disabled])', { timeout: 60000 });
 await page.addStyleTag({ content: '.screen, #corner { display: none !important }' });
-for (const id of (process.env.ONLY || 'sparrow,gull,hornet,shahak,skyhawk,viper,bulldog,sufa,lavi,phantom').split(',')) {
+for (const id of (process.env.ONLY || 'sparrow,mustang,gull,ouragan,hornet,mystere,shahak,smystere,skyhawk,nesher,viper,bulldog,sufa,lavi,phantom').split(',')) {
   for (const [view, cam] of [['front', [-7, 2.5, -9]], ['side', [11, 1.5, 1.5]], ['top', [2, 13, 3]]]) {
     await page.evaluate(([id, cam, paint, neon]) => {
       const S = window.__sky;

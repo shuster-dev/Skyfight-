@@ -64,6 +64,26 @@ export const ISLANDS = [
   { x: -880, z: -140, r: 60, h: 18, peak: 30 },
 ];
 
+/**
+ * The airfield, on the flat land north of the city: a runway along x, a
+ * taxiway and an apron beside it, hangars, a control tower, fuel tanks.
+ */
+export const AIRFIELD = { x0: 160, x1: 620, z0: 700, z1: 960, runway: { x0: 175, x1: 600, z: 790, w: 34 }, taxi: 832, apron: { x0: 240, x1: 540, z0: 846, z1: 900 } };
+/**
+ * The port, on the coast south of the city: a straight quay at x0 with deep
+ * water off it, gantry cranes over the water, container stacks and sheds
+ * behind, a freighter tied up alongside.
+ */
+export const PORT = { x0: 70, x1: 300, z0: -880, z1: -660 };
+const portK = (z) => smooth(PORT.z0 - 30, PORT.z0, z) * (1 - smooth(PORT.z1, PORT.z1 + 30, z));
+const fieldK = (x, z) => smooth(AIRFIELD.x0 - 30, AIRFIELD.x0, x) * (1 - smooth(AIRFIELD.x1, AIRFIELD.x1 + 30, x)) * smooth(AIRFIELD.z0 - 30, AIRFIELD.z0, z) * (1 - smooth(AIRFIELD.z1, AIRFIELD.z1 + 30, z));
+/** Which site (x, z) is on, `m` metres round it counted in: 'airfield', 'port' or ''. */
+export function siteAt(x, z, m = 0) {
+  if (x > AIRFIELD.x0 - m && x < AIRFIELD.x1 + m && z > AIRFIELD.z0 - m && z < AIRFIELD.z1 + m) return 'airfield';
+  if (x > PORT.x0 - 6 && x < PORT.x1 + m && z > PORT.z0 - m && z < PORT.z1 + m) return 'port';
+  return '';
+}
+
 /** Height of the terrain, seabed included (negative under the sea). */
 export function terrainAt(x, z) {
   const d = x - coastX(z);
@@ -77,6 +97,14 @@ export function terrainAt(x, z) {
   // the bay
   const w = inBay(x, z) * smooth(-80, 0, d + 80);
   h = lerp(h, -7, w);
+  // the airfield is levelled; the port is a flat quay, deep water off it
+  const fk = fieldK(x, z);
+  if (fk > 0) h = lerp(h, 5, fk);
+  const pk = portK(z);
+  if (pk > 0) {
+    if (x >= PORT.x0) h = lerp(h, 4.5, pk * (1 - smooth(PORT.x1, PORT.x1 + 40, x)));
+    else h = lerp(h, -7, pk);
+  }
   for (const o of ISLANDS) {
     const r = Math.hypot(x - o.x, z - o.z);
     if (r >= o.r) continue;
@@ -119,6 +147,8 @@ const BLOCK = 72, STREET = 20;
 export function cityAt(x, z) {
   const d = x - coastX(z);
   if (d < 45 || x > 640 || Math.abs(z) > 980) return 0;
+  if (x > AIRFIELD.x0 - 20 && x < AIRFIELD.x1 + 20 && z > AIRFIELD.z0 - 20 && z < AIRFIELD.z1 + 20) return 0;
+  if (x > PORT.x0 - 20 && x < PORT.x1 + 20 && z > PORT.z0 - 20 && z < PORT.z1 + 20) return 0;
   if (inBay(x, z) > 0 || Math.abs(z - bayZ(x)) < bayW(x) / 2 + 35) return 0;
   // the boulevard that runs onto the bridge stays clear
   if (Math.abs(x - BRIDGE.x) < 48 && z > BRIDGE.z0 - 220 && z < BRIDGE.z1 + 220) return 0;
@@ -127,6 +157,9 @@ export function cityAt(x, z) {
 
 /** The streets, for the map painter: block size, street width, origin. */
 export const GRID = { block: BLOCK, street: STREET, x0: 0, z0: 0 };
+
+// where the repair pads stand (see HEALS): kept clear of buildings
+const PAD_SPOTS = [[433, 250], [139, 788], [69, -394], [520, -300], [156, -886]];
 
 export const BUILDINGS = (() => {
   const r = rng(4242), out = [];
@@ -146,13 +179,57 @@ export const BUILDINGS = (() => {
     for (const [ox, oz, sw, sd] of parts) {
       const w = BLOCK * sw - 8 - r() * 6, dd = BLOCK * sd - 8 - r() * 6;
       const x = cx + ox * BLOCK, z = cz + oz * BLOCK;
+      if (PAD_SPOTS.some(([px, pz]) => Math.abs(px - x) < w / 2 + 36 && Math.abs(pz - z) < dd / 2 + 36)) continue;
       let h = down > 0.3 ? 30 + down * 150 * (0.45 + r() * 0.7) : 10 + r() * 22;
       if (r() < 0.06) h *= 1.6;
       h = Math.min(h, 185);
       const kind = h > 70 ? (r() < 0.6 ? 'glass' : 'office') : r() < 0.5 ? 'flat' : 'office';
-      out.push({ x, z, w, d: dd, h: Math.round(h), base: terrainAt(x, z), kind, tint: r() });
+      const b = { x, z, w, d: dd, h: Math.round(h), base: terrainAt(x, z), kind, tint: r() };
+      // a tall one steps in once or twice on the way up, as towers do; the
+      // tallest wear a spire, and some flat roofs a helipad
+      const look = r();
+      if (b.h > 75 && look < 0.55) b.step = { at: Math.round(b.h * (0.45 + r() * 0.25)), k: 0.62 + r() * 0.16 };
+      if (b.h > 110 && look > 0.7) b.spire = 12 + Math.round(r() * 18);
+      else if (b.h > 60 && !b.step && look > 0.35) b.pad = true;
+      out.push(b);
     }
   }
+  return out;
+})();
+
+/**
+ * What stands at the airfield and the port: boxes a plane can hit, each
+ * with what it is so the screen can draw it as that. (h is from `base`.)
+ */
+export const STRUCTURES = (() => {
+  const out = [], A = AIRFIELD, P = PORT;
+  const at = (kind, x, z, w, d, h, extra = {}) => out.push({ kind, x, z, w, d, h, base: groundAt(x, z), ...extra });
+  // three arched hangars behind the apron, a control tower, fuel tanks
+  for (const x of [290, 370, 450]) at('hangar', x, 928, 64, 44, 19);
+  at('tower', 565, 872, 9, 9, 34);
+  at('terminal', 565, 918, 46, 30, 11);
+  for (const [x, z] of [[604, 900], [604, 926], [580, 950]]) at('tank', x, z, 16, 16, 12);
+  // the port: three gantry cranes on the quay, their booms out over the water
+  for (const z of [-835, -775, -715]) {
+    at('craneLeg', P.x0 + 6, z - 9, 3, 3, 46, { crane: z });
+    at('craneLeg', P.x0 + 6, z + 9, 3, 3, 46, { crane: z });
+    at('craneLeg', P.x0 + 30, z - 9, 3, 3, 46, { crane: z });
+    at('craneLeg', P.x0 + 30, z + 9, 3, 3, 46, { crane: z });
+    out.push({ kind: 'craneBoom', x: P.x0 - 4, z, w: 74, d: 6, h: 6, base: groundAt(P.x0 + 6, z) + 46 });
+  }
+  // container stacks in rows, and two long sheds
+  const r = rng(808);
+  for (let x = P.x0 + 52; x < P.x0 + 150; x += 16) {
+    for (let z = P.z0 + 22; z < P.z1 - 10; z += 34) {
+      if (Math.hypot(x - 156, z + 886) < 46 || r() < 0.15) continue;
+      at('stack', x, z, 12, 28, 2.6 * (1 + Math.floor(r() * 4)), { seed: Math.floor(r() * 1e6) });
+    }
+  }
+  at('shed', P.x0 + 190, -800, 40, 110, 13);
+  at('shed', P.x0 + 190, -690, 40, 50, 11);
+  // the freighter tied up at the quay
+  out.push({ kind: 'hull', x: P.x0 - 16, z: -770, w: 22, d: 150, h: 13, base: -4 });
+  out.push({ kind: 'bridgehouse', x: P.x0 - 16, z: -705, w: 18, d: 14, h: 16, base: 9 });
   return out;
 })();
 
@@ -161,7 +238,13 @@ export const BUILDINGS = (() => {
 /** Boxes a plane cannot pass: buildings, the deck, the towers' legs and beams. */
 export const BOXES = (() => {
   const b = [];
-  for (const o of BUILDINGS) b.push({ x0: o.x - o.w / 2, x1: o.x + o.w / 2, z0: o.z - o.d / 2, z1: o.z + o.d / 2, y0: o.base - 8, y1: o.base + o.h, kind: 'building' });
+  for (const o of BUILDINGS) {
+    // a stepped tower: the full footprint up to the step, the narrower top above it
+    const top = o.step ? o.base + o.step.at : o.base + o.h;
+    b.push({ x0: o.x - o.w / 2, x1: o.x + o.w / 2, z0: o.z - o.d / 2, z1: o.z + o.d / 2, y0: o.base - 8, y1: top, kind: 'building' });
+    if (o.step) { const w = o.w * o.step.k / 2, d = o.d * o.step.k / 2; b.push({ x0: o.x - w, x1: o.x + w, z0: o.z - d, z1: o.z + d, y0: top - 1, y1: o.base + o.h, kind: 'building' }); }
+  }
+  for (const o of STRUCTURES) b.push({ x0: o.x - o.w / 2, x1: o.x + o.w / 2, z0: o.z - o.d / 2, z1: o.z + o.d / 2, y0: o.base - 6, y1: o.base + o.h, kind: 'building' });
   const B = BRIDGE;
   b.push({ x0: B.x - B.width / 2, x1: B.x + B.width / 2, z0: B.z0, z1: B.z1, y0: B.deckBottom, y1: B.deckTop, kind: 'bridge' });
   for (const tz of B.towers) {
@@ -233,7 +316,7 @@ export function spawnPoint(n, count = 12) {
  * side, on flat ground clear of anything to fly into.
  */
 export const HEAL = { r: 26, h: 45, every: 30 };
-export const HEALS = [[433, 250], [139, 788], [69, -394], [520, -300], [156, -886]].map(([x, z]) => ({ x, z, y: groundAt(x, z) }));
+export const HEALS = PAD_SPOTS.map(([x, z]) => ({ x, z, y: groundAt(x, z) }));
 
 /** The pad a plane at (x, y, z) is flying through, as its index, or -1. */
 export function healAt(x, y, z) {

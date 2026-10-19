@@ -199,6 +199,7 @@ function openSettings() {
   $('#set-sound').checked = !sound.muted;
   $('#set-invert').checked = controls.invert;
   $('#set-quality').value = Q.pick;
+  $('#set-sky').value = world.time;
   $('#set-account').textContent = S.account.guest ? 'הטייס עדיין לא שמור — שמרו אותו בהאנגר.' : `מחובר כ־${S.account.username}`;
   show('#btn-logout', !S.account.guest);
   show('#sheet-settings');
@@ -1662,6 +1663,12 @@ function watchFrames(now) {
   S.fps = Math.round(fps);
 }
 $('#set-quality').addEventListener('change', (e) => pickQuality(e.target.value));
+// the time of day: noon or sunset, remembered on this device
+try { world.setSky(localStorage.getItem('sky.time') || 'day'); } catch {}
+$('#set-sky').addEventListener('change', (e) => {
+  world.setSky(e.target.value);
+  try { localStorage.setItem('sky.time', e.target.value); } catch {}
+});
 
 /**
  * Fit the picture to the screen as it is now. A phone turned on its side

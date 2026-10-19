@@ -3,9 +3,9 @@
 // these numbers, the client only shows them.
 
 /**
- * The planes: ten, eighty years of Israeli fighters, from the piston
+ * The planes: fifteen, eighty years of Israeli fighters, from the piston
  * fighter to stealth. A ladder: each a little better than the one before,
- * and every fourth an elite (`ace`) — a big step up, prettier, and dear.
+ * and now and then an elite (`ace`) — a big step up, prettier, and dear.
  * A plane opens at a level and is then bought once with gold; the first is
  * free. (The first five ids are the old ones: pilots' hangars are stored by
  * them.)
@@ -23,25 +23,50 @@ export const PLANES = {
     desc: 'לוחם הבוכנה של הטייסות הראשונות. כבד ויורה לאט — אבל כל שדרוג מקרב אותו לגדולים.',
     hp: 250, speed: 56, boost: 86, turn: 0.95, climb: 0.85, rate: 8, dmg: 8.7, missiles: 1, flares: 2, reload: 10, fill: 0.12,
   },
+  mustang: {
+    id: 'mustang', he: 'מוסטנג', role: 'בוכנה מהיר', era: '1952', kind: 'מטוס בוכנה', level: 2, price: 600,
+    desc: 'הבוכנה המהיר של הטייסת: כנף ישרה ונקייה, חופה בועה ומדחף ארבעה להבים. מהיר וזריז יותר מהסער.',
+    hp: 270, speed: 58, boost: 89, turn: 0.98, climb: 0.87, rate: 8.5, dmg: 9.2, missiles: 1, flares: 2, reload: 9.8, fill: 0.125,
+  },
   gull: {
     id: 'gull', he: 'שחף', role: 'בוכנה כבד', era: '1952', kind: 'כנף שחף', level: 3, price: 1200,
     desc: 'כנף שבורה, מדחף ענק ושישה מקלעים. מחזיק יותר, יורה יותר.',
     hp: 300, speed: 60, boost: 92, turn: 1.0, climb: 0.9, rate: 9, dmg: 9.4, missiles: 1, flares: 2, reload: 9.5, fill: 0.13,
+  },
+  ouragan: {
+    id: 'ouragan', he: 'אורגן', role: 'סילון ראשון', era: '1955', kind: 'סילון כנף ישרה', level: 4, price: 1800,
+    desc: 'הסילון הראשון של חיל האוויר: כנף ישרה עם מכלים בקצוות, פתח אוויר באף. מהיר מכל בוכנה.',
+    hp: 300, speed: 65, boost: 102, turn: 1.07, climb: 0.97, rate: 11, dmg: 8, missiles: 1, flares: 2, reload: 9.2, fill: 0.14,
   },
   hornet: {
     id: 'hornet', he: 'ברק', role: 'סילון ראשון', era: '1956', kind: 'סילון כנף משוכה', level: 5, price: 2500,
     desc: 'דור הסילונים הראשון: כנף משוכה ומתכת חשופה. פוגע ובורח לפני שמספיקים להסתובב.',
     hp: 300, speed: 70, boost: 112, turn: 1.15, climb: 1.05, rate: 13, dmg: 6.5, missiles: 1, flares: 2, reload: 9, fill: 0.15,
   },
+  mystere: {
+    id: 'mystere', he: 'מיסטר', role: 'סילון משופר', era: '1956', kind: 'סילון כנף משוכה', level: 6, price: 3500,
+    desc: 'מיסטר IV של מבצע קדש: כנף משוכה דקה, זנב גבוה ושני תותחי 30 מ"מ. צולל מהר מהקול.',
+    hp: 310, speed: 71, boost: 114, turn: 1.18, climb: 1.08, rate: 12, dmg: 7.6, missiles: 1, flares: 2, reload: 8.8, fill: 0.15,
+  },
   shahak: {
     id: 'shahak', he: 'שחק', role: 'עלית', era: '1967', kind: 'כנף משולשת', level: 8, price: 7000, ace: true,
     desc: 'המיראז\' של מלחמת ששת הימים. מהיר מכל מה שלפניו, שני טילים ותותחי 30 מ"מ.',
     hp: 320, speed: 78, boost: 126, turn: 1.3, climb: 1.2, rate: 9, dmg: 11, missiles: 2, flares: 2, reload: 7.5, fill: 0.16,
   },
+  smystere: {
+    id: 'smystere', he: 'סופר מיסטר', role: 'על־קולי', era: '1958', kind: 'סילון על־קולי', level: 9, price: 4800,
+    desc: 'הסילון העל־קולי הראשון של חיל האוויר: אף מחודד, כנף משוכה חדה ומבער. מהיר בקו ישר.',
+    hp: 310, speed: 72, boost: 118, turn: 1.2, climb: 1.1, rate: 11, dmg: 8.5, missiles: 2, flares: 2, reload: 8.4, fill: 0.15,
+  },
   skyhawk: {
     id: 'skyhawk', he: 'עיט', role: 'תקיפה', era: '1968', kind: 'מטוס תקיפה', level: 10, price: 5500,
     desc: 'קטן, עקשן וזריז. מחזיק פגיעות ונכנס לכל קרב.',
     hp: 330, speed: 70, boost: 110, turn: 1.2, climb: 1.1, rate: 10, dmg: 9.2, missiles: 2, flares: 3, reload: 8, fill: 0.14,
+  },
+  nesher: {
+    id: 'nesher', he: 'נשר', role: 'כנף משולשת', era: '1971', kind: 'כנף משולשת', level: 11, price: 6500,
+    desc: 'אחיו של השחק, שנבנה בארץ: אף ארוך, כנף משולשת גדולה ושני תותחי 30. ותיק של מלחמת יום כיפור.',
+    hp: 330, speed: 74, boost: 118, turn: 1.3, climb: 1.2, rate: 9, dmg: 10.4, missiles: 2, flares: 3, reload: 7.8, fill: 0.15,
   },
   viper: {
     id: 'viper', he: 'כפיר', role: 'זריז', era: '1975', kind: 'כנף משולשת וכנפונים', level: 13, price: 8000,
@@ -113,7 +138,7 @@ export const PAINTS = {
 };
 export const PAINT_ORDER = ['stock', 'arctic', 'jungle', 'night', 'sea', 'fox', 'gold'];
 
-export const PLANE_ORDER = ['sparrow', 'gull', 'hornet', 'shahak', 'skyhawk', 'viper', 'bulldog', 'sufa', 'lavi', 'phantom'];
+export const PLANE_ORDER = ['sparrow', 'mustang', 'gull', 'ouragan', 'hornet', 'mystere', 'shahak', 'smystere', 'skyhawk', 'nesher', 'viper', 'bulldog', 'sufa', 'lavi', 'phantom'];
 export const START_PLANE = 'sparrow';
 
 /**
@@ -136,7 +161,7 @@ export const TIER_MAX = 5;
 export const TIER_COST = [800, 1800, 4000, 8000, 14000];
 export const TIER_LEVEL = [2, 5, 9, 14, 20];
 /** A tier of a better plane costs more: the starter's are cheap. */
-export const PLANE_COST = { sparrow: 0.5, gull: 0.6, hornet: 0.7, shahak: 1, skyhawk: 0.9, viper: 1, bulldog: 1.1, sufa: 1.5, lavi: 1.4, phantom: 1.8 };
+export const PLANE_COST = { sparrow: 0.5, mustang: 0.55, gull: 0.6, ouragan: 0.65, mystere: 0.8, smystere: 0.85, nesher: 0.95, hornet: 0.7, shahak: 1, skyhawk: 0.9, viper: 1, bulldog: 1.1, sufa: 1.5, lavi: 1.4, phantom: 1.8 };
 
 /** The tiers a pilot has put into a plane. */
 export const tiersOf = (pilot, plane) => pilot?.upgrades?.[plane] || {};
