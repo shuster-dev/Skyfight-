@@ -203,6 +203,9 @@
   .friends .f-me b { color: #fff; font-size: 16px; letter-spacing: 0.5px; }
   .friends .f-me button { padding: 6px 12px; font-size: 12px; font-weight: 700; color: #dfe7f2; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; }
   .f-add { display: flex; gap: 8px; padding: 12px 0; }
+  .f-share { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: 12px; padding: 11px 14px; font-weight: 800; font-size: 15px; color: #04201c; background: linear-gradient(180deg, #5ff0d8, var(--teal)); border-radius: 8px; box-shadow: 0 4px 14px rgba(40, 220, 190, 0.25); }
+  .f-share svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; }
+  .f-share circle { fill: currentColor; }
   .ad-card { display: grid; gap: 10px; padding: 14px; margin-bottom: 10px; border-radius: 14px; background: linear-gradient(180deg, rgba(241,210,122,0.1), rgba(241,210,122,0.02)); border: 1px solid rgba(241,210,122,0.35); }
   .ad-who b { font-size: 18px; display: block; }
   .ad-who span { font-size: 12.5px; color: var(--dim); }
@@ -520,7 +523,15 @@
   <div class="tag">כולם נגד כולם · מפילים · עולים רמות · משדרגים</div>
   <form class="card" id="title-form" autocomplete="off">
     <label class="lbl" for="in-name">איך יקראו לך בשמיים?</label>
-    <input class="field" id="in-name" maxlength="14" placeholder="שם טייס" enterkeyhint="go">
+    <input class="field" id="in-name" maxlength="14" placeholder="שם טייס" enterkeyhint="next">
+    <!-- a newcomer makes the account here and now: then they have a code friends can add -->
+    <div id="title-acct" class="hidden">
+      <label class="lbl" for="in-newuser" style="margin-top:10px">שם משתמש לכניסה (אנגלית ומספרים)</label>
+      <input class="field" id="in-newuser" maxlength="16" placeholder="למשל meir12" autocomplete="username" autocapitalize="none" spellcheck="false" dir="ltr" enterkeyhint="next">
+      <label class="lbl" for="in-newpass" style="margin-top:10px">סיסמה (לפחות 4 תווים)</label>
+      <input class="field" id="in-newpass" type="password" autocomplete="new-password" dir="ltr" enterkeyhint="go">
+      <div class="note" style="margin-top:8px">ככה ההתקדמות נשמרת, מקבלים קוד משלכם לחברים — וממשיכים מכל מכשיר.</div>
+    </div>
     <button class="big" id="btn-go" type="submit" disabled>טוען…</button>
     <div class="err" id="title-err"></div>
     <button class="ghost" id="btn-have" type="button">יש לי כבר טייס שמור — התחברות</button>
@@ -577,6 +588,7 @@
   <div class="h-panel board hidden" id="tab-board"></div>
   <div class="h-panel friends hidden" id="tab-friends">
     <div class="f-me" id="f-me"></div>
+    <button class="f-share hidden" id="f-share" type="button"><svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="19" r="2.6"/><path d="M8.3 10.8l7.4-4.4M8.3 13.2l7.4 4.4"/></svg><span>שתפו קישור למשחק</span></button>
     <form class="f-add" id="f-add" autocomplete="off"><input id="f-code" placeholder="שם#מספר של חבר" maxlength="24" dir="auto"><button type="submit">הוסף</button></form>
     <div id="f-list"></div>
   </div>
