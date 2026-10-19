@@ -35,11 +35,23 @@ room.onMessage('welcome', (m) => { key = m.key; stats = m.stats; });
 room.onMessage('spawn', (m) => { me = newBody(m, stats); alive = true; ammo = m.ammo; });
 room.onMessage('fix', (m) => me && Object.assign(me, m));
 let boss = null;
+// how the bots fly, seen from here: a bot that has turned a full circle in
+// the last six seconds is going round in circles, not fighting
+const turns = new Map(), circ = { samples: 0, circling: 0 };
 room.onMessage('s', (s) => {
+  const now = Date.now();
   boss = s.b ? { key: 'boss', x: s.b[0] / 10, y: s.b[1] / 10, z: s.b[2] / 10, alive: true, vel: { x: 0, y: 0, z: 0 } } : null;
   for (const [k, x, y, z, yaw, pitch, , hp, flags, spd] of s.p) {
     if (k === key) continue;
     const f = forward(yaw / 1000, pitch / 1000);
+    const o = others.get(k);
+    if (o && o.alive && flags & 1) {
+      const h = turns.get(k) || [];
+      h.push([now, Math.abs(Math.atan2(Math.sin(yaw / 1000 - o.yaw), Math.cos(yaw / 1000 - o.yaw)))]);
+      while (h.length && now - h[0][0] > 6000) h.shift();
+      turns.set(k, h);
+      if (now - h[0][0] > 5000) { circ.samples++; if (h.reduce((a, x) => a + x[1], 0) > Math.PI * 2 * 0.9) circ.circling++; }
+    } else turns.delete(k);
     others.set(k, { key: k, x: x / 10, y: y / 10, z: z / 10, yaw: yaw / 1000, pitch: pitch / 1000, hp, alive: !!(flags & 1), shield: !!(flags & 8), vel: { x: f.x * spd / 10, y: f.y * spd / 10, z: f.z * spd / 10 } });
   }
 });
@@ -52,7 +64,9 @@ room.onMessage('bt', () => {});
 room.onMessage('score', () => {});
 room.onMessage('ram', (m) => { rams++; if (m.a === key || m.b === key) rammed++; });
 room.onMessage('fired', (m) => { st.missiles++; ammo = m.ammo; });
+const room_ = { downs: 0, by: {} };
 room.onMessage('down', (m) => {
+  room_.downs++; room_.by[m.how] = (room_.by[m.how] || 0) + 1;
   if (m.v === key) { alive = false; st.deaths++; st.by[m.how] = (st.by[m.how] || 0) + 1; if (m.how === 'crash' && !m.k) st.crashes++; }
 });
 room.onMessage('reward', (m) => {
@@ -120,6 +134,7 @@ const report = {
   killsPerMin: +(st.kills / mins).toFixed(2), deathsPerMin: +(st.deaths / mins).toFixed(2),
   firstKillSec: st.firstKillAt ? Math.round(st.firstKillAt) : null,
   hits: st.hits, missiles: st.missiles, missileHits: st.mHits || 0, rams, rammed, bossSeen, bossDown, bossPay, level: st.level, levels: st.levels, xp: st.xp, gold: st.gold, xpToLevel2: xpStep(1),
+  arena: { downsPerMin: +(room_.downs / mins).toFixed(2), by: room_.by, circling: circ.samples ? +(circ.circling / circ.samples).toFixed(2) : null },
 };
 console.log(JSON.stringify(report, null, 1));
 srv?.kill();

@@ -68,7 +68,7 @@ try {
     ok('bots fill the sky to ten planes', await until(() => solo.snap?.p?.length === 10, 4000), solo.snap?.p?.length);
     ok('the roster marks them as bots: nine, and me', await until(() => got(solo, 'roster').at(-1)?.m.filter((r) => r.bot).length === 9));
     const kinds = got(solo, 'roster').at(-1).m.filter((r) => r.bot);
-    ok('the bots fly different things', new Set(kinds.map((r) => `${r.plane}/${r.gun}/${r.level}`)).size > 1, kinds.map((r) => `${r.plane}/${r.gun}/${r.level}`));
+    ok('the bots fly different things', new Set(kinds.map((r) => `${r.plane}/${r.paint}/${r.gun}/${r.level}`)).size > 1, kinds.map((r) => `${r.plane}/${r.paint}/${r.gun}/${r.level}`));
     // a second person takes a bot's seat
     const two = await pilot(h.token);
     ok('a second pilot in: still ten, one bot fewer', await until(() => { const r = got(solo, 'roster').at(-1)?.m || []; return r.length === 10 && r.filter((x) => x.bot).length === 8; }, 4000), (got(solo, 'roster').at(-1)?.m || []).map((x) => x.bot));

@@ -34,6 +34,15 @@ const q = (v, k = 10) => Math.round(v * k);
 const BOT_VS_PEOPLE = 0.85;
 /** How quickly a bot takes in a change of its target's course (1/s): about half a second. */
 const BOT_REACT = 2.2;
+// how a bot likes to fight: how long it will go round with someone before it
+// breaks off (s), how long it runs before coming back (s), and how much
+// higher than its target it likes to come in from (m)
+const BOT_STYLES = {
+  boom: { circle: 3.5, extend: 4.5, alt: 140 },
+  turn: { circle: 7, extend: 2.5, alt: 0 },
+  sniper: { circle: 4.5, extend: 4, alt: 60 },
+  hunter: { circle: 5.5, extend: 3, alt: 30 },
+};
 /** A round's way off true: a little scatter round the aim, as a real gun has. */
 function scatter(d, spread = GUN.spread) {
   const a = Math.random() * Math.PI * 2, r = spread * Math.sqrt(Math.random());
@@ -724,7 +733,7 @@ export class ArenaRoom extends Room {
     const arms = { gun: pick(GUN_ORDER.filter((k) => GUNS[k].level <= level)), missile: pick(MISSILE_ORDER.filter((k) => MISSILES[k].level <= level)) };
     // some bots fly in paint, as pilots who have earned it would
     const paint = Math.random() < 0.4 ? PAINT_ORDER[1 + Math.floor(Math.random() * (PAINT_ORDER.length - 2))] : 'stock';
-    const p = this.addPlane({ team, name, plane, paint, level, upgrades, arms, bot: { forKey: forH?.key || '', xp: 0, skill: Math.min(0.85, 0.3 + 0.4 * Math.min(1, level / 20) + Math.random() * 0.2), target: '', think: 0, jink: 0, jinkDir: 1, hurtAt: 0 } });
+    const p = this.addPlane({ team, name, plane, paint, level, upgrades, arms, bot: { forKey: forH?.key || '', xp: 0, skill: Math.min(0.85, 0.3 + 0.4 * Math.min(1, level / 20) + Math.random() * 0.2), target: '', think: 0, jink: 0, jinkDir: 1, hurtAt: 0, style: pick(Object.keys(BOT_STYLES)), mode: 'attack', modeT: 0, circleT: 0, side: Math.random() < 0.5 ? -1 : 1 } });
     this.spawn(p);
   }
 
@@ -769,18 +778,73 @@ export class ArenaRoom extends Room {
       const k = Math.min(1, dt * BOT_REACT), s0 = (ai.seen ||= { ...t.vel });
       s0.x += (t.vel.x - s0.x) * k; s0.y += (t.vel.y - s0.y) * k; s0.z += (t.vel.z - s0.z) * k;
     }
-    if (t) {
-      const d = aimDir(p, t);
-      const wantYaw = Math.atan2(-d.x, -d.z), wantPitch = Math.asin(Math.max(-1, Math.min(1, d.y)));
-      // a worse pilot aims worse
+    // the stick towards a heading, with a worse pilot's hand a little off
+    const steer = (wantYaw, wantPitch) => {
       const wobble = (1 - ai.skill) * 0.35 * Math.sin(this.now / 700 + p.key.charCodeAt(0));
       const dy = Math.atan2(Math.sin(wantYaw + wobble - p.yaw), Math.cos(wantYaw + wobble - p.yaw));
       input.turn = Math.max(-1, Math.min(1, -dy * 2.4));
       input.climb = Math.max(-1, Math.min(1, (wantPitch - p.pitch) * 2.4));
+    };
+    const style = BOT_STYLES[ai.style] || BOT_STYLES.hunter;
+    if (t) {
       const dist = Math.hypot(t.x - p.x, t.y - p.y, t.z - p.z);
-      input.boost = dist > 450 && p.fuel > 0.5;
-      fire = dist < p.stats.gunRange * 0.95 && offNose(p, p.yaw, p.pitch, t) < 0.09 + (1 - ai.skill) * 0.08;
-      if (p.ammo > 0 && dist < p.stats.mRange * 0.9 && offNose(p, p.yaw, p.pitch, t) < MISSILE.lockCone * 0.7 && Math.random() < dt * 0.25 * ai.skill) this.launch(p);
+      const off = offNose(p, p.yaw, p.pitch, t);
+      if (ai.mode === 'break') {
+        ai.modeT -= dt;
+        input.turn = ai.breakDir; input.climb = ai.breakClimb; input.boost = p.fuel > 0.3;
+        if (ai.modeT <= 0) ai.mode = 'attack';
+      } else if (ai.mode === 'extend') {
+        // run: away and up, fast, then turn back and come in again from
+        // another side — not chase its tail round and round
+        ai.modeT -= dt;
+        // someone sitting on its tail: no straight line for them to shoot
+        // down — weave, and if they stay there, turn round and fight them
+        let chaser = null;
+        for (const o of this.planes.values()) {
+          if (o === p || !o.alive || (this.teams && o.team === p.team)) continue;
+          if (Math.hypot(o.x - p.x, o.y - p.y, o.z - p.z) < 550 && offNose(o, o.yaw, o.pitch, p) < 0.3) { chaser = o; break; }
+        }
+        ai.chasedT = chaser ? (ai.chasedT || 0) + dt : 0;
+        const weave = Math.sin(this.now / 420 + p.key.charCodeAt(0)) * (chaser ? 1 : 0.4);
+        steer(ai.extYaw + weave * 0.9, (style.alt > 50 ? 0.3 : 0.12) + weave * 0.25);
+        input.boost = p.fuel > 0.3;
+        if (ai.chasedT > 0.6 + ai.skill * 0.6) ai.target = chaser.key, ai.seen = null, ai.modeT = 0, ai.think = 2;
+        if (ai.modeT <= 0 || dist > 850) ai.mode = 'attack', ai.circleT = 0, ai.chasedT = 0, ai.side = -ai.side, ai.think = Math.min(ai.think, 0.3);
+      } else {
+        // come in from its own side and height when still far, so two bots
+        // on one pilot do not fly nose to tail; straight in when close
+        const d = aimDir(p, t), far = Math.max(0, Math.min(1, (dist - 300) / 600));
+        if (far > 0) {
+          const lx = t.x - p.x, lz = t.z - p.z, lh = Math.hypot(lx, lz) || 1;
+          const ax = d.x * dist + (-lz / lh) * ai.side * 260 * far, ay = d.y * dist + style.alt * far, az = d.z * dist + (lx / lh) * ai.side * 260 * far;
+          const al = Math.hypot(ax, ay, az) || 1;
+          d.x = ax / al; d.y = ay / al; d.z = az / al;
+        }
+        steer(Math.atan2(-d.x, -d.z), Math.asin(Math.max(-1, Math.min(1, d.y))));
+        input.boost = dist > 450 && p.fuel > 0.5;
+        // close, and its nose will not come round: they are going round in
+        // circles — break off (sooner for one who fights fast and high)
+        if (dist < 550 && off > 0.45) ai.circleT += dt;
+        else ai.circleT = Math.max(0, ai.circleT - dt * 0.5);
+        // is it on this bot's tail? then running in a straight line is the
+        // worst thing to do: reverse the turn and go up or down instead
+        const onTail = t.key !== 'boss' && dist < 600 && offNose(t, t.yaw, t.pitch, p) < 0.35;
+        if (onTail && ai.circleT > style.circle * 0.6) {
+          ai.mode = 'break'; ai.modeT = 1 + Math.random() * 0.8; ai.circleT = 0;
+          ai.breakDir = input.turn > 0 ? -1 : 1; ai.breakClimb = p.y > surfaceAt(p.x, p.z) + 250 && Math.random() < 0.5 ? -0.7 : 0.8;
+        }
+        // flown past it (a head-on pass, an overshoot): break off and come back
+        const past = !onTail && dist < 160 && off > 1.5;
+        if (ai.mode === 'attack' && (past || (!onTail && ai.circleT > style.circle))) {
+          ai.mode = 'extend';
+          ai.modeT = (past ? 0.6 : 1) * (style.extend + Math.random() * 1.5);
+          // away from it, give or take, and not so hard a turn it loses its speed
+          ai.extYaw = Math.atan2(t.x - p.x, t.z - p.z) + (Math.random() - 0.5) * 1.4;
+          ai.extYaw = p.yaw + Math.atan2(Math.sin(ai.extYaw - p.yaw), Math.cos(ai.extYaw - p.yaw)) * 0.5;
+        }
+      }
+      fire = dist < p.stats.gunRange * 0.95 && off < 0.09 + (1 - ai.skill) * 0.08;
+      if (p.ammo > 0 && dist < p.stats.mRange * 0.9 && off < MISSILE.lockCone * 0.7 && Math.random() < dt * 0.25 * ai.skill) this.launch(p);
     }
     // a missile on its tail: flares, if it keeps its head
     // once a missile closes in it decides, once: some keep their heads and
