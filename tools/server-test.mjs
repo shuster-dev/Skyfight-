@@ -14,7 +14,7 @@ const ok = (name, cond, info) => {
   if (cond) { pass++; console.log('  ok  ', name); } else { fail++; console.log('  FAIL', name, info === undefined ? '' : JSON.stringify(info).slice(0, 400)); }
 };
 
-const srv = spawn(process.execPath, ['src/server/index.js'], { env: { ...process.env, PORT: String(PORT), NODE_ENV: 'test' }, stdio: ['ignore', 'pipe', 'pipe'] });
+const srv = spawn(process.execPath, ['src/server/index.js'], { env: { ...process.env, PORT: String(PORT), NODE_ENV: 'test', ADMIN_USERS: 'hunter2' }, stdio: ['ignore', 'pipe', 'pipe'] });
 let log = '';
 srv.stdout.on('data', (d) => (log += d));
 srv.stderr.on('data', (d) => (log += d));
@@ -221,6 +221,7 @@ try {
     await api('/api/pilot/name', { name: 'מאיר' }, a.token);
     const adm = await api('/api/register', { username: 'meiradmin', password: 'pass9' }, a.token);
     ok('מאיר#1, saved, is the admin', adm.admin === true && adm.pilot.tag === 1, { admin: adm.admin, tag: adm.pilot?.tag });
+    ok('an account named in ADMIN_USERS is an admin, whatever its pilot is called', (await api('/api/me', null, twin.token)).admin === true);
     ok('anyone else is not', (await api('/api/me', null, back.token)).admin === false && (await api('/api/admin/pilots', null, back.token)).status === 403);
     ok('nor can they give gold', (await api('/api/admin/edit', { code: 'צייד#1', gold: 999999 }, back.token)).status === 403);
     const who = await api('/api/admin/pilot?code=' + encodeURIComponent('צייד#1'), null, adm.token);

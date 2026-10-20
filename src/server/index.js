@@ -78,7 +78,10 @@ async function tagPilot(user, p) {
  * the old one.
  */
 const ADMIN_CODES = new Set(String(process.env.ADMIN_CODES ?? 'מאיר#1').split(',').map((c) => c.trim().toLowerCase()).filter(Boolean));
-const isAdmin = (user, p) => !user.guest && !!p?.registered && !!p.tag && ADMIN_CODES.has(`${tagKey(p.tagName || p.name)}#${p.tag}`);
+// or, by the account: usernames in ADMIN_USERS (comma-separated) — set in the
+// host's environment, it holds whatever the pilot is called
+const ADMIN_USERS = new Set(String(process.env.ADMIN_USERS || '').split(',').map((u) => u.trim().toLowerCase()).filter(Boolean));
+const isAdmin = (user, p) => !user.guest && (ADMIN_USERS.has(user.username) || (!!p?.registered && !!p.tag && ADMIN_CODES.has(`${tagKey(p.tagName || p.name)}#${p.tag}`)));
 const me = async (user) => {
   const p = await tagPilot(user, await pilotOf(user.id));
   return { guest: !!user.guest, username: user.username || '', admin: isAdmin(user, p), pilot: view(p) };

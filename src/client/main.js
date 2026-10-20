@@ -213,10 +213,12 @@ $('#login-form').addEventListener('submit', async (e) => {
     took(me);
     show('#sheet-login', false);
     $('#in-pass').value = '';
+    // say which pilot this is: two saved pilots of one name differ only by the number
+    const who = S.pilot.tag ? ` · ${displayName(S.pilot)}${S.account.admin ? ' · אדמין' : ''}` : '';
     if (S.mode === 'title') {
       titleForm();
-      if (S.pilot.name) showHangar(), addPendingFriend();
-    } else renderHangar(), addPendingFriend(), toast(loginMode === 'login' ? 'מחובר!' : 'נשמר! ✔');
+      if (S.pilot.name) showHangar(), addPendingFriend(), toast(`מחובר${who}`, 'lvl');
+    } else renderHangar(), addPendingFriend(), toast(loginMode === 'login' ? `מחובר${who}` : 'נשמר! ✔');
   } catch (x) { $('#login-err').textContent = err(x); }
 });
 
@@ -227,7 +229,7 @@ function openSettings() {
   $('#set-invert').checked = controls.invert;
   $('#set-quality').value = Q.pick;
   $('#set-sky').value = world.time;
-  $('#set-account').textContent = S.account.guest ? 'הטייס שמור במכשיר הזה. כדי להמשיך גם ממכשיר אחר — בחרו שם משתמש וסיסמה בהאנגר.' : `מחובר כ־${S.account.username}`;
+  $('#set-account').textContent = S.account.guest ? 'הטייס שמור במכשיר הזה. כדי להמשיך גם ממכשיר אחר — בחרו שם משתמש וסיסמה בהאנגר.' : `מחובר כ־${S.account.username} · הטייס ${displayName(S.pilot)}${S.account.admin ? ' · אדמין' : ''}`;
   show('#btn-logout', !S.account.guest);
   show('#sheet-settings');
 }
