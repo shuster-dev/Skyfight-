@@ -194,6 +194,12 @@ try {
     ok('stopped on a roof: a crash, not stuck there', got(b, 'down').length > downs && roof?.how === 'crash' && roof?.v === b.key, { roof, at: [b.pose.x, b.pose.y, b.pose.z], top });
   }
 
+  {
+    // people on right now: whoever is flying or was in the hangar this last
+    // minute and a half; the nine bots in the sky are not counted
+    const on = await api('/api/online', null, g.token);
+    ok('online: people only, not the bots', on.n >= 1 && on.n < 9, on);
+  }
   console.log('\nsaving');
   ok('pilots are on the board from the start, by name and number', ((await api('/api/leaderboard')).rows || []).some((r) => r.name === 'צייד#1'));
   const saved = await api('/api/register', { username: 'hunter1', password: 'pass1' }, g.token);

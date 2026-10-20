@@ -121,6 +121,7 @@ async function boot() {
     took(me);
     $('#btn-go').disabled = false;
     titleForm();
+    pollOnline();
   } catch (e) {
     $('#title-err').textContent = err(e);
     $('#btn-go').textContent = 'נסו לרענן את הדף';
@@ -153,6 +154,20 @@ async function addPendingFriend() {
   const q = new URLSearchParams(location.search); q.delete('f');
   history.replaceState(null, '', location.pathname + (q.toString() ? `?${q}` : ''));
   try { const r = await net.api('/api/friends/add', { code }); toast(`${r.friend.code} נוסף לחברים שלך`, 'lvl'); } catch (x) { if (x.code !== 'already_friends' && x.code !== 'self') toast(err(x), 'bad'); }
+}
+
+// how many people are on (bots not counted): by the launch button, kept fresh
+// while the title or the hangar is up
+let onlineT = 0;
+async function pollOnline() {
+  clearTimeout(onlineT);
+  if (S.mode === 'title' || S.mode === 'hangar') {
+    try {
+      const { n } = await net.api('/api/online');
+      $$('#h-online b, #t-online b').forEach((b) => (b.textContent = n));
+    } catch {}
+  }
+  onlineT = setTimeout(pollOnline, 15000);
 }
 
 function took(me) {
@@ -269,6 +284,7 @@ function showHangar() {
   viewing = S.pilot.plane;
   paintView = '';
   renderHangar();
+  pollOnline();
 }
 
 $$('.h-tabs button').forEach((b) => b.addEventListener('click', () => {

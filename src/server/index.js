@@ -128,6 +128,9 @@ app.post('/api/login', knock.mw(), async (req, res) => {
   res.json({ token: signToken(user.id), ...(await me(user)) });
 });
 
+// how many people are on: the green dot by the launch button (asking counts you in)
+app.get('/api/online', requireAuth, (req, res) => res.json({ n: presence.online() }));
+
 app.get('/api/me', requireAuth, async (req, res) => res.json(await me(req.user)));
 
 // --- the hangar -------------------------------------------------------------

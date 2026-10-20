@@ -78,6 +78,7 @@ async function run(label, viewport, mobile) {
   await page.click('[data-tab="planes"]');
   await wait(1500);
   ok('back on the planes, no weapon left standing on the pad', await page.evaluate(() => window.__sky.hangarArms()) === 0);
+  ok('by the launch button: a green dot and how many people are on (at least you; bots not counted)', await page.waitForFunction(() => /online players: [1-9]/.test(document.querySelector('#h-online').textContent), null, { timeout: 10000 }).then(() => true, () => false));
   ok('a name, and nothing else: the pilot has a code of their own at once', await page.evaluate(() => !!window.__sky.pilot.tag));
   ok('a username and a password are only a backup, offered but not asked', await page.isVisible('#btn-save'));
   await page.click('[data-tab="friends"]');
