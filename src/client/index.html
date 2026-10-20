@@ -225,6 +225,20 @@
   .ad-row button:disabled { background: rgba(255,255,255,0.08); color: var(--dim); }
   .ad-quick button { flex: 1 1 0; min-width: 0; padding: 9px 4px; font-size: 12px; color: #04201c; background: var(--teal); }
   .ad-quick button:last-child { background: rgba(255,90,100,0.85); color: #fff; }
+  .ad-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 0 10px; }
+  .ad-chip { display: flex; align-items: center; gap: 6px; padding: 7px 10px; border-radius: 999px; font-size: 13px; color: #fff; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.16); }
+  .ad-chip i { width: 8px; height: 8px; border-radius: 50%; background: #2fe37a; }
+  .ad-chip.hangar i { background: #6fb4ff; }
+  .ad-chip small { color: var(--dim); font-size: 11px; }
+  .ad-chip.on { border-color: #ffe08a; background: rgba(241,210,122,0.16); }
+  .ad-sub .live { display: inline-block; width: 8px; height: 8px; margin-left: 6px; border-radius: 50%; background: #2fe37a; animation: onl 2s infinite; }
+  .ad-mod { display: grid; gap: 8px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1); }
+  .ad-state { font-size: 13px; color: var(--dim); }
+  .ad-state .ok { color: #2fe37a; } .ad-state .warn, #title-code .warn { color: #ffd25e; } .ad-state .bad { color: #ff5a64; }
+  .ad-mod .ad-row button { flex: 1 1 0; background: rgba(255,255,255,0.1); color: #fff; border: 1px solid rgba(255,255,255,0.2); }
+  .ad-mod .ad-row button.danger { background: rgba(255,90,100,0.85); border-color: transparent; }
+  .ad-mod .ad-row button.soft { background: var(--teal); color: #04201c; }
+  .ad-mod .ad-row button:disabled { opacity: 0.4; }
   .ad-sub { font-size: 12px; font-weight: 800; letter-spacing: 1px; color: var(--teal); padding: 8px 0 2px; }
   .ad-pick { width: 100%; background: none; text-align: right; color: inherit; }
   .f-add input { flex: 1; min-width: 0; padding: 10px 12px; font: inherit; font-size: 15px; color: #fff; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.18); border-radius: 6px; outline: none; }
@@ -598,6 +612,7 @@
   <div class="h-panel admin hidden" id="tab-admin">
     <div class="up-head"><b>אדמין</b><small>זהב, מטוסים ורמה לכל שחקן</small></div>
     <form class="f-add" id="ad-find" autocomplete="off"><input id="ad-code" placeholder="שם#מספר של שחקן" maxlength="24" dir="auto"><button type="submit">חפש</button></form>
+    <div id="ad-online"></div>
     <div id="ad-card"></div>
     <div id="ad-list"></div>
   </div>

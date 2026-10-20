@@ -46,7 +46,8 @@ export class Net {
         }
         return await this.api('/api/guest', {});
       } catch (e) {
-        if (i > 14) throw e;
+        // blocked: no point asking again
+        if (i > 14 || e.code === 'banned') throw e;
         onWait?.(i);
         await new Promise((r) => setTimeout(r, Math.min(6000, 1200 * (i + 1))));
       }

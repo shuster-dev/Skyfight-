@@ -7,7 +7,7 @@ import { makeRenderer, makeWorld, inCloud, makePads } from './gfx/scene.js';
 import { buildPlane, buildBomber, animatePlane } from './gfx/planes.js';
 import { Fx } from './gfx/fx.js';
 import { Hangar } from './gfx/hangar.js';
-import { ARMS, GUNS, GUN_ORDER, MISSILES, MISSILE_ORDER, PAINTS, PAINT_ORDER, PLANES, PLANE_ORDER, GIFT_PLANES, UPGRADES, UPGRADE_ORDER, TIER_MAX, nextTier, statsOf, tiersOf, levelProgress, planeOpen, planeOwned, cleanCallsign, displayName } from '../shared/planes.js';
+import { ARMS, GUNS, GUN_ORDER, MISSILES, MISSILE_ORDER, PAINTS, PAINT_ORDER, PLANES, PLANE_ORDER, GIFT_PLANES, UPGRADES, UPGRADE_ORDER, TIER_MAX, nextTier, statsOf, tiersOf, levelProgress, planeOpen, planeOwned, cleanCallsign, displayName, rudeName } from '../shared/planes.js';
 import { ARENA, BRIDGE, HEAL, HEALS, groundAt, underBridge } from '../shared/arena.js';
 import { flyQ, forward, newBodyQ, drawnQ, Q as QQ } from '../shared/flight.js';
 import { DODGE, FLARE, GUN, MISSILE, RESPAWN, aimDir, gunTarget, leadPoint, offNose, pickTarget } from '../shared/combat.js';
@@ -21,6 +21,7 @@ const ERR = {
   offline: 'אין חיבור לשרת — בדקו את האינטרנט', bad_name: 'שם בין 2 ל־14 תווים, אותיות ומספרים בלבד', bad_login: 'שם משתמש או סיסמה שגויים',
   username_taken: 'השם הזה כבר תפוס', invalid_username: 'שם משתמש: 3–16 אותיות אנגלית קטנות ומספרים', invalid_password: 'סיסמה: לפחות 4 תווים',
   bad_code: 'כותבים שם#מספר, כמו מאיר#1', no_such_pilot: 'אין טייס כזה — בדקו את השם והמספר', self: 'אי אפשר להוסיף את עצמכם',
+  banned: 'החשבון הזה נחסם על ידי האדמין', rename: 'האדמין ביקש שתבחרו שם חדש', rude_name: 'השם הזה לא מתאים — בחרו שם אחר', new_name: 'צריך לבחור שם חדש, שונה מהקודם',
   already_friends: 'כבר חברים', friends_full: 'רשימת החברים מלאה', name_fixed: 'השם כבר קבוע — הוא הקוד שלך לחברים',
   no_neon: 'צריך את קוד הניאון', no_such_gift: 'אין קוד כזה', gift_used: 'כבר מימשת את הקוד הזה', gift_only: 'המטוס הזה רק בקוד מתנה',
   not_admin: 'רק לאדמין', bad_gold: 'כמות זהב לא תקינה', bad_level: 'רמה בין 1 ל־30', no_such_plane: 'אין מטוס כזה', nothing_to_do: 'לא נבחר שינוי',
@@ -124,7 +125,7 @@ async function boot() {
     pollOnline();
   } catch (e) {
     $('#title-err').textContent = err(e);
-    $('#btn-go').textContent = 'נסו לרענן את הדף';
+    $('#btn-go').textContent = e.code === 'banned' ? 'חסום' : 'נסו לרענן את הדף';
   }
 }
 
@@ -134,13 +135,15 @@ async function boot() {
  * log in to. A pilot who has one just goes in.
  */
 function titleForm() {
-  const named = !!(S.pilot.name && S.pilot.tag);
+  // the admin turned the name down: a new one before anything else
+  const redo = !!S.pilot.mustRename;
+  const named = !!(S.pilot.name && S.pilot.tag) && !redo;
   const inp = $('#in-name');
-  if (S.pilot.name) inp.value = S.pilot.name;
+  inp.value = redo ? '' : S.pilot.name || inp.value;
   inp.readOnly = named;
   inp.classList.toggle('fixed', named);
-  $('#title-code').innerHTML = named ? `הקוד שלך לחברים: <b dir="auto">${esc(displayName(S.pilot))}</b>` : '';
-  show('#title-code', named);
+  $('#title-code').innerHTML = redo ? '<b class="warn">האדמין ביקש שתבחרו שם חדש לטייס</b>' : named ? `הקוד שלך לחברים: <b dir="auto">${esc(displayName(S.pilot))}</b>` : '';
+  show('#title-code', named || redo);
   show('#btn-have', S.account.guest);
   $('#btn-go').textContent = named ? 'להאנגר' : 'המראה';
 }
@@ -195,7 +198,8 @@ $('#title-form').addEventListener('submit', async (e) => {
   const btn = $('#btn-go');
   btn.disabled = true;
   try {
-    if (name !== S.pilot.name || !S.pilot.tag) S.pilot = (await net.api('/api/pilot/name', { name })).pilot, titleForm();
+    if (rudeName(name)) throw Object.assign(new Error('rude_name'), { code: 'rude_name' });
+    if (name !== S.pilot.name || !S.pilot.tag || S.pilot.mustRename) S.pilot = (await net.api('/api/pilot/name', { name })).pilot, titleForm();
     showHangar();
     addPendingFriend();
   } catch (x) {
@@ -631,14 +635,28 @@ async function renderAdmin() {
   const list = $('#ad-list');
   try {
     const { rows } = await net.api('/api/admin/pilots');
-    list.innerHTML = '<div class="ad-sub">שחקנים</div>' + rows.map((r) => `<button type="button" class="f-row ad-pick" data-code="${esc(r.code)}"><div class="t"><b dir="auto">${esc(r.code)}</b><small>רמה ${r.level} · ${r.kills} הפלות · ${esc(PLANES[r.plane]?.he || '')}</small></div></button>`).join('');
+    list.innerHTML = '<div class="ad-sub">כל השחקנים</div>' + rows.map((r) => `<button type="button" class="f-row ad-pick" data-code="${esc(r.code)}"><div class="t"><b dir="auto">${esc(r.code)}</b><small>רמה ${r.level} · ${r.kills} הפלות · ${esc(PLANES[r.plane]?.he || '')}</small></div></button>`).join('');
   } catch (x) { list.innerHTML = `<div class="note">${err(x)}</div>`; }
+  renderAdminOnline();
   if (!adminCode && S.pilot.tag) adminCode = `${S.pilot.name}#${S.pilot.tag}`;
   if (adminCode) adminLoad(adminCode);
+}
+// who is on right now, at the top: tap one and the card below is theirs.
+// Kept fresh while the desk is open.
+let adminOnlineT = 0;
+async function renderAdminOnline() {
+  clearTimeout(adminOnlineT);
+  if (S.mode !== 'hangar' || tab !== 'admin' || !S.account.admin) return;
+  try {
+    const { rows } = await net.api('/api/admin/online');
+    $('#ad-online').innerHTML = `<div class="ad-sub"><i class="live"></i>מחוברים עכשיו · ${rows.length}</div><div class="ad-chips">` + rows.map((r) => `<button type="button" class="ad-chip ${r.state} ${r.code === adminCode ? 'on' : ''}" data-code="${esc(r.code)}"><i></i><b dir="auto">${esc(r.code)}</b><small>${r.state === 'air' ? 'בקרב' : 'בהאנגר'} · ${r.level}</small></button>`).join('') + '</div>';
+  } catch {}
+  adminOnlineT = setTimeout(renderAdminOnline, 10000);
 }
 async function adminLoad(code) {
   adminCode = code;
   $('#ad-code').value = code;
+  $$('#ad-online .ad-chip').forEach((x) => x.classList.toggle('on', x.dataset.code === code));
   const card = $('#ad-card');
   try {
     const { pilot: a } = await net.api(`/api/admin/pilot?code=${encodeURIComponent(code)}`);
@@ -655,7 +673,26 @@ function paintAdmin(a) {
     <div class="ad-row"><span class="k">מטוס</span><select id="ad-plane">${missing.map((k) => `<option value="${k}">${esc(PLANES[k].he)} · רמה ${PLANES[k].level}</option>`).join('') || '<option value="">יש לו את כולם</option>'}</select>
       <button type="button" data-ad="plane" ${missing.length ? '' : 'disabled'}>תן</button><button type="button" data-ad="all" ${missing.length ? '' : 'disabled'}>תן הכול</button></div>
     <div class="ad-row"><span class="k">רמה</span><input id="ad-level" type="number" inputmode="numeric" min="1" max="30" placeholder="${a.level}"><button type="button" data-ad="level">קבע רמה</button></div>
+    <div class="ad-mod">
+      <div class="ad-state">${a.banned ? '<b class="bad">חסום</b>' : a.mustRename ? '<b class="warn">ממתין לשם חדש</b>' : a.state === 'air' ? '<b class="ok">בקרב עכשיו</b>' : a.state === 'hangar' ? '<b class="ok">בהאנגר</b>' : 'לא מחובר'}</div>
+      <div class="ad-row">
+        <button type="button" data-mod="kick" ${a.state === 'air' ? '' : 'disabled'}>קיק מהזירה</button>
+        <button type="button" data-mod="rename" ${a.mustRename ? 'disabled' : ''}>חייב לשנות שם</button>
+        ${a.banned ? '<button type="button" data-mod="unban" class="soft">בטל חסימה</button>' : '<button type="button" data-mod="ban" class="danger">חסום</button>'}
+      </div>
+    </div>
   </div>`;
+}
+const MOD_ASK = { kick: 'להוציא את {c} מהזירה? (יוכל לחזור)', rename: 'להוציא את {c} ולחייב אותו לבחור שם חדש?', ban: 'לחסום את {c}? לא יוכל להיכנס למשחק עד שתבטל', unban: 'לבטל את החסימה של {c}?' };
+const MOD_DONE = { kick: 'הוצא מהזירה', rename: 'יצטרך לבחור שם חדש', ban: 'נחסם', unban: 'החסימה בוטלה' };
+async function adminModerate(action) {
+  if (!confirm(MOD_ASK[action].replace('{c}', adminCode))) return;
+  try {
+    const { pilot: a } = await net.api('/api/admin/moderate', { code: adminCode, action });
+    paintAdmin(a);
+    toast(`${a.code} · ${MOD_DONE[action]}`, action === 'unban' ? '' : 'bad');
+    renderAdminOnline();
+  } catch (x) { toast(err(x), 'bad'); }
 }
 async function adminEdit(body) {
   try {
@@ -669,9 +706,17 @@ async function adminEdit(body) {
 }
 $('#ad-find').addEventListener('submit', (e) => { e.preventDefault(); const c = $('#ad-code').value.trim(); c && adminLoad(c); });
 $('#ad-list').addEventListener('click', (e) => { const c = e.target.closest('[data-code]')?.dataset.code; c && adminLoad(c); });
+$('#ad-online').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-code]');
+  if (!b) return;
+  adminLoad(b.dataset.code);
+  $('#ad-card').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+});
 $('#ad-card').addEventListener('click', (e) => {
   const add = e.target.closest('[data-add]')?.dataset.add;
   if (add) return adminEdit({ addGold: Number(add) });
+  const mod = e.target.closest('[data-mod]')?.dataset.mod;
+  if (mod) return adminModerate(mod);
   const op = e.target.closest('[data-ad]')?.dataset.ad;
   const gold = Number($('#ad-gold')?.value);
   if (op === 'set-gold' && $('#ad-gold').value !== '') adminEdit({ gold });
@@ -774,6 +819,8 @@ async function launch() {
     controls.enabled = true;
     $('#feed').innerHTML = '';
   } catch (x) {
+    const why = /banned/.test(x?.message) ? 'banned' : /rename/.test(x?.message) ? 'rename' : '';
+    if (why) return void afterSentOff(why === 'banned' ? 4005 : 4004);
     toast(err(x), 'bad');
   } finally { btn.disabled = false; renderHangar(); }
 }
@@ -899,11 +946,25 @@ function hook(room) {
   room.onMessage('reward', onReward);
   room.onLeave((code) => {
     if (room !== S.room) return; // an old room, already replaced
-    const why = code === 4002 ? 'נותקת מהזירה כי לא טסת זמן מה' : code === 4000 ? 'נכנסת מחלון אחר' : code === 4001 ? 'נותקת: המיקום שלך לא הסתנכרן' : '';
+    const why = code === 4002 ? 'נותקת מהזירה כי לא טסת זמן מה' : code === 4000 ? 'נכנסת מחלון אחר' : code === 4001 ? 'נותקת: המיקום שלך לא הסתנכרן'
+      : code === 4003 ? 'הוצאת מהזירה על ידי האדמין' : code === 4004 ? ERR.rename : code === 4005 ? ERR.banned : '';
+    // sent off by the admin to choose a new name, or blocked: to the front door
+    if (code === 4004 || code === 4005) setTimeout(() => afterSentOff(code), 300);
     // the line dropped (not us, not the room sending us off): back in, not out
     if (!S.leaving && !why && code !== 1000) return void rejoin(room);
     leaveSky(S.leaving ? '' : why || (code > 1000 ? 'החיבור לשרת נפל' : ''));
   });
+}
+
+/** Out of the sky on the admin's word: a new name to choose, or the door shut. */
+async function afterSentOff(code) {
+  try { took(await net.api('/api/me')); } catch (x) {
+    showTitle();
+    $('#btn-go').disabled = true;
+    return void ($('#title-err').textContent = err(x));
+  }
+  showTitle(); titleForm();
+  if (code === 4004) $('#title-err').textContent = ERR.rename;
 }
 
 /**
