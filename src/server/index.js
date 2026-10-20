@@ -11,8 +11,8 @@ import { openStore, tagKey } from './store.js';
 import { presence } from './presence.js';
 import { hashPassword, verifyPassword, signToken, verifyToken, validateUsername } from './auth.js';
 import { adminEdit, redeemGift, setNeon, buyArm, equipArm, buyPaint, buyPlane, buyUpgrade, choosePaint, choosePlane, newPilot, normalize, view } from './pilot.js';
-import { ArenaRoom } from './rooms/ArenaRoom.js';
-import { cleanCallsign, displayName, levelOf } from '../shared/planes.js';
+import { ArenaRoom, ROOMS } from './rooms/ArenaRoom.js';
+import { cleanCallsign, displayName, levelOf, rudeName } from '../shared/planes.js';
 
 process.on('unhandledRejection', (e) => console.error('[unhandled]', e));
 
@@ -49,6 +49,8 @@ const requireAuth = async (req, res, next) => {
   const claims = h.startsWith('Bearer ') ? verifyToken(h.slice(7)) : null;
   const user = claims && await store.findUser(claims.sub);
   if (!user) return res.status(401).json({ error: 'unauthorized' });
+  // blocked by the admin: nothing more for them here
+  if ((await store.getPilot(user.id))?.banned) return res.status(403).json({ error: 'banned' });
   req.user = user;
   presence.seen(user.id);
   next();
@@ -144,9 +146,13 @@ const hangar = (fn) => async (req, res) => {
 app.post('/api/pilot/name', requireAuth, async (req, res) => {
   const name = cleanCallsign(req.body?.name);
   if (!name) return res.status(400).json({ error: 'bad_name' });
+  if (rudeName(name)) return res.status(400).json({ error: 'rude_name' });
   const p = await pilotOf(req.user.id);
-  // a pilot keeps the name it was given: it is their code, friends know them by it
-  if (p.tag && p.name && p.name !== name) return res.status(409).json({ error: 'name_fixed' });
+  // a pilot keeps the name it was given: it is their code, friends know them
+  // by it — unless the admin turned the name down; then a new one, and a new number
+  if (p.mustRename && name === p.name) return res.status(400).json({ error: 'new_name' });
+  if (p.tag && p.name && p.name !== name && !p.mustRename) return res.status(409).json({ error: 'name_fixed' });
+  delete p.mustRename;
   p.name = name;
   await store.savePilot(p);
   await tagPilot(req.user, p);
@@ -218,7 +224,39 @@ const requireAdmin = async (req, res, next) => {
   if (!isAdmin(req.user, await pilotOf(req.user.id))) return res.status(403).json({ error: 'not_admin' });
   next();
 };
-const adminRow = (p) => ({ code: displayName(p), level: levelOf(p.xp || 0), gold: p.gold || 0, plane: p.plane, planes: p.planes, kills: p.kills || 0 });
+const adminRow = (p) => ({ code: displayName(p), level: levelOf(p.xp || 0), gold: p.gold || 0, plane: p.plane, planes: p.planes, kills: p.kills || 0, state: presence.of(p.id).state, banned: !!p.banned, mustRename: !!p.mustRename });
+// who is on right now, flying first: the admin picks from these
+app.get('/api/admin/online', requireAuth, requireAdmin, async (req, res) => {
+  const rows = [];
+  for (const id of presence.onlineIds()) {
+    const p = await store.getPilot(id);
+    if (p?.name) rows.push(adminRow(normalize(p)));
+  }
+  rows.sort((a, b) => (a.state === 'air' ? 0 : 1) - (b.state === 'air' ? 0 : 1) || b.level - a.level);
+  res.json({ rows });
+});
+/**
+ * Keeping the sky clean: 'kick' sends a pilot out of the arena (they can come
+ * back); 'rename' sends them out and lets them back only under a new name (and
+ * a new number); 'ban' blocks the account until 'unban'.
+ */
+const SEND_OFF = { kick: 4003, rename: 4004, ban: 4005 };
+app.post('/api/admin/moderate', requireAuth, requireAdmin, async (req, res) => {
+  const c = parseCode(req.body?.code), action = String(req.body?.action || '');
+  if (!['kick', 'rename', 'ban', 'unban'].includes(action)) return res.status(400).json({ error: 'nothing_to_do' });
+  const p = c && await store.findPilotByCode(c.name, c.tag);
+  if (!p) return res.status(404).json({ error: 'no_such_pilot' });
+  if (p.id === req.user.id) return res.status(400).json({ error: 'self' });
+  if (action === 'rename') p.mustRename = true;
+  if (action === 'ban') p.banned = true;
+  if (action === 'unban') delete p.banned;
+  await store.savePilot(p);
+  let out = 0;
+  if (SEND_OFF[action]) for (const room of ROOMS) out += room.sendOff(p.id, SEND_OFF[action]);
+  const by = await pilotOf(req.user.id);
+  console.log(`[admin] ${displayName(by)} ${action} ${displayName(p)}`);
+  res.json({ ok: true, sentOff: out, pilot: adminRow(normalize(p)) });
+});
 app.get('/api/admin/pilot', requireAuth, requireAdmin, async (req, res) => {
   const c = parseCode(req.query.code);
   const p = c && await store.findPilotByCode(c.name, c.tag);

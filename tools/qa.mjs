@@ -1,6 +1,6 @@
 // The rules, checked without a server or a browser: flying, shooting, paying,
 // and the hangar's prices. `npm run qa`
-import { GUNS, MISSILES, GUN_ORDER, MISSILE_ORDER, PLANES, PLANE_ORDER, UPGRADES, TIER_COST, TIER_LEVEL, statsOf, xpAt, xpStep, levelOf, levelProgress, killReward, cleanCallsign, nextTier, MAX_LEVEL } from '../src/shared/planes.js';
+import { GUNS, MISSILES, GUN_ORDER, MISSILE_ORDER, PLANES, PLANE_ORDER, UPGRADES, TIER_COST, TIER_LEVEL, statsOf, xpAt, xpStep, levelOf, levelProgress, killReward, cleanCallsign, nextTier, MAX_LEVEL, rudeName } from '../src/shared/planes.js';
 import { AIRFIELD, ARENA, BRIDGE, BUILDINGS, PORT, STRUCTURES, HEAL, HEALS, groundAt, healAt, hitsSolid, inBay, spawnPoint, surfaceAt, terrainAt, underBridge } from '../src/shared/arena.js';
 import { fly, flyQ, forward, newBody, newBodyQ, plausibleMove, BOOST, BRAKE, Q } from '../src/shared/flight.js';
 import { GUN, MISSILE, RAM, aimDir, blastDamage, closestOn, missileHurt, DODGE, dodgeChance, gunTarget, leadPoint, offNose, pickTarget, ramDamage, segmentHit, steerMissile } from '../src/shared/combat.js';
@@ -11,6 +11,14 @@ const ok = (name, cond, info) => {
   if (cond) { pass++; console.log('  ok  ', name); } else { fail++; console.log('  FAIL', name, info === undefined ? '' : JSON.stringify(info)); }
 };
 const near = (a, b, e = 1e-6) => Math.abs(a - b) <= e;
+
+console.log('\nnames');
+{
+  const rude = ['זין', 'הזונה', 'בן זונה', 'כוס אמק', 'שרמוטה', 'fuck', 'f u c k', 'sh1t', 'Bitch99', 'kusamak', 'Hitler'];
+  const fine = ['מאיר', 'מאזין', 'כוסמת', 'שוסטר', 'Ace', 'Dickens', 'classic', 'Assaf', 'לביא', 'תחתית', 'Sasha'];
+  ok('curses are caught, dressed up or not', rude.every(rudeName), rude.filter((n) => !rudeName(n)));
+  ok('ordinary names are not', fine.every((n) => !rudeName(n)), fine.filter(rudeName));
+}
 
 console.log('\nplanes');
 ok('fifteen planes, in order of level', PLANE_ORDER.length === 15 && PLANE_ORDER.every((k, i) => !i || PLANES[k].level > PLANES[PLANE_ORDER[i - 1]].level));

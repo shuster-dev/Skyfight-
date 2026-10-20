@@ -242,6 +242,35 @@ try {
     ok('nonsense is refused', (await api('/api/admin/edit', { code: 'צייד#1', plane: '__proto__' }, adm.token)).error === 'no_such_plane' && (await api('/api/admin/edit', { code: 'צייד#1', level: 99 }, adm.token)).error === 'bad_level' && (await api('/api/admin/edit', { code: 'nobody#9', gold: 1 }, adm.token)).status === 404);
     await api('/api/admin/edit', { code: 'צייד#1', level: 1, plane: 'sparrow' }, adm.token);
     await api('/api/pilot/plane', { plane: 'sparrow' }, back.token);
+
+    console.log('\nkeeping the sky clean');
+    ok('a rude name is refused at the door', (await api('/api/pilot/name', { name: 'f u c k' }, (await api('/api/guest', {})).token)).error === 'rude_name');
+    // a pilot flying under a name that has to go
+    const bad = await api('/api/guest', {});
+    await api('/api/pilot/name', { name: 'גרוע' }, bad.token);
+    const bp = await pilot(bad.token, 'arena_duel');
+    await until(() => bp.key);
+    const online = await api('/api/admin/online', null, adm.token);
+    ok('the admin sees who is on, the one flying among them', online.rows?.some((r) => r.code === 'גרוע#1' && r.state === 'air'), online.rows?.map((r) => r.code + ':' + r.state));
+    ok('only the admin', (await api('/api/admin/online', null, back.token)).status === 403);
+    ok('and not on themselves', (await api('/api/admin/moderate', { code: 'מאיר#1', action: 'kick' }, adm.token)).error === 'self');
+    const k = await api('/api/admin/moderate', { code: 'גרוע#1', action: 'kick' }, adm.token);
+    ok('a kick sends them out of the arena', k.sentOff === 1 && await until(() => bp.left === 4003), { k, left: bp.left });
+    const bp2 = await pilot(bad.token, 'arena_duel');
+    ok('a kick is only a kick: they can come back', await until(() => bp2.key));
+    const r = await api('/api/admin/moderate', { code: 'גרוע#1', action: 'rename' }, adm.token);
+    ok('"new name": out again, and told why', r.pilot?.mustRename && await until(() => bp2.left === 4004));
+    ok('not back in the sky under that name', await (async () => { try { await pilot(bad.token, 'arena_duel'); return false; } catch (e) { return /rename/.test(e.message); } })());
+    ok('the pilot is asked for a new one', (await api('/api/me', null, bad.token)).pilot?.mustRename === true);
+    ok('the same name again will not do', (await api('/api/pilot/name', { name: 'גרוע' }, bad.token)).error === 'new_name');
+    const renamed = await api('/api/pilot/name', { name: 'נקי' }, bad.token);
+    ok('a new name, a new number, and back in', renamed.pilot?.name === 'נקי' && renamed.pilot.tag === 1 && !renamed.pilot.mustRename);
+    const bp3 = await pilot(bad.token, 'arena_duel');
+    ok('flying again', await until(() => bp3.key));
+    const b = await api('/api/admin/moderate', { code: 'נקי#1', action: 'ban' }, adm.token);
+    ok('blocked: out, and the door shut', b.pilot?.banned && await until(() => bp3.left === 4005) && (await api('/api/me', null, bad.token)).error === 'banned');
+    ok('no way into the arena either', await (async () => { try { await pilot(bad.token, 'arena_duel'); return false; } catch (e) { return /banned/.test(e.message); } })());
+    ok('unblocked: back in', !(await api('/api/admin/moderate', { code: 'נקי#1', action: 'unban' }, adm.token)).pilot?.banned && (await api('/api/me', null, bad.token)).pilot?.name === 'נקי');
   }
 
   console.log('\nbots for everyone');

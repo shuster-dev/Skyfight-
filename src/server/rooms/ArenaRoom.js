@@ -18,6 +18,8 @@ import { ARENA, hitsSolid, spawnPoint, surfaceAt, HEAL, HEALS, healAt } from '..
 import { Q, fly, forward, newBody } from '../../shared/flight.js';
 import { ASSIST_SHARE, CREDIT_MS, FLARE, GUN, MISSILE, RAM, REPAIR, RESPAWN, ramDamage, aimDir, closestOn, DODGE, dodgeChance, gunTarget, missileHurt, offNose, pickTarget, segmentHit, steerMissile } from '../../shared/combat.js';
 
+/** Every arena open on this server: the admin reaches a pilot in any of them. */
+export const ROOMS = new Set();
 const TICK_MS = 1000 / 30;
 const SNAP_EVERY = 2;          // 15 snapshots a second
 const MAX_POSES_PER_SEC = 40;
@@ -60,6 +62,7 @@ export class ArenaRoom extends Room {
   maxClients = SKY_SIZE;
 
   onCreate(opts = {}) {
+    ROOMS.add(this);
     this.store = opts.store;
     this.planes = new Map();   // key -> plane
     this.bySession = new Map(); // sessionId -> key
@@ -107,6 +110,9 @@ export class ArenaRoom extends Room {
     if (!claims) throw new Error('unauthorized');
     const pilot = await this.store.getPilot(claims.sub);
     if (!pilot || !pilot.name) throw new Error('no_pilot');
+    // turned away by the admin: blocked, or flying under a name that must go
+    if (pilot.banned) throw new Error('banned');
+    if (pilot.mustRename) throw new Error('rename');
     normalize(pilot);
     return { id: claims.sub, pilot };
   }
@@ -165,8 +171,23 @@ export class ArenaRoom extends Room {
   }
 
   async onDispose() {
+    ROOMS.delete(this);
     for (const p of this.planes.values()) if (p.uid) presence.leave(p.uid, this.roomId);
     for (const p of this.planes.values()) if (p.pilot) await this.store.savePilot(p.pilot);
+  }
+
+  /**
+   * The admin sends a pilot out of the sky (4003 kicked, 4004 to choose a new
+   * name, 4005 blocked): no waiting for them to come back to the plane.
+   */
+  sendOff(uid, code) {
+    let n = 0;
+    for (const p of this.planes.values()) {
+      if (p.uid !== uid || !p.sid) continue;
+      const c = this.clients.find((c) => c.sessionId === p.sid);
+      if (c) p.kicked = true, c.leave(code), n++;
+    }
+    return n;
   }
 
   // ---- planes -------------------------------------------------------------

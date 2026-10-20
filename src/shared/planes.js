@@ -295,6 +295,28 @@ export const planeOwned = (pilot, id) => id === START_PLANE || (pilot.planes || 
  */
 export const displayName = (p) => (p?.tag ? `${p.name}#${p.tag}` : p?.name || '');
 
+/**
+ * A name nobody should have to fly next to: curses and slurs, Hebrew and
+ * English. Letters dressed up as digits (f4ck, sh1t) and spaces or marks
+ * between letters (f u c k) do not get past it. Short words count only
+ * as a whole word (with a Hebrew prefix letter or two), so מאזין and
+ * Dickens are fine; the long ones anywhere in the name.
+ */
+const RUDE_ANYWHERE = ['fuck', 'fuk', 'shit', 'bitch', 'cunt', 'nigg', 'whore', 'slut', 'asshole', 'porn', 'hitler', 'nazi', 'kusam', 'kusem', 'kusima',
+  'שרמוט', 'מזדיי', 'כוסאמ', 'כוסעמ', 'כוסאחות', 'לזיין', 'זיונ', 'מזדינ', 'היטלר', 'נאצי', 'קוקסינל'];
+const RUDE_WORD = ['dick', 'cock', 'sex', 'fag', 'pussy', 'ass', 'zona', 'kus', 'zain', 'zayin',
+  'זין', 'כוס', 'זונה', 'זונות', 'חרא', 'מניאק', 'מניאקים', 'כוסית', 'כוסון', 'בןזונה', 'זיון', 'קקי', 'פיפי', 'תחת', 'ערס', 'מפגר', 'מפגרת', 'אידיוט'];
+const LEET = { 0: 'o', 1: 'i', 3: 'e', 4: 'a', 5: 's', 7: 't', 8: 'b', '@': 'a', $: 's' };
+export function rudeName(s) {
+  const low = String(s ?? '').toLowerCase().replace(/[0134578@$]/g, (c) => LEET[c]);
+  const flat = low.replace(/[^\p{L}]/gu, '');
+  if (RUDE_ANYWHERE.some((w) => flat.includes(w))) return true;
+  const words = low.split(/[^\p{L}]+/u).filter(Boolean);
+  // a word, or a word with a Hebrew prefix (ה, ו, ש, ב, ל, מ, כ) or two on it
+  const bare = (w) => [w, w.replace(/^[הושבלמכ]/u, ''), w.replace(/^[הושבלמכ]{2}/u, '')];
+  return words.some((w) => bare(w).some((b) => RUDE_WORD.includes(b))) || RUDE_WORD.includes(flat);
+}
+
 /** A callsign: 2–14 letters (Hebrew or Latin), digits, spaces, _ and -. */
 export function cleanCallsign(s) {
   const v = String(s ?? '').replace(/\s+/g, ' ').trim();

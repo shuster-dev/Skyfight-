@@ -23,6 +23,12 @@ export const presence = {
     for (const [id, t] of seen) if (now - t < SEEN_MS) ids.add(id);
     return ids.size;
   },
+  /** Who is on right now, by pilot id: for the admin's list. */
+  onlineIds(now = Date.now()) {
+    const ids = new Set(flying.keys());
+    for (const [id, t] of seen) if (now - t < SEEN_MS) ids.add(id);
+    return [...ids];
+  },
   /** 'air' (and where), 'hangar', or 'off'. */
   of(id, now = Date.now()) {
     const f = flying.get(id);

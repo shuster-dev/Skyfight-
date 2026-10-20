@@ -76,6 +76,8 @@ export const view = (p) => ({
   kills: p.kills, deaths: p.deaths, best: p.best,
   plane: p.plane, planes: p.planes, upgrades: p.upgrades, paint: p.paint, paints: p.paints, paintOf: p.paintOf, neon: p.neon, neonOf: p.neonOf,
   arms: p.arms, loadout: p.loadout,
+  // the admin asked for a new name: nothing until one is chosen
+  mustRename: !!p.mustRename,
 });
 
 /** Buy a plane: open at this level, not owned, and the gold to pay. */
