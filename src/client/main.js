@@ -875,7 +875,10 @@ function hook(room) {
   room.onMessage('roster', (list) => {
     S.roster = new Map(list.map((r) => [r.key, r]));
     paintScore();
+    paintPlayers();
   });
+  room.onMessage('pinvite', onPartyInvite);
+  room.onMessage('party', onParty);
   room.onMessage('hit', (m) => {
     S.hitFlash = 0.12;
     sound.hit();
@@ -1118,6 +1121,7 @@ function onReward(m) {
 async function leaveSky(why) {
   if (S.mode !== 'air') return;
   S.leaving = true;
+  show('#players', false); show('#pinvite', false);
   // nothing more goes out on a socket that is closing; the room is told we
   // are going, but nobody waits for it to answer
   const room = S.room;
@@ -1547,7 +1551,7 @@ function tags() {
       P.copy(o.mesh.position); P.y += 3.5;
       if (P.clone().project(camera).z > 1 || !project(P)) continue;
       const r = S.roster.get(o.key);
-      const side = S.teams ? (r?.team === S.myTeam ? ' mate' : ' foe') : '';
+      const side = S.teams ? (r?.team === S.myTeam ? ' mate' : ' foe') : r?.pc >= 0 ? ` pc${r.pc % 6}` : '';
       if (named < 2 && d < 900) {
         named++;
         // the plane under fire: a bigger bar, and the bit just shot off flashing white
@@ -1640,8 +1644,9 @@ function compass() {
   let near = null;
   for (const o of S.others.values()) {
     if (!o.alive || o.x === undefined) continue;
-    const mate = S.teams && S.roster.get(o.key)?.team === S.myTeam;
-    const m = mark(o.x, o.y, o.z, mate ? '#6aa8ff' : '#ff4d5a', 4.5);
+    const r = S.roster.get(o.key);
+    const mate = S.teams ? r?.team === S.myTeam : !!(myParty() && r?.party === myParty());
+    const m = mark(o.x, o.y, o.z, mate ? (S.teams ? '#6aa8ff' : PARTY_COLORS[r.pc % 6]) : '#ff4d5a', 4.5);
     if (!mate && m && (!near || m.d < near.d)) near = m;
   }
   if (S.boss) mark(S.boss.x, S.boss.y, S.boss.z, '#ffd27a', 6.5);
@@ -1654,10 +1659,82 @@ function compass() {
   }
 }
 
-/** Who I may shoot at: everyone, or in teams the other side. */
+/** Who I may shoot at: everyone (but my party), or in teams the other side. */
 function foes() {
   const all = [...S.others.values()];
-  return S.teams ? all.filter((o) => S.roster.get(o.key)?.team !== S.myTeam) : all;
+  if (S.teams) return all.filter((o) => S.roster.get(o.key)?.team !== S.myTeam);
+  const mine = myParty();
+  return mine ? all.filter((o) => S.roster.get(o.key)?.party !== mine) : all;
+}
+
+// ---- who is in this sky, and parties ---------------------------------------
+// A list of everyone here (a button and Tab): add a person as a friend, or
+// ask them into your party — up to five fly as one in a sky of everyone for
+// themselves: no harm between them, and everyone sees them in their colour.
+const PARTY_COLORS = ['#6aa8ff', '#c08bff', '#ffb259', '#ff7ad9', '#a6f06a', '#5ff0e0'];
+const PARTY_MAX = 5;
+const myParty = () => S.roster.get(S.myKey)?.party || '';
+let plFriends = new Set();
+async function openPlayers() {
+  if (S.mode !== 'air') return;
+  show('#players');
+  paintPlayers();
+  try { plFriends = new Set((await net.api('/api/friends')).rows.map((r) => r.code)); paintPlayers(); } catch {}
+}
+function paintPlayers() {
+  if ($('#players').classList.contains('hidden')) return;
+  const rows = [...S.roster.values()].sort((a, b) => a.bot - b.bot || b.kills - a.kills);
+  const mine = myParty(), mates = mine ? rows.filter((r) => r.party === mine) : [];
+  const people = rows.filter((r) => !r.bot).length;
+  $('#pl-count').textContent = `${people} אנשים · ${rows.length - people} בוטים`;
+  $('#pl-party').innerHTML = mine
+    ? `<div class="pp"><span class="pc${mates[0]?.pc % 6}">הפארטי שלך · ${mates.length}/${PARTY_MAX}</span><button type="button" id="pl-leave">עזוב</button></div>`
+    : S.teams ? '' : '<div class="note" style="font-size:12px">הזמינו עד 4 שחקנים לפארטי — לא פוגעים אחד בשני, ונלחמים יחד בכל השאר.</div>';
+  const full = mates.length >= PARTY_MAX;
+  $('#pl-list').innerHTML = rows.map((r) => {
+    const me = r.key === S.myKey, inMine = mine && r.party === mine;
+    const color = r.pc >= 0 ? `pc${r.pc % 6}` : '';
+    const btns = r.bot || me ? '' : [
+      plFriends.has(r.name) ? '' : `<button type="button" data-friend="${esc(r.name)}">+ חבר</button>`,
+      S.teams || inMine ? '' : `<button type="button" class="pty" data-party="${esc(r.key)}" ${full ? 'disabled' : ''}>פארטי</button>`,
+    ].join('');
+    return `<div class="pl-row"><span class="n ${color}" dir="auto">${esc(r.name)}${me ? ' <small>(אתה)</small>' : ''}<small>רמה ${r.level} · ${r.kills} הפלות</small></span>${r.bot ? '<span class="bot">בוט</span>' : btns}</div>`;
+  }).join('');
+}
+function togglePlayers() { $('#players').classList.contains('hidden') ? openPlayers() : show('#players', false); }
+$('#players-btn').addEventListener('click', togglePlayers);
+$('#pl-close').addEventListener('click', () => show('#players', false));
+addEventListener('keydown', (e) => { if (e.code === 'Tab' && S.mode === 'air') { e.preventDefault(); togglePlayers(); } });
+$('#players').addEventListener('click', async (e) => {
+  const f = e.target.closest('[data-friend]');
+  if (f) {
+    f.disabled = true;
+    try { const r = await net.api('/api/friends/add', { code: f.dataset.friend }); plFriends.add(f.dataset.friend); toast(`${r.friend.code} נוסף לחברים`); paintPlayers(); } catch (x) { f.disabled = false; toast(err(x), 'bad'); }
+    return;
+  }
+  const p = e.target.closest('[data-party]');
+  if (p) return void (S.room?.send('pinvite', { to: p.dataset.party }), (p.disabled = true));
+  if (e.target.id === 'pl-leave') S.room?.send('pleave');
+});
+// an invitation: yes or no, and it goes by itself after a while
+let pinviteFrom = '', pinviteT = 0;
+function onPartyInvite(m) {
+  pinviteFrom = m.from;
+  $('#pi-text').textContent = `${m.name} מזמין אותך לפארטי`;
+  show('#pinvite');
+  sound.coin?.();
+  clearTimeout(pinviteT);
+  pinviteT = setTimeout(() => show('#pinvite', false), 25000);
+}
+$('#pi-yes').addEventListener('click', () => { S.room?.send('paccept', { from: pinviteFrom }); show('#pinvite', false); });
+$('#pi-no').addEventListener('click', () => { S.room?.send('pdecline'); show('#pinvite', false); });
+function onParty(m) {
+  const who = (k) => S.roster.get(k)?.name || '';
+  if (m.invited) toast(`הזמנה לפארטי נשלחה ל־${who(m.invited)}`);
+  else if (m.joined) toast(m.joined === S.myKey ? 'הצטרפת לפארטי' : `${who(m.joined)} הצטרף לפארטי`, 'lvl');
+  else if (m.left) toast(`${who(m.left)} עזב את הפארטי`);
+  else if (m.ended) toast('הפארטי התפרק');
+  else if (m.error) toast(m.error === 'full' ? 'הפארטי מלא — עד 5 שחקנים' : 'ההזמנה כבר לא בתוקף', 'bad');
 }
 
 /** The team score at the top, blue against red. */
