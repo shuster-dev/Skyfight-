@@ -121,6 +121,12 @@ async function run(label, viewport, mobile) {
   ok('the stick climbs', st.alive ? st.pitch > 0.15 : true, { y0, ...st });
   if (!mobile) { await page.keyboard.up('ArrowUp'); await page.keyboard.up('Space'); }
   ok('the HUD is up', await page.isVisible('#hud') && await page.isVisible('#score'));
+  // the list of who is in this sky: you, and the bots, with no buttons on bots
+  await page.click('#players-btn');
+  ok('a button opens who is in the sky: people and bots', await page.waitForFunction(() => document.querySelectorAll('#pl-list .pl-row').length >= 5 && /בוטים/.test(document.querySelector('#pl-count').textContent), null, { timeout: 8000 }).then(() => true, () => false));
+  ok('no friend or party buttons on bots', await page.evaluate(() => [...document.querySelectorAll('#pl-list .pl-row')].filter((r) => r.querySelector('.bot')).every((r) => !r.querySelector('button'))));
+  await snap('5c-players');
+  await page.click('#pl-close');
   if (mobile) {
     // the right thumb drags the camera round; let go and it comes back
     const lp = await (await page.$('#look-pad')).boundingBox();

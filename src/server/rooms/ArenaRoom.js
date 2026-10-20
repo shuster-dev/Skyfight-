@@ -36,6 +36,9 @@ const q = (v, k = 10) => Math.round(v * k);
 const BOT_VS_PEOPLE = 0.85;
 /** How quickly a bot takes in a change of its target's course (1/s): about half a second. */
 const BOT_REACT = 2.2;
+/** A party: up to this many people flying together in a sky of everyone-for-themselves. */
+export const PARTY_MAX = 5;
+const INVITE_MS = 30000;
 // how a bot likes to fight: how long it will go round with someone before it
 // breaks off (s), how long it runs before coming back (s), and how much
 // higher than its target it likes to come in from (m)
@@ -103,6 +106,13 @@ export class ArenaRoom extends Room {
     });
     this.onMessage('hello', (client) => this.hello(client));
     this.onMessage('ping', (client, t) => client.send('pong', t));
+    // parties: an invitation, its answer, and leaving
+    this.parties = new Map();  // id -> { id, color, members: Set of plane keys }
+    this.invites = new Map();  // invited key -> { from, at }
+    this.onMessage('pinvite', (client, m) => this.partyInvite(this.planes.get(this.bySession.get(client.sessionId)), String(m?.to || '')));
+    this.onMessage('paccept', (client, m) => this.partyAccept(this.planes.get(this.bySession.get(client.sessionId)), String(m?.from || '')));
+    this.onMessage('pdecline', (client) => { const p = this.planes.get(this.bySession.get(client.sessionId)); p && this.invites.delete(p.key); });
+    this.onMessage('pleave', (client) => this.partyLeave(this.planes.get(this.bySession.get(client.sessionId))));
   }
 
   async onAuth(client, options = {}) {
@@ -212,6 +222,9 @@ export class ArenaRoom extends Room {
   }
 
   drop(key) {
+    const gone = this.planes.get(key);
+    if (gone) this.partyLeave(gone);
+    this.invites.delete(key);
     this.planes.delete(key);
     this.bullets = this.bullets.filter((b) => b.owner !== key);
     for (const m of this.missiles) if (m.target === key) m.target = '';
@@ -346,7 +359,7 @@ export class ArenaRoom extends Room {
       // from the wing the barrel is on, alternating
       const side = (p.gun++ % 2 ? 1 : -1) * 2.2, rx = Math.cos(p.yaw), rz = -Math.sin(p.yaw);
       this.bullets.push({
-        owner: p.key, team: p.team, t: 0, dmg: p.stats.dmg, r: p.bot ? GUN.botHitR : GUN.hitR, life: p.stats.gunRange / GUN.speed,
+        owner: p.key, team: p.team, party: p.party || '', t: 0, dmg: p.stats.dmg, r: p.bot ? GUN.botHitR : GUN.hitR, life: p.stats.gunRange / GUN.speed,
         x: p.x + f.x * 5 + rx * side, y: p.y + f.y * 5, z: p.z + f.z * 5 + rz * side,
         vx: d.x * GUN.speed + f.x * p.speed, vy: d.y * GUN.speed + f.y * p.speed, vz: d.z * GUN.speed + f.z * p.speed,
       });
@@ -390,7 +403,7 @@ export class ArenaRoom extends Room {
       const nx = b.x + b.vx * dt, ny = b.y + b.vy * dt, nz = b.z + b.vz * dt;
       let hit = null, tBest = 2;
       for (const p of alive) {
-        if (p.key === b.owner || (b.team && p.team === b.team)) continue; // teammates' rounds pass through
+        if (p.key === b.owner || (b.team && p.team === b.team) || (b.party && p.party === b.party)) continue; // teammates' (and party mates') rounds pass through
         // where the target was when the shooter saw it is a little behind
         // where it is: the sphere is fat enough to cover that
         const t = segmentHit(b.x, b.y, b.z, nx, ny, nz, p.x, p.y, p.z, b.r || GUN.hitR);
@@ -579,6 +592,8 @@ export class ArenaRoom extends Room {
     if (!p.alive || this.now < p.shieldUntil) return;
     const from = this.planes.get(by);
     if (this.teams && how !== 'collision' && from && from.team === p.team) return;
+    // a party flies together: no harm from one to another
+    if (how !== 'collision' && from?.party && from.party === p.party) return;
     p.hp -= dmg;
     p.lastHurt = this.now;
     const d = p.damagers.get(by) || { dmg: 0, at: 0 };
@@ -660,7 +675,58 @@ export class ArenaRoom extends Room {
   /** Who this plane may shoot at: everyone, or in teams the other side. */
   foes(p) {
     const all = [...this.planes.values()];
-    return this.teams ? all.filter((o) => o.team !== p.team) : all;
+    return this.teams ? all.filter((o) => o.team !== p.team) : all.filter((o) => !p.party || o.party !== p.party);
+  }
+
+  // ---- parties ------------------------------------------------------------
+  // In a sky of everyone-for-themselves, up to five people can fly as one:
+  // they cannot hurt each other, and everyone sees them in their party's
+  // colour. A party lasts as long as its people stay in this sky.
+
+  partyInvite(p, to) {
+    const t = this.planes.get(to);
+    if (!p || !t || this.teams || p.bot || t.bot || t === p) return;
+    const mine = p.party && this.parties.get(p.party);
+    if (mine && mine.members.has(t.key)) return;
+    if (mine && mine.members.size >= PARTY_MAX) return void this.sendTo(p, 'party', { error: 'full' });
+    this.invites.set(t.key, { from: p.key, at: this.now });
+    this.sendTo(t, 'pinvite', { from: p.key, name: p.name });
+    this.sendTo(p, 'party', { invited: t.key });
+  }
+
+  partyAccept(p, from) {
+    const inv = p && this.invites.get(p.key);
+    const f = this.planes.get(from);
+    if (!inv || inv.from !== from || !f || this.now - inv.at > INVITE_MS) return void (p && this.sendTo(p, 'party', { error: 'expired' }));
+    this.invites.delete(p.key);
+    let party = f.party && this.parties.get(f.party);
+    if (party && party.members.size >= PARTY_MAX) return void this.sendTo(p, 'party', { error: 'full' });
+    if (p.party) this.partyLeave(p);
+    if (!party) {
+      // a colour no other party in this sky is wearing
+      const used = new Set([...this.parties.values()].map((x) => x.color));
+      let color = 0;
+      while (used.has(color)) color++;
+      party = { id: (++this.seq).toString(36), color, members: new Set() };
+      this.parties.set(party.id, party);
+      party.members.add(f.key); f.party = party.id;
+    }
+    party.members.add(p.key); p.party = party.id;
+    this.rosterDirty = true;
+    for (const k of party.members) { const m = this.planes.get(k); m && this.sendTo(m, 'party', { joined: p.key }); }
+  }
+
+  partyLeave(p) {
+    const party = p?.party && this.parties.get(p.party);
+    if (!party) return;
+    party.members.delete(p.key);
+    p.party = '';
+    // one left alone is not a party
+    if (party.members.size < 2) {
+      for (const k of party.members) { const m = this.planes.get(k); if (m) m.party = '', this.sendTo(m, 'party', { ended: true }); }
+      this.parties.delete(party.id);
+    } else for (const k of party.members) { const m = this.planes.get(k); m && this.sendTo(m, 'party', { left: p.key }); }
+    this.rosterDirty = true;
   }
 
   /** The side a newcomer joins: fewer people first, then fewer planes. */
@@ -673,7 +739,7 @@ export class ArenaRoom extends Room {
   }
 
   roster() {
-    return [...this.planes.values()].map((p) => ({ key: p.key, name: p.name, plane: p.plane, paint: p.paint, neon: !!p.neon, gun: p.stats.gun, missile: p.stats.missile, team: p.team, level: p.level, bot: !!p.bot, kills: p.kills, deaths: p.deaths, streak: p.streak }));
+    return [...this.planes.values()].map((p) => ({ key: p.key, name: p.name, plane: p.plane, paint: p.paint, neon: !!p.neon, gun: p.stats.gun, missile: p.stats.missile, team: p.team, level: p.level, bot: !!p.bot, kills: p.kills, deaths: p.deaths, streak: p.streak, party: p.party || '', pc: p.party ? this.parties.get(p.party)?.color ?? -1 : -1 }));
   }
 
   // ---- bots ---------------------------------------------------------------

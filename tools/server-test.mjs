@@ -34,7 +34,7 @@ async function pilot(token, room = 'arena') {
   const c = new Client(`ws://127.0.0.1:${PORT}`);
   const r = await c.joinOrCreate(room, { token });
   const s = { room: r, events: [], snap: null };
-  for (const type of ['welcome', 'spawn', 'fix', 'hit', 'hurt', 'down', 'reward', 'roster', 'fired', 'incoming', 'boom', 'pong', 'ram', 'flare', 'flared', 'score', 'bt', 'bossStart', 'bossDown', 'bossGone', 'friendIn', 'healed', 'pad', 'dodged', 'missed', 'royal']) {
+  for (const type of ['welcome', 'spawn', 'fix', 'hit', 'hurt', 'down', 'reward', 'roster', 'fired', 'incoming', 'boom', 'pong', 'ram', 'flare', 'flared', 'score', 'bt', 'bossStart', 'bossDown', 'bossGone', 'friendIn', 'healed', 'pad', 'dodged', 'missed', 'royal', 'pinvite', 'party']) {
     r.onMessage(type, (m) => { s.events.push({ type, m }); type === 'spawn' && (s.pose = { ...m }); type === 'welcome' && (s.key = m.key); });
   }
   r.onMessage('s', (m) => (s.snap = m));
@@ -135,6 +135,29 @@ try {
   ok('b\'s record counts the death', (await api('/api/me', null, h.token)).pilot.deaths === 1);
 
   ok('no more hits once a stops firing', got(a, 'hit').length - hitsAtStop <= 2, got(a, 'hit').slice(hitsAtStop).map((e) => e.m));
+
+  console.log('\na party');
+  {
+    a.room.send('pinvite', { to: b.key });
+    ok('an invitation reaches the one asked, with who asks', await until(() => got(b, 'pinvite').some((e) => e.m.from === a.key)));
+    b.room.send('paccept', { from: a.key });
+    const ros = () => got(a, 'roster').at(-1)?.m || [];
+    ok('accepted: both in one party, in its colour', await until(() => { const r = ros(); const x = r.find((q) => q.key === a.key), y = r.find((q) => q.key === b.key); return x?.party && x.party === y?.party && x.pc === 0 && y.pc === 0; }), ros());
+    ok('and both are told', got(a, 'party').some((e) => e.m.joined === b.key) && got(b, 'party').some((e) => e.m.joined === b.key));
+    // a gets behind b again and fires: nothing gets through
+    await walk(() => [a.pose.x, target().y + 80, a.pose.z]);
+    await walk(behind(80));
+    await walk(behind(0));
+    a.pose.yaw = b.pose.yaw; a.pose.pitch = 0; send(a);
+    await wait(2500);
+    const hurt0 = got(b, 'hurt').length;
+    const f2 = setInterval(() => send(a, 1), 50);
+    await wait(2500);
+    clearInterval(f2); send(a, 0);
+    ok('no harm between party mates: the rounds pass through', got(b, 'hurt').length === hurt0, got(b, 'hurt').slice(hurt0).map((e) => e.m));
+    a.room.send('pleave');
+    ok('one leaves, and a party of one is no party', await until(() => ros().every((q) => !q.party)) && await until(() => got(b, 'party').some((e) => e.m.ended)));
+  }
   console.log('\na collision');
   // a and b fly into each other head-on: a flies its last few metres onto b
   await wait(3200); // b's shield from the respawn
