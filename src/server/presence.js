@@ -13,6 +13,16 @@ export const presence = {
   },
   enter(id, room, mode) { flying.set(id, { room, mode, at: Date.now() }); },
   leave(id, room) { if (flying.get(id)?.room === room) flying.delete(id); },
+  /**
+   * How many people are on right now: in a room, or heard from in the last
+   * minute and a half (the hangar asks every few seconds). Bots are not
+   * people and are never here.
+   */
+  online(now = Date.now()) {
+    const ids = new Set(flying.keys());
+    for (const [id, t] of seen) if (now - t < SEEN_MS) ids.add(id);
+    return ids.size;
+  },
   /** 'air' (and where), 'hangar', or 'off'. */
   of(id, now = Date.now()) {
     const f = flying.get(id);

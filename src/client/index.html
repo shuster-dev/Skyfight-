@@ -154,6 +154,13 @@
     background: linear-gradient(90deg, #2fd3bd, #6fe6ff); box-shadow: 0 10px 40px rgba(47,211,189,0.25); clip-path: polygon(14px 0, 100% 0, calc(100% - 14px) 100%, 0 100%); }
   .h-launch .go:active { filter: brightness(0.9); }
   .h-launch .save { padding: 0 16px; border-radius: 6px; font-size: 13px; font-weight: 700; color: #dfe7f2; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.2); }
+  /* who is on: a green dot that breathes, and how many (people, not bots) */
+  .online { display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 700; letter-spacing: 0.4px; color: #cfe9dd; direction: ltr; }
+  .online b { color: #fff; font-weight: 800; }
+  .online i { width: 9px; height: 9px; border-radius: 50%; background: #2fe37a; box-shadow: 0 0 0 0 rgba(47, 227, 122, 0.6); animation: onl 2s infinite; }
+  @keyframes onl { 0% { box-shadow: 0 0 0 0 rgba(47, 227, 122, 0.55); } 70% { box-shadow: 0 0 0 7px rgba(47, 227, 122, 0); } 100% { box-shadow: 0 0 0 0 rgba(47, 227, 122, 0); } }
+  #h-online { position: absolute; left: 18px; bottom: max(88px, calc(env(safe-area-inset-bottom) + 80px)); }
+  .t-online { justify-content: center; margin-top: 10px; }
   .h-mode { position: absolute; right: 18px; bottom: max(84px, calc(env(safe-area-inset-bottom) + 76px)); display: flex; gap: 16px; }
   .h-mode button { background: none; padding: 4px 0; font-size: 12px; font-weight: 700; letter-spacing: 1px; color: rgba(255,255,255,0.45); border-bottom: 2px solid transparent; }
   .h-mode button.on { color: #fff; border-bottom-color: #6fe6ff; }
@@ -236,6 +243,7 @@
     .h-plane { top: 96px; bottom: 96px; left: auto; width: min(420px, 42vw); display: flex; flex-direction: column; justify-content: center; }
     .h-panel { left: auto; width: min(560px, 56vw); }
     .h-launch { left: auto; width: min(560px, 56vw); }
+    #h-online { left: calc(100vw - 18px - min(560px, 56vw)); }
   }
   @media (orientation: landscape) and (max-height: 500px) {
     .h-tabs { top: 54px; padding: 3px; border-radius: 11px; max-width: 520px; }
@@ -527,6 +535,7 @@
     <input class="field" id="in-name" maxlength="14" placeholder="שם טייס" enterkeyhint="go">
     <div class="note hidden" id="title-code" style="margin-top:8px"></div>
     <button class="big" id="btn-go" type="submit" disabled>טוען…</button>
+    <div class="online t-online" id="t-online"><i></i><span>online players: <b class="num">–</b></span></div>
     <div class="err" id="title-err"></div>
     <button class="ghost" id="btn-have" type="button">יש לי כבר טייס שמור — התחברות</button>
   </form>
@@ -594,6 +603,7 @@
   </div>
   <div class="h-invite hidden" id="h-invite">הוזמנת לזירה של חבר — לחצו המראה</div>
   <div class="h-mode"><button type="button" data-mode="ffa" class="on">כולם נגד כולם</button><button type="button" data-mode="teams">קבוצות</button></div>
+  <div class="online" id="h-online"><i></i><span>online players: <b class="num">–</b></span></div>
   <div class="h-launch">
     <button class="save hidden" id="btn-save" type="button">גיבוי לכל מכשיר</button>
     <button class="go" id="btn-launch" type="button">המראה</button>
