@@ -130,6 +130,15 @@ app.post('/api/login', knock.mw(), async (req, res) => {
   res.json({ token: signToken(user.id), ...(await me(user)) });
 });
 
+// how two players' devices find each other for voice: public STUN, and a
+// TURN relay if the host names one (TURN_URLS, TURN_USERNAME, TURN_CREDENTIAL)
+// for the networks that will not let two phones talk straight to each other
+app.get('/api/rtc', requireAuth, (req, res) => {
+  const ice = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }];
+  if (process.env.TURN_URLS) ice.push({ urls: process.env.TURN_URLS.split(',').map((u) => u.trim()), username: process.env.TURN_USERNAME || '', credential: process.env.TURN_CREDENTIAL || '' });
+  res.json({ iceServers: ice });
+});
+
 // how many people are on: the green dot by the launch button (asking counts you in)
 app.get('/api/online', requireAuth, (req, res) => res.json({ n: presence.online() }));
 
@@ -298,7 +307,8 @@ if (fs.existsSync(webRoot)) {
 }
 
 const httpServer = http.createServer(app);
-export const gameServer = new Server({ transport: new WebSocketTransport({ server: httpServer }) });
+// (a voice handshake is a few kilobytes: room for it, above the 4 KB default)
+export const gameServer = new Server({ transport: new WebSocketTransport({ server: httpServer, maxPayload: 16 * 1024 }) });
 gameServer.define('arena', ArenaRoom, { store, noBots: process.env.NO_BOTS === '1' });
 gameServer.define('arena_teams', ArenaRoom, { store, mode: 'teams', noBots: process.env.NO_BOTS === '1' });
 // the tests' own sky, with nobody else in it

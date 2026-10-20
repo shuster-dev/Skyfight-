@@ -34,7 +34,7 @@ async function pilot(token, room = 'arena') {
   const c = new Client(`ws://127.0.0.1:${PORT}`);
   const r = await c.joinOrCreate(room, { token });
   const s = { room: r, events: [], snap: null };
-  for (const type of ['welcome', 'spawn', 'fix', 'hit', 'hurt', 'down', 'reward', 'roster', 'fired', 'incoming', 'boom', 'pong', 'ram', 'flare', 'flared', 'score', 'bt', 'bossStart', 'bossDown', 'bossGone', 'friendIn', 'healed', 'pad', 'dodged', 'missed', 'royal', 'pinvite', 'party']) {
+  for (const type of ['welcome', 'spawn', 'fix', 'hit', 'hurt', 'down', 'reward', 'roster', 'fired', 'incoming', 'boom', 'pong', 'ram', 'flare', 'flared', 'score', 'bt', 'bossStart', 'bossDown', 'bossGone', 'friendIn', 'healed', 'pad', 'dodged', 'missed', 'royal', 'pinvite', 'party', 'rtc']) {
     r.onMessage(type, (m) => { s.events.push({ type, m }); type === 'spawn' && (s.pose = { ...m }); type === 'welcome' && (s.key = m.key); });
   }
   r.onMessage('s', (m) => (s.snap = m));
@@ -127,6 +127,7 @@ try {
   clearInterval(fire);
   send(a, 0);
   const hitsAtStop = got(a, 'hit').length;
+  await until(() => got(a, 'reward').length > 0); // (the pay follows the fall by a moment)
   const pay = got(a, 'reward')[0]?.m;
   ok('a is paid xp and gold for it', pay && pay.xp > 0 && pay.gold > 0 && pay.pilot.kills === 1, pay);
   ok('b comes back after the delay', await until(() => got(b, 'spawn').length >= 2, 5000));
@@ -155,6 +156,18 @@ try {
     await wait(2500);
     clearInterval(f2); send(a, 0);
     ok('no harm between party mates: the rounds pass through', got(b, 'hurt').length === hurt0, got(b, 'hurt').slice(hurt0).map((e) => e.m));
+    // voice: the handshake goes from one to the other only when both have it on
+    a.room.send('rtc', { to: b.key, d: { sdp: { type: 'offer', sdp: 'x' } } });
+    await wait(300);
+    ok('voice: no line to someone who has not turned it on', got(b, 'rtc').length === 0);
+    a.room.send('vc', { on: true }); b.room.send('vc', { on: true });
+    ok('voice on shows in the roster', await until(() => ros().filter((q) => q.v).length === 2));
+    a.room.send('rtc', { to: b.key, d: { sdp: { type: 'offer', sdp: 'x' } } });
+    ok('both on: the handshake is passed along, with who it is from', await until(() => got(b, 'rtc').some((e) => e.m.from === a.key && e.m.d.sdp.type === 'offer')));
+    a.room.send('rtc', { to: b.key, d: { junk: 'x'.repeat(13000) } });
+    await wait(300);
+    ok('nothing oversized gets through', got(b, 'rtc').length === 1);
+    a.room.send('vc', { on: false }); b.room.send('vc', { on: false });
     a.room.send('pleave');
     ok('one leaves, and a party of one is no party', await until(() => ros().every((q) => !q.party)) && await until(() => got(b, 'party').some((e) => e.m.ended)));
   }
