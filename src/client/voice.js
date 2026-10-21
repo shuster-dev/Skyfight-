@@ -49,14 +49,16 @@ export class Voice {
     if (!MODES.includes(m) || m === this.mode) return;
     this.mode = m;
     try { localStorage.setItem('sky.voice', m); } catch {}
-    if (this.on) { const key = this.myKey; this.stop(); if (m !== 'off') this.prime(), this.start(key); }
+    // in the air: the change takes now (turning it on from off as well)
+    if (this.inRoom) { const key = this.myKey; this.stop(); if (m !== 'off') this.prime(), this.start(key); else this.inRoom = true; }
     this.onChange();
   }
 
   /** Into a room: the microphone (if sending), then tell the room voice is on. */
   async start(myKey) {
     this.myKey = myKey;
-    if (this.mode === 'off' || this.on) return;
+    this.inRoom = true;
+    if (this.mode === 'off' || this.on) return this.onChange();
     this.on = true;
     this.prime();
     if (this.sends && !this.stream) {
@@ -74,11 +76,16 @@ export class Voice {
     if (!this.on) return this.stopMic(); // left while asking
     this.applyLive();
     this.send('vc', { on: true });
+    // only now may lines be made: the room passes a handshake along only
+    // between two it knows have voice on
+    this.ready = true;
     this.onChange();
   }
 
   /** Out of the room: every line closed, the microphone off. */
   stop() {
+    this.inRoom = false;
+    this.ready = false;
     for (const k of [...this.peers.keys()]) this.drop(k);
     if (this.on) this.send('vc', { on: false });
     this.on = false;
@@ -105,8 +112,11 @@ export class Voice {
   async line(key) {
     let P = this.peers.get(key);
     if (P) return P;
-    P = { pc: new RTCPeerConnection({ iceServers: await this.iceServers() }), buf: [], talking: false, level: 0 };
-    if (this.peers.has(key)) { P.pc.close(); return this.peers.get(key); } // made twice while waiting
+    const iceServers = await this.iceServers();
+    // voice went off while asking: no line
+    if (!this.on) return null;
+    if (this.peers.has(key)) return this.peers.get(key); // made twice while waiting
+    P = { pc: new RTCPeerConnection({ iceServers }), buf: [], talking: false, level: 0 };
     this.peers.set(key, P);
     const pc = P.pc;
     pc.onicecandidate = (e) => e.candidate && this.send('rtc', { to: key, d: { ice: e.candidate.toJSON() } });
@@ -120,6 +130,7 @@ export class Voice {
   /** I am the one who calls (the lower key does): an offer, my voice in it if I send. */
   async call(key) {
     const P = await this.line(key);
+    if (!P) return;
     const pc = P.pc;
     if (pc.signalingState !== 'stable' || P.called) return;
     P.called = true;
@@ -134,7 +145,9 @@ export class Voice {
     if (!this.on || !d) return;
     try {
       if (d.sdp?.type === 'offer') {
-        const P = await this.line(from), pc = P.pc;
+        const P = await this.line(from);
+        if (!P) return;
+        const pc = P.pc;
         await pc.setRemoteDescription(d.sdp);
         const track = this.stream?.getAudioTracks()[0];
         // my voice back on the line the offer opened
@@ -193,8 +206,13 @@ export class Voice {
    * `fwd` the way the camera looks (for which way is left).
    */
   update(me, others, roster, fwd) {
-    if (!this.on) return;
+    if (!this.on || !this.ready) return;
     const now = performance.now();
+    // a line that never came up (a handshake lost on the way) is let go and tried again
+    for (const [k, P] of this.peers) {
+      P.born ||= now;
+      if (P.pc.connectionState !== 'connected' && now - P.born > 20000) this.drop(k, true);
+    }
     for (const [k, r] of roster) {
       if (k === this.myKey || r.bot || !r.v) continue;
       if (!this.peers.has(k) && this.myKey < k && (this.retry.get(k) || 0) < now) this.call(k).catch(() => this.drop(k, true));
@@ -222,6 +240,7 @@ export class Voice {
       P.an.getFloatTimeDomainData(P.abuf);
       let sum = 0; for (const v of P.abuf) sum += v * v;
       P.level = Math.sqrt(sum / P.abuf.length);
+      P.peak = Math.max(P.peak || 0, P.level);
       P.talking = P.audible && P.level > 0.015;
     }
     if (this.micAn && this.live) {
