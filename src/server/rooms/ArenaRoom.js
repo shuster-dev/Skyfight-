@@ -112,6 +112,19 @@ export class ArenaRoom extends Room {
     this.onMessage('pinvite', (client, m) => this.partyInvite(this.planes.get(this.bySession.get(client.sessionId)), String(m?.to || '')));
     this.onMessage('paccept', (client, m) => this.partyAccept(this.planes.get(this.bySession.get(client.sessionId)), String(m?.from || '')));
     this.onMessage('pdecline', (client) => { const p = this.planes.get(this.bySession.get(client.sessionId)); p && this.invites.delete(p.key); });
+    // voice: who has it on, and the handshake between two who both do, passed
+    // from one to the other (the voice itself goes straight between them)
+    this.onMessage('vc', (client, m) => {
+      const p = this.planes.get(this.bySession.get(client.sessionId));
+      if (p && !p.bot && p.voice !== !!m?.on) p.voice = !!m?.on, this.rosterDirty = true;
+    });
+    this.onMessage('rtc', (client, m) => {
+      const p = this.planes.get(this.bySession.get(client.sessionId)), t = this.planes.get(String(m?.to || ''));
+      if (!p?.voice || !t?.voice || t === p || t.bot) return;
+      const d = m?.d;
+      if (!d || typeof d !== 'object' || JSON.stringify(d).length > 12000) return;
+      this.sendTo(t, 'rtc', { from: p.key, d });
+    });
     this.onMessage('pleave', (client) => this.partyLeave(this.planes.get(this.bySession.get(client.sessionId))));
   }
 
@@ -739,7 +752,7 @@ export class ArenaRoom extends Room {
   }
 
   roster() {
-    return [...this.planes.values()].map((p) => ({ key: p.key, name: p.name, plane: p.plane, paint: p.paint, neon: !!p.neon, gun: p.stats.gun, missile: p.stats.missile, team: p.team, level: p.level, bot: !!p.bot, kills: p.kills, deaths: p.deaths, streak: p.streak, party: p.party || '', pc: p.party ? this.parties.get(p.party)?.color ?? -1 : -1 }));
+    return [...this.planes.values()].map((p) => ({ key: p.key, name: p.name, plane: p.plane, paint: p.paint, neon: !!p.neon, gun: p.stats.gun, missile: p.stats.missile, team: p.team, level: p.level, bot: !!p.bot, kills: p.kills, deaths: p.deaths, streak: p.streak, v: !!p.voice, party: p.party || '', pc: p.party ? this.parties.get(p.party)?.color ?? -1 : -1 }));
   }
 
   // ---- bots ---------------------------------------------------------------

@@ -11,7 +11,8 @@
     "qa": "node tools/qa.mjs",
     "test": "npm run qa && npm run test:server",
     "test:server": "node tools/server-test.mjs",
-    "test:browser": "node tools/build.mjs && node tools/smoke.mjs"
+    "test:browser": "node tools/build.mjs && node tools/smoke.mjs",
+    "test:voice": "node tools/voice-test.mjs"
   },
   "dependencies": {
     "@colyseus/core": "0.16.24",
@@ -25,5 +26,7 @@
     "playwright": "1.63.0",
     "three": "0.185.1"
   },
-  "engines": { "node": ">=20" }
+  "engines": {
+    "node": ">=20"
+  }
 }

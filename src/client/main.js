@@ -7,6 +7,7 @@ import { makeRenderer, makeWorld, inCloud, makePads } from './gfx/scene.js';
 import { buildPlane, buildBomber, animatePlane } from './gfx/planes.js';
 import { Fx } from './gfx/fx.js';
 import { Hangar } from './gfx/hangar.js';
+import { Voice } from './voice.js';
 import { ARMS, GUNS, GUN_ORDER, MISSILES, MISSILE_ORDER, PAINTS, PAINT_ORDER, PLANES, PLANE_ORDER, GIFT_PLANES, UPGRADES, UPGRADE_ORDER, TIER_MAX, nextTier, statsOf, tiersOf, levelProgress, planeOpen, planeOwned, cleanCallsign, displayName, rudeName } from '../shared/planes.js';
 import { ARENA, BRIDGE, HEAL, HEALS, groundAt, underBridge } from '../shared/arena.js';
 import { flyQ, forward, newBodyQ, drawnQ, Q as QQ } from '../shared/flight.js';
@@ -30,6 +31,8 @@ const ERR = {
 const err = (e) => ERR[e?.code] || 'משהו השתבש — נסו שוב';
 
 const net = new Net();
+// voice in the sky: near pilots are heard, far ones fade out (voice.js)
+const voice = new Voice({ send: (t, m) => S.room?.send(t, m), ice: () => net.api('/api/rtc'), onChange: () => paintVoice() });
 const controls = new Controls();
 // the hover switch: a word on the screen when it flips
 controls.onHover = (on) => S.mode === 'air' && toast(on ? 'ריחוף — טורבו למעלה, בלימה למטה' : 'טיסה', 'lvl', 'hover');
@@ -57,11 +60,13 @@ S.renderHangar = () => renderHangar();
 S.hangarArms = () => hangar.scene.children.filter((c) => c.children[0]?.userData?.model).length;
 S.note = (t, c) => toast(t, c);
 S.reward = (m) => onReward(m); // the screenshot tools play a run of kills through it
+S.voice = voice;
 S.world = world; S.camera = camera; S.buildPlane = buildPlane; S.buildBomber = buildBomber; S.scene = scene;
 S.look = controls.look;
 
 // ---- the camera's rig, and the showcase behind the menus ------------------
 
+const voiceFwd = new Vector3();
 const camPos = new Vector3(0, 300, 600), camLook = new Vector3(), tmpV = new Vector3(), tmpE = new Euler(0, 0, 0, 'YXZ');
 
 function setPreview(kinds) {
@@ -248,6 +253,7 @@ function openSettings() {
   $('#set-invert').checked = controls.invert;
   $('#set-quality').value = Q.pick;
   $('#set-sky').value = world.time;
+  $('#set-voice').value = voice.mode;
   $('#set-account').textContent = S.account.guest ? 'הטייס שמור במכשיר הזה. כדי להמשיך גם ממכשיר אחר — בחרו שם משתמש וסיסמה בהאנגר.' : `מחובר כ־${S.account.username} · הטייס ${displayName(S.pilot)}${S.account.admin ? ' · אדמין' : ''}`;
   show('#btn-logout', !S.account.guest);
   show('#sheet-settings');
@@ -798,6 +804,7 @@ $('#btn-launch').addEventListener('click', () => { sound.unlock(); launch(); });
 // ---- into the air -----------------------------------------------------------
 
 async function launch() {
+  voice.prime();
   const btn = $('#btn-launch');
   btn.disabled = true;
   btn.textContent = 'ממריא…';
@@ -826,8 +833,10 @@ async function launch() {
 }
 
 function hook(room) {
+  room.onMessage('rtc', (m) => voice.signal(m.from, m.d));
   room.onMessage('welcome', (m) => {
     S.myKey = m.key;
+    voice.start(m.key).then(() => voice.micDenied && voice.sends && toast('אין גישה למיקרופון — אפשר רק לשמוע', 'bad'));
     S.teams = m.mode === 'teams'; S.myTeam = m.team || ''; S.roomId = m.room || room.roomId;
     paintTeams(m.score);
     (m.pads || []).forEach((t, i) => pads.spend(i, t));
@@ -954,7 +963,7 @@ function hook(room) {
     // sent off by the admin to choose a new name, or blocked: to the front door
     if (code === 4004 || code === 4005) setTimeout(() => afterSentOff(code), 300);
     // the line dropped (not us, not the room sending us off): back in, not out
-    if (!S.leaving && !why && code !== 1000) return void rejoin(room);
+    if (!S.leaving && !why && code !== 1000) return void (voice.stop(), rejoin(room));
     leaveSky(S.leaving ? '' : why || (code > 1000 ? 'החיבור לשרת נפל' : ''));
   });
 }
@@ -1122,6 +1131,7 @@ async function leaveSky(why) {
   if (S.mode !== 'air') return;
   S.leaving = true;
   show('#players', false); show('#pinvite', false);
+  voice.stop();
   // nothing more goes out on a socket that is closing; the room is told we
   // are going, but nobody waits for it to answer
   const room = S.room;
@@ -1450,6 +1460,7 @@ function hud(dt, now) {
   show('#cross', !!me?.alive);
   threat(dt);
   tail(dt);
+  voice.update(me?.alive ? me.mesh.position : null, S.others, S.roster, camera.getWorldDirection(voiceFwd));
   tags();
   compass();
   if (me?.body) {
@@ -1557,7 +1568,8 @@ function tags() {
         // the plane under fire: a bigger bar, and the bit just shot off flashing white
         const hot = o.hitAt && performance.now() - o.hitAt < 2500;
         const bar = o.hp < 100 || hot ? `<div class="mini${hot ? ' hot' : ''}"><i style="width:${o.hp}%"></i></div>` : '';
-        setTag(n++, `tagp${side}`, `${esc(r?.name || '')} · <span class="num">${Math.round(d / 10) * 10}</span>${bar}`, P.x, P.y);
+        const spk = voice.talking(o.key) ? '<i class="spk"><b></b><b></b><b></b></i>' : '';
+        setTag(n++, `tagp${side}`, `${spk}${esc(r?.name || '')} · <span class="num">${Math.round(d / 10) * 10}</span>${bar}`, P.x, P.y);
       } else setTag(n++, `tagdot${side}`, '', P.x, P.y);
     }
     const B = S.boss;
@@ -1667,6 +1679,29 @@ function foes() {
   return mine ? all.filter((o) => S.roster.get(o.key)?.party !== mine) : all;
 }
 
+// ---- voice --------------------------------------------------------------------
+// The microphone button in the air: held to talk (push-to-talk, or V on a
+// keyboard), or tapped to mute an open mic. Off and listen-only: no button.
+function paintVoice() {
+  const b = $('#voice-btn');
+  const sends = voice.on && voice.sends && !!voice.stream;
+  show(b, S.mode === 'air' && sends);
+  b.classList.toggle('live', voice.live);
+  b.classList.toggle('muted', voice.mode === 'open' && voice.selfMute);
+  b.querySelector('.lbl').textContent = voice.mode === 'ptt' ? (voice.live ? 'משדר' : 'לחץ ודבר') : voice.selfMute ? 'מושתק' : 'מיקרופון';
+  $('#set-voice').value = voice.mode;
+}
+{
+  const b = $('#voice-btn');
+  b.addEventListener('pointerdown', (e) => { e.preventDefault(); if (voice.mode === 'ptt') voice.talk(true); else voice.toggleSelfMute(); });
+  for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) b.addEventListener(ev, () => voice.talk(false));
+  addEventListener('keydown', (e) => { if (e.code === 'KeyV' && !e.repeat && S.mode === 'air' && e.target?.tagName !== 'INPUT') voice.mode === 'ptt' ? voice.talk(true) : voice.toggleSelfMute(); });
+  addEventListener('keyup', (e) => { if (e.code === 'KeyV') voice.talk(false); });
+  addEventListener('blur', () => voice.talk(false));
+  $('#set-voice').addEventListener('change', (e) => { voice.setMode(e.target.value); paintVoice(); });
+  paintVoice();
+}
+
 // ---- who is in this sky, and parties ---------------------------------------
 // A list of everyone here (a button and Tab): add a person as a friend, or
 // ask them into your party — up to five fly as one in a sky of everyone for
@@ -1697,6 +1732,7 @@ function paintPlayers() {
     const btns = r.bot || me ? '' : [
       plFriends.has(r.name) ? '' : `<button type="button" data-friend="${esc(r.name)}">+ חבר</button>`,
       S.teams || inMine ? '' : `<button type="button" class="pty" data-party="${esc(r.key)}" ${full ? 'disabled' : ''}>פארטי</button>`,
+      r.v && voice.on ? `<button type="button" class="vm ${voice.muted.has(r.key) ? 'off' : ''}" data-vmute="${esc(r.key)}" aria-label="השתקה">${voice.muted.has(r.key) ? 'מושתק' : 'קול'}</button>` : '',
     ].join('');
     return `<div class="pl-row"><span class="n ${color}" dir="auto">${esc(r.name)}${me ? ' <small>(אתה)</small>' : ''}<small>רמה ${r.level} · ${r.kills} הפלות</small></span>${r.bot ? '<span class="bot">בוט</span>' : btns}</div>`;
   }).join('');
@@ -1712,6 +1748,8 @@ $('#players').addEventListener('click', async (e) => {
     try { const r = await net.api('/api/friends/add', { code: f.dataset.friend }); plFriends.add(f.dataset.friend); toast(`${r.friend.code} נוסף לחברים`); paintPlayers(); } catch (x) { f.disabled = false; toast(err(x), 'bad'); }
     return;
   }
+  const vm = e.target.closest('[data-vmute]');
+  if (vm) return void (voice.toggleMute(vm.dataset.vmute), paintPlayers());
   const p = e.target.closest('[data-party]');
   if (p) return void (S.room?.send('pinvite', { to: p.dataset.party }), (p.disabled = true));
   if (e.target.id === 'pl-leave') S.room?.send('pleave');

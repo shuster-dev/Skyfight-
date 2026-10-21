@@ -421,6 +421,16 @@
   #corner .icon-btn { background: rgba(8, 12, 18, 0.45); }
   #invite-btn { pointer-events: auto; position: absolute; top: calc(max(10px, env(safe-area-inset-top)) + 112px); left: calc(max(12px, env(safe-area-inset-left)) + 52px); background: rgba(8, 12, 18, 0.35); }
   #players-btn { pointer-events: auto; position: absolute; top: calc(max(10px, env(safe-area-inset-top)) + 112px); left: calc(max(12px, env(safe-area-inset-left)) + 104px); background: rgba(8, 12, 18, 0.35); }
+  #voice-btn { pointer-events: auto; position: absolute; top: calc(max(10px, env(safe-area-inset-top)) + 112px); left: calc(max(12px, env(safe-area-inset-left)) + 156px); width: auto; padding: 0 12px; gap: 6px; display: flex; border-radius: 999px; align-items: center; background: rgba(8, 12, 18, 0.35); touch-action: none; user-select: none; -webkit-user-select: none; }
+  #voice-btn.hidden { display: none; }
+  #voice-btn .lbl { font-size: 12px; font-weight: 800; }
+  #voice-btn.live { background: rgba(47, 227, 122, 0.35); box-shadow: 0 0 0 2px #2fe37a, 0 0 16px rgba(47, 227, 122, 0.6); }
+  #voice-btn.muted { background: rgba(255, 90, 100, 0.35); }
+  .spk { display: inline-flex; gap: 1.5px; align-items: flex-end; height: 10px; margin-inline-end: 4px; vertical-align: -1px; }
+  .spk b { width: 2.5px; background: #2fe37a; border-radius: 1px; animation: spk .5s ease-in-out infinite alternate; }
+  .spk b:nth-child(1) { height: 5px; } .spk b:nth-child(2) { height: 10px; animation-delay: .15s; } .spk b:nth-child(3) { height: 7px; animation-delay: .3s; }
+  @keyframes spk { to { transform: scaleY(0.4); } }
+  .pl-row button.vm { background: rgba(47, 227, 122, 0.25); color: #c8ffe0; } .pl-row button.vm.off { background: rgba(255, 90, 100, 0.3); color: #ffd0d4; }
   #players { pointer-events: auto; position: absolute; top: calc(max(10px, env(safe-area-inset-top)) + 160px); left: max(12px, env(safe-area-inset-left)); width: min(340px, calc(100vw - 24px)); max-height: 55vh; overflow-y: auto; padding: 10px 12px; border-radius: 12px; background: rgba(8, 12, 18, 0.86); border: 1px solid rgba(255, 255, 255, 0.14); backdrop-filter: blur(6px); z-index: 30; }
   .pl-head { display: flex; align-items: center; gap: 8px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); }
   .pl-head b { font-size: 15px; } .pl-head span { flex: 1; color: var(--dim); font-size: 12px; }
@@ -684,7 +694,7 @@
     <span class="u">טילים</span><div class="msl" id="hud-msl"></div>
     <span class="u">נורים</span><div class="msl flr" id="hud-flr"></div>
   </div>
-  <div class="keys-help" id="keys-help">חצים / WASD — טיסה<br>רווח / עכבר שמאלי — ירי<br>Shift — מבער · B — בלם אוויר<br>E — טיל · Q — נורים · Tab — שחקנים<br>גרירה עם עכבר ימני — הסתכלות</div>
+  <div class="keys-help" id="keys-help">חצים / WASD — טיסה<br>רווח / עכבר שמאלי — ירי<br>Shift — מבער · B — בלם אוויר<br>E — טיל · Q — נורים · Tab — שחקנים · V — דיבור<br>גרירה עם עכבר ימני — הסתכלות</div>
   <div id="touch" class="hidden">
     <div id="touch-pad"></div>
     <div id="look-pad"></div>
@@ -705,6 +715,7 @@
   </div>
   <button class="icon-btn" id="invite-btn" type="button" aria-label="הזמן חבר"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5M18 7v6M15 10h6"/></svg></button>
   <button class="icon-btn" id="menu-btn" type="button" aria-label="האנגר"><svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7M6 10v10h12V10"/></svg></button>
+  <button class="icon-btn hidden" id="voice-btn" type="button" aria-label="מיקרופון"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M9 21h6"/></svg><span class="lbl">מיקרופון</span></button>
   <button class="icon-btn" id="players-btn" type="button" aria-label="שחקנים בזירה"><svg viewBox="0 0 24 24"><path d="M4 6h10M4 12h10M4 18h10"/><circle cx="19" cy="6" r="1.4"/><circle cx="19" cy="12" r="1.4"/><circle cx="19" cy="18" r="1.4"/></svg></button>
   <!-- who is in this sky: add a friend, ask someone into your party -->
   <div id="players" class="hidden">
@@ -749,6 +760,12 @@
         <option value="auto">אוטומטית</option><option value="high">גבוהה</option><option value="med">בינונית</option><option value="low">נמוכה</option>
       </select>
     </label>
+    <label class="switch">דיבור בזירה
+      <select id="set-voice" class="sel">
+        <option value="off">כבוי</option><option value="listen">רק לשמוע</option><option value="ptt">לחיצה לדיבור</option><option value="open">מיקרופון פתוח</option>
+      </select>
+    </label>
+    <div class="note" style="text-align:right;margin-top:-4px">שומעים רק טייסים עד 500 מטר ממך — הקול מתחזק כשמתקרבים ונעלם כשמתרחקים. בזירה: כפתור המיקרופון, או V במקלדת.</div>
     <label class="switch">שעה בשמיים
       <select id="set-sky" class="sel">
         <option value="day">צהריים</option><option value="sunset">שקיעה</option>

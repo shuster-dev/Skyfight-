@@ -1,6 +1,7 @@
 // The rules, checked without a server or a browser: flying, shooting, paying,
 // and the hangar's prices. `npm run qa`
 import { GUNS, MISSILES, GUN_ORDER, MISSILE_ORDER, PLANES, PLANE_ORDER, UPGRADES, TIER_COST, TIER_LEVEL, statsOf, xpAt, xpStep, levelOf, levelProgress, killReward, cleanCallsign, nextTier, MAX_LEVEL, rudeName } from '../src/shared/planes.js';
+import { VOICE, voiceGain } from '../src/shared/voice.js';
 import { AIRFIELD, ARENA, BRIDGE, BUILDINGS, PORT, STRUCTURES, HEAL, HEALS, groundAt, healAt, hitsSolid, inBay, spawnPoint, surfaceAt, terrainAt, underBridge } from '../src/shared/arena.js';
 import { fly, flyQ, forward, newBody, newBodyQ, plausibleMove, BOOST, BRAKE, Q } from '../src/shared/flight.js';
 import { GUN, MISSILE, RAM, aimDir, blastDamage, closestOn, missileHurt, DODGE, dodgeChance, gunTarget, leadPoint, offNose, pickTarget, ramDamage, segmentHit, steerMissile } from '../src/shared/combat.js';
@@ -11,6 +12,14 @@ const ok = (name, cond, info) => {
   if (cond) { pass++; console.log('  ok  ', name); } else { fail++; console.log('  FAIL', name, info === undefined ? '' : JSON.stringify(info)); }
 };
 const near = (a, b, e = 1e-6) => Math.abs(a - b) <= e;
+
+console.log('\nvoice');
+{
+  const g = [0, 100, VOICE.full, 300, 375, 450, VOICE.range, 800].map(voiceGain);
+  ok('full voice up close, nothing past 500 m', g[0] === 1 && g[2] === 1 && voiceGain(VOICE.range) === 0 && voiceGain(800) === 0 && VOICE.range === 500);
+  ok('in between it fades, steadily down, no jumps', g.every((v, i) => !i || v <= g[i - 1]) && g[3] > 0.8 && g[4] > 0.4 && g[4] < 0.6 && g[5] < 0.2, g.map((v) => +v.toFixed(2)));
+  ok('the fade is gradual in time as well: a glide of about a third of a second', VOICE.glide > 0.2 && VOICE.glide < 0.6);
+}
 
 console.log('\nnames');
 {
