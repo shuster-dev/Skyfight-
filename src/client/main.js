@@ -33,6 +33,8 @@ const err = (e) => ERR[e?.code] || 'משהו השתבש — נסו שוב';
 const net = new Net();
 // voice in the sky: near pilots are heard, far ones fade out (voice.js)
 const voice = new Voice({ send: (t, m) => S.room?.send(t, m), ice: () => net.api('/api/rtc'), onChange: () => paintVoice() });
+// any touch wakes the voices up again (a phone suspends audio after a call or a lock)
+addEventListener('pointerdown', () => voice.on && voice.prime(), { passive: true });
 const controls = new Controls();
 // the hover switch: a word on the screen when it flips
 controls.onHover = (on) => S.mode === 'air' && toast(on ? 'ריחוף — טורבו למעלה, בלימה למטה' : 'טיסה', 'lvl', 'hover');
@@ -817,6 +819,7 @@ async function launch() {
     hook(room);
     room.send('hello');
     S.mode = 'air';
+    paintVoice();
     hangar.clear();
     clearPreview();
     ['#screen-hangar', '#screen-title', '#death'].forEach((s) => show(s, false));
@@ -1683,19 +1686,43 @@ function foes() {
 // The microphone button in the air: held to talk (push-to-talk, or V on a
 // keyboard), or tapped to mute an open mic. Off and listen-only: no button.
 function paintVoice() {
-  const b = $('#voice-btn');
-  const sends = voice.on && voice.sends && !!voice.stream;
-  show(b, S.mode === 'air' && sends);
+  const b = $('#voice-btn'), m = voice.mode;
+  // always there in the air: when voice is off it says so, and a tap turns it on
+  show(b, S.mode === 'air');
+  const noMic = voice.on && voice.sends && !voice.stream;
   b.classList.toggle('live', voice.live);
-  b.classList.toggle('muted', voice.mode === 'open' && voice.selfMute);
-  b.querySelector('.lbl').textContent = voice.mode === 'ptt' ? (voice.live ? 'משדר' : 'לחץ ודבר') : voice.selfMute ? 'מושתק' : 'מיקרופון';
-  $('#set-voice').value = voice.mode;
+  b.classList.toggle('muted', m === 'open' && voice.selfMute);
+  b.classList.toggle('off', m === 'off' || noMic);
+  b.querySelector('.lbl').textContent = m === 'off' ? 'דיבור כבוי' : m === 'listen' ? 'רק שומע' : noMic ? 'אין מיקרופון'
+    : m === 'ptt' ? (voice.live ? 'משדר…' : 'לחץ ודבר') : voice.selfMute ? 'מושתק' : 'מיקרופון פתוח';
+  $('#set-voice').value = m;
+  $$('#voice-menu [data-vmode]').forEach((x) => x.classList.toggle('on', x.dataset.vmode === m));
+  if (S.mode !== 'air') show('#voice-menu', false);
 }
 {
   const b = $('#voice-btn');
-  b.addEventListener('pointerdown', (e) => { e.preventDefault(); if (voice.mode === 'ptt') voice.talk(true); else voice.toggleSelfMute(); });
+  const menu = (on = $('#voice-menu').classList.contains('hidden')) => show('#voice-menu', on);
+  b.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    if (e.target.closest('#voice-more')) return menu();
+    // off, listening, or no microphone: choose how to talk
+    if (voice.mode === 'off' || voice.mode === 'listen' || !voice.stream) return menu(true);
+    if (voice.mode === 'ptt') voice.talk(true); else voice.toggleSelfMute();
+  });
   for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) b.addEventListener(ev, () => voice.talk(false));
-  addEventListener('keydown', (e) => { if (e.code === 'KeyV' && !e.repeat && S.mode === 'air' && e.target?.tagName !== 'INPUT') voice.mode === 'ptt' ? voice.talk(true) : voice.toggleSelfMute(); });
+  $('#voice-menu').addEventListener('click', (e) => {
+    const m = e.target.closest('[data-vmode]')?.dataset.vmode;
+    if (!m) return;
+    voice.setMode(m);
+    menu(false);
+    paintVoice();
+    if (m === 'ptt') toast('מחזיקים את כפתור המיקרופון (או V) ומדברים');
+  });
+  addEventListener('keydown', (e) => {
+    if (e.code !== 'KeyV' || e.repeat || S.mode !== 'air' || e.target?.tagName === 'INPUT') return;
+    if (voice.mode === 'off' || voice.mode === 'listen') return menu(true);
+    voice.mode === 'ptt' ? voice.talk(true) : voice.toggleSelfMute();
+  });
   addEventListener('keyup', (e) => { if (e.code === 'KeyV') voice.talk(false); });
   addEventListener('blur', () => voice.talk(false));
   $('#set-voice').addEventListener('change', (e) => { voice.setMode(e.target.value); paintVoice(); });

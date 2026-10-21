@@ -19,8 +19,8 @@ const browser = await chromium.launch({
 });
 const errors = [];
 async function pilot(name, mode) {
-  const ctx = await browser.newContext({ viewport: { width: 900, height: 600 }, permissions: ['microphone'] });
-  await ctx.addInitScript((m) => localStorage.setItem('sky.voice', m), mode);
+  const ctx = await browser.newContext({ viewport: { width: 640, height: 400 }, permissions: ['microphone'] });
+  await ctx.addInitScript((m) => { localStorage.setItem('sky.voice', m); localStorage.setItem('sky.quality', 'low'); }, mode);
   const page = await ctx.newPage();
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: 'domcontentloaded', timeout: 90000 });
@@ -28,23 +28,27 @@ async function pilot(name, mode) {
   await page.evaluate(() => document.fonts.ready);
   const why = await page.evaluate(() => { const i = document.querySelector('#in-name'); return { ro: i.readOnly, vis: !!i.offsetParent, title: !document.querySelector('#screen-title').classList.contains('hidden'), err: document.querySelector('#title-err').textContent, btn: document.querySelector('#btn-go').textContent }; });
   if (why.ro || !why.vis) console.log('  (title:', JSON.stringify(why), ')');
-  try { await page.fill('#in-name', name, { timeout: 60000 }); } catch (e) {
+  await page.$eval('#in-name', (el, v) => { el.value = v; }, name);
+  // (clicked straight on the element: software rendering is too slow for a
+  // moving page to ever look "stable" to the test's pointer)
+  await page.$eval('#btn-go', (b) => b.click());
+  await page.waitForSelector('#screen-hangar:not(.hidden)', { timeout: 60000 });
+  await page.$eval('#btn-launch', (b) => b.click());
+  try { await page.waitForFunction(() => window.__sky?.me?.alive === true, null, { timeout: 90000 }); } catch (e) {
     await page.screenshot({ path: `../vt-${name}.png` }).catch(() => {});
-    console.log('  (url', page.url(), 'html', (await page.content().catch(() => '')).length, ')');
+    console.log('  (', name, await page.evaluate(() => ({ mode: window.__sky.mode, notes: document.querySelector('#notes')?.innerText })).catch((x) => x.message), ')');
     throw e;
   }
-  await page.click('#btn-go');
-  await page.waitForSelector('#screen-hangar:not(.hidden)');
-  await page.click('#btn-launch');
-  await page.waitForFunction(() => window.__sky?.me?.alive === true, null, { timeout: 30000 });
+  // a real tap on the page, as a player's finger would (it wakes the audio)
+  await page.mouse.click(320, 380).catch(() => {});
   return page;
 }
 const state = (page) => page.evaluate(() => {
   const V = window.__sky.voice, me = window.__sky.me?.mesh?.position;
-  return { on: V.on, mode: V.mode, mic: !!V.stream, live: V.live, track: V.stream?.getAudioTracks()[0]?.enabled,
+  return { ctx: V.ctx?.state, on: V.on, mode: V.mode, mic: !!V.stream, live: V.live, track: V.stream?.getAudioTracks()[0]?.enabled,
     peers: [...V.peers].map(([k, P]) => {
       const o = window.__sky.others.get(k);
-      return { k, state: P.pc.connectionState, heard: !!P.gain, level: P.level, gain: P.gain?.gain.value, d: o && me ? Math.hypot(o.x - me.x, o.y - me.y, o.z - me.z) : null };
+      return { k, state: P.pc.connectionState, heard: !!P.gain, level: P.level, peak: P.peak, gain: P.gain?.gain.value, d: o && me ? Math.hypot(o.x - me.x, o.y - me.y, o.z - me.z) : null };
     }) };
 });
 try {
@@ -54,7 +58,9 @@ try {
   const micOn = (p) => p.waitForFunction(() => window.__sky.voice.on && !!window.__sky.voice.stream, null, { timeout: 20000 }).then(() => true, () => false);
   ok('both have their microphones and voice on', await micOn(a) && await micOn(b), [await state(a), await state(b)]);
   ok('they find each other: the line connects, both ways', await Promise.all([a, b].map((p) => p.waitForFunction(() => [...window.__sky.voice.peers.values()].some((P) => P.pc.connectionState === 'connected'), null, { timeout: 90000 }).then(() => true, () => false))).then((r) => r.every(Boolean)), [await state(a), await state(b)]);
-  ok('sound comes through (the fake microphone\'s tone)', await b.waitForFunction(() => [...window.__sky.voice.peers.values()].some((P) => P.level > 0.005), null, { timeout: 30000 }).then(() => true, () => false), await state(b));
+  // (the fake microphone's beep comes out of noise suppression faint; a dead
+  // line reads exactly nothing)
+  ok('sound comes through (the fake microphone\'s tone)', await b.waitForFunction(() => [...window.__sky.voice.peers.values()].some((P) => P.peak > 0.0005), null, { timeout: 45000 }).then(() => true, () => false), await state(b));
   await wait(1500);
   const s = await state(b), P = s.peers[0];
   ok('the volume is the distance\'s: full near, nothing past 500 m', P && P.d != null && Math.abs(P.gain - voiceGain(P.d)) < 0.12, P);
@@ -70,8 +76,15 @@ try {
   await a.evaluate(() => window.__sky.voice.setMode('off'));
   ok('turned off: no lines, no microphone', await a.waitForFunction(() => !window.__sky.voice.on && !window.__sky.voice.stream && window.__sky.voice.peers.size === 0, null, { timeout: 10000 }).then(() => true, () => false));
   ok('and the other side drops the line', await b.waitForFunction(() => window.__sky.voice.peers.size === 0, null, { timeout: 10000 }).then(() => true, () => false), await state(b));
+  // from off, right there in the air: the button stays, a tap opens the choice
+  ok('off: the button is still there, saying so', await a.isVisible('#voice-btn') && /כבוי/.test(await a.textContent('#voice-btn')));
+  await a.$eval('#voice-btn', (b) => b.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })));
+  ok('a tap opens how to talk', await a.isVisible('#voice-menu'));
+  await a.$eval('#voice-menu [data-vmode="open"]', (b) => b.click());
+  ok('chosen in the air: the microphone comes on and the line is made again', await a.waitForFunction(() => window.__sky.voice.on && !!window.__sky.voice.stream, null, { timeout: 20000 }).then(() => true, () => false) && !(await a.isVisible('#voice-menu')));
+  ok('and the other side hears again', await b.waitForFunction(() => [...window.__sky.voice.peers.values()].some((P) => P.pc.connectionState === 'connected'), null, { timeout: 90000 }).then(() => true, () => false), [await state(a), await state(b), await a.evaluate(() => [window.__sky.myKey, [...window.__sky.roster.values()].filter((r) => !r.bot).map((r) => r.key + ':' + r.v)])]);
   ok('no page errors', errors.length === 0, errors);
-} catch (e) { fail++; console.log('  FAIL (threw)', e.message); }
+} catch (e) { fail++; console.log("  FAIL (threw)", e.message.split("\n").slice(0, 6).join(" | ")); }
 console.log(`\n${pass} passed, ${fail} failed`);
 await browser.close(); srv.kill();
 process.exit(fail ? 1 : 0);

@@ -126,7 +126,12 @@ async function run(label, viewport, mobile) {
   ok('a button opens who is in the sky: people and bots', await page.waitForFunction(() => document.querySelectorAll('#pl-list .pl-row').length >= 5 && /בוטים/.test(document.querySelector('#pl-count').textContent), null, { timeout: 8000 }).then(() => true, () => false));
   ok('no friend or party buttons on bots', await page.evaluate(() => [...document.querySelectorAll('#pl-list .pl-row')].filter((r) => r.querySelector('.bot')).every((r) => !r.querySelector('button'))));
   await snap('5c-players');
-  await page.click('#pl-close');
+  await page.$eval('#pl-close', (b) => b.click());
+  ok('the microphone button is there in the air, off to begin with', await page.isVisible('#voice-btn') && /כבוי/.test(await page.textContent('#voice-btn')));
+  await page.$eval('#voice-btn', (b) => b.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })));
+  ok('a tap on it offers how to talk', await page.isVisible('#voice-menu') && (await page.$$('#voice-menu [data-vmode]')).length === 4);
+  await snap('5d-voice');
+  await page.$eval('#voice-menu [data-vmode="off"]', (b) => b.click());
   if (mobile) {
     // the right thumb drags the camera round; let go and it comes back
     const lp = await (await page.$('#look-pad')).boundingBox();
