@@ -49,19 +49,20 @@ async function run(label, viewport, mobile) {
   await page.waitForSelector('#screen-hangar:not(.hidden)');
   await wait(1200);
   await snap('2-hangar');
-  ok('the hangar is its own 3D scene, fifteen planes in the row', await page.evaluate(() => window.__sky.mode === 'hangar') && (await page.$$('#hp-dots i')).length === 15);
-  ok('the first plane is on the table, in use', (await page.textContent('#hp-name')) === 'סער' && (await page.textContent('#hp-act')) === 'בשימוש');
+  ok('the hangar is its own 3D scene, the fifteen planes side by side as cards', await page.evaluate(() => window.__sky.mode === 'hangar') && (await page.$$('#hp-strip .hp-card')).length === 15);
+  ok('the first plane is on the table, in use, and its card says so', (await page.textContent('#hp-name')) === 'סער' && /המטוס שלך/.test(await page.textContent('#hp-act')) && /בשימוש/.test(await page.textContent('#hp-strip .hp-card.on')));
+  ok('a newcomer is told what to do here', await page.isVisible('#h-hint'));
   ok('no pictures and no emoji in the hangar', await page.evaluate(() => !/[\u{1F300}-\u{1FAFF}\u2600-\u27BF]/u.test(document.querySelector('#screen-hangar').innerText)));
   ok('seven paints to choose from, the stock one worn', (await page.$$('#hp-paints .sw')).length === 7 && await page.evaluate(() => document.querySelector('#hp-paints .sw.on')?.dataset.paint === 'stock'));
   await page.click('#hp-paints [data-paint="fox"]');
   ok('trying a paint on shows its price', /שועל/.test(await page.textContent('#hp-paint-act')) && await page.evaluate(() => document.querySelector('#hp-paint-act').disabled));
   await page.click('#hp-paints [data-paint="stock"]');
   ok('two skies to choose: everyone for themselves, or teams', (await page.$$('.h-mode button')).length === 2);
-  await page.click('#hp-next');
+  await page.$eval('#hp-strip [data-plane="mustang"]', (b) => b.click());
   await wait(800);
   await snap('2b-next');
-  ok('the next plane is locked to a level', (await page.textContent('#hp-name')) === 'מוסטנג' && /נפתח ברמה 2/.test(await page.textContent('#hp-act')));
-  await page.click('#hp-prev');
+  ok('a card puts its plane on the table: this one opens at level 2, and says so', (await page.textContent('#hp-name')) === 'מוסטנג' && /רמה 2/.test(await page.textContent('#hp-act')) && /רמה 2/.test(await page.textContent('#hp-strip .hp-card.on')));
+  await page.$eval('#hp-strip [data-plane="sparrow"]', (b) => b.click());
   await page.click('[data-tab="ups"]');
   await wait(400);
   await snap('3-upgrades');
@@ -80,7 +81,7 @@ async function run(label, viewport, mobile) {
   ok('back on the planes, no weapon left standing on the pad', await page.evaluate(() => window.__sky.hangarArms()) === 0);
   ok('by the launch button: a green dot and how many people are on (at least you; bots not counted)', await page.waitForFunction(() => /online players: [1-9]/.test(document.querySelector('#h-online').textContent), null, { timeout: 10000 }).then(() => true, () => false));
   ok('a name, and nothing else: the pilot has a code of their own at once', await page.evaluate(() => !!window.__sky.pilot.tag));
-  ok('a username and a password are only a backup, offered but not asked', await page.isVisible('#btn-save'));
+  ok('a username and a password are only a backup, offered in the settings, not asked', await page.evaluate(() => { const b = document.querySelector('#btn-save'); return !!b && !b.classList.contains('hidden') && !!b.closest('#sheet-settings'); }));
   await page.click('[data-tab="friends"]');
   ok('the friends page: your code, and a link to the game to share', await page.waitForFunction(() => /#\d+/.test(document.querySelector('#f-me')?.textContent || '') && !document.querySelector('#f-share').classList.contains('hidden'), null, { timeout: 10000 }).then(() => true, () => false));
   await snap('3d-friends');
@@ -121,6 +122,11 @@ async function run(label, viewport, mobile) {
   ok('the stick climbs', st.alive ? st.pitch > 0.15 : true, { y0, ...st });
   if (!mobile) { await page.keyboard.up('ArrowUp'); await page.keyboard.up('Space'); }
   ok('the HUD is up', await page.isVisible('#hud') && await page.isVisible('#score'));
+  ok('the first flight: a lesson, a step at a time', await page.waitForFunction(() => !document.querySelector('#tut').classList.contains('hidden') && /\/6/.test(document.querySelector('#tut-n').textContent), null, { timeout: 8000 }).then(() => true, () => false));
+  if (mobile) ok('on a phone the stick is there to see before it is touched', await page.evaluate(() => { const s = document.querySelector('#stick'); return !s.classList.contains('hidden') || s.classList.contains('rest'); }));
+  await snap('5a-lesson');
+  await page.$eval('#tut-skip', (b) => b.click());
+  ok('and it can be skipped', await page.evaluate(() => document.querySelector('#tut').classList.contains('hidden')));
   // the list of who is in this sky: you, and the bots, with no buttons on bots
   await page.click('#players-btn');
   ok('a button opens who is in the sky: people and bots', await page.waitForFunction(() => document.querySelectorAll('#pl-list .pl-row').length >= 5 && /בוטים/.test(document.querySelector('#pl-count').textContent), null, { timeout: 8000 }).then(() => true, () => false));

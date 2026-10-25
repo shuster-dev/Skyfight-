@@ -13,7 +13,7 @@ import { Room } from '@colyseus/core';
 import { verifyToken } from '../auth.js';
 import { Bomber } from '../boss.js';
 import { normalize, payKill, view } from '../pilot.js';
-import { GUNS, GUN_ORDER, MISSILES, MISSILE_ORDER, PAINT_ORDER, PLANES, PLANE_ORDER, UPGRADE_ORDER, displayName, levelOf, statsOf, tiersOf, killReward } from '../../shared/planes.js';
+import { GUNS, GUN_ORDER, MISSILES, MISSILE_ORDER, PAINT_ORDER, PLANES, PLANE_ORDER, UPGRADE_ORDER, aimHelp, displayName, levelOf, statsOf, tiersOf, killReward } from '../../shared/planes.js';
 import { ARENA, hitsSolid, spawnPoint, surfaceAt, HEAL, HEALS, healAt } from '../../shared/arena.js';
 import { Q, fly, forward, newBody } from '../../shared/flight.js';
 import { ASSIST_SHARE, CREDIT_MS, FLARE, GUN, MISSILE, RAM, REPAIR, RESPAWN, ramDamage, aimDir, closestOn, DODGE, dodgeChance, gunTarget, missileHurt, offNose, pickTarget, segmentHit, steerMissile } from '../../shared/combat.js';
@@ -106,6 +106,11 @@ export class ArenaRoom extends Room {
     });
     this.onMessage('hello', (client) => this.hello(client));
     this.onMessage('ping', (client, t) => client.send('pong', t));
+    // the first-flight lesson: while it runs (a minute at most) bots pick on someone else
+    this.onMessage('tut', (client, m) => {
+      const p = this.planes.get(this.bySession.get(client.sessionId));
+      if (p && !p.bot && !p.tutored) p.learning = m?.on ? this.now + 60000 : 0, p.tutored = !m?.on;
+    });
     // parties: an invitation, its answer, and leaving
     this.parties = new Map();  // id -> { id, color, members: Set of plane keys }
     this.invites = new Map();  // invited key -> { from, at }
@@ -218,6 +223,8 @@ export class ArenaRoom extends Room {
   addPlane({ uid = '', sid = '', name, plane, paint = 'stock', neon = false, level, upgrades = {}, arms = {}, pilot = null, bot = null, team = '' }) {
     const key = (++this.seq).toString(36);
     const stats = statsOf(plane, upgrades, arms);
+    // a newcomer's guns are helped onto a target more (fading out by level 10)
+    if (!bot) stats.gunAssist *= aimHelp(level), stats.aimHelp = aimHelp(level);
     const p = {
       key, uid, sid, name, plane, paint, neon, team, level, bot, pilot, stats,
       hp: stats.hp, alive: false, respawnAt: 0, shieldUntil: 0,
@@ -372,7 +379,7 @@ export class ArenaRoom extends Room {
       // from the wing the barrel is on, alternating
       const side = (p.gun++ % 2 ? 1 : -1) * 2.2, rx = Math.cos(p.yaw), rz = -Math.sin(p.yaw);
       this.bullets.push({
-        owner: p.key, team: p.team, party: p.party || '', t: 0, dmg: p.stats.dmg, r: p.bot ? GUN.botHitR : GUN.hitR, life: p.stats.gunRange / GUN.speed,
+        owner: p.key, team: p.team, party: p.party || '', t: 0, dmg: p.stats.dmg, r: p.bot ? GUN.botHitR : GUN.hitR * (1 + ((p.stats.aimHelp || 1) - 1) * 0.5), life: p.stats.gunRange / GUN.speed,
         x: p.x + f.x * 5 + rx * side, y: p.y + f.y * 5, z: p.z + f.z * 5 + rz * side,
         vx: d.x * GUN.speed + f.x * p.speed, vy: d.y * GUN.speed + f.y * p.speed, vz: d.z * GUN.speed + f.z * p.speed,
       });
@@ -855,6 +862,8 @@ export class ArenaRoom extends Room {
       let best = null, bestD = Infinity;
       for (const o of this.planes.values()) {
         if (o === p || !o.alive || this.now < o.shieldUntil || (this.teams && o.team === p.team)) continue;
+        // someone on their first flight, learning the stick: left alone a while
+        if (this.now < (o.learning || 0)) continue;
         // a fight of its own size: the further apart in level, the further off it seems
         const gap = Math.max(0, Math.abs((o.level || 1) - (p.level || 1)) - 3);
         const d = Math.hypot(o.x - p.x, o.y - p.y, o.z - p.z) * (1 + (o.bot ? 0.8 : 1.6) * (hunted.get(o.key) || 0)) * (1 + gap * 0.35);
