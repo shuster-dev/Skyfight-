@@ -13,6 +13,8 @@ import {
   AdditiveBlending, BufferAttribute, BufferGeometry, CanvasTexture, ConeGeometry, CylinderGeometry, Group, Mesh,
   MeshBasicMaterial, MeshStandardMaterial, SphereGeometry, SRGBColorSpace, Vector3, BoxGeometry, TorusGeometry, Color, PlaneGeometry, MeshPhysicalMaterial, EdgesGeometry, InstancedMesh, Matrix4, Quaternion,
 } from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { bakeInPlace } from './bake.js';
 import { PAINTS, PLANES } from '../../shared/planes.js';
 import { buildMissile } from './arms.js';
 
@@ -1120,12 +1122,99 @@ export function buildPlane(kind, paint = 'stock', load = {}) {
       g.add(l, h);
     }
   }
+  // the still parts merged, look by look: what turns, burns or is fired stays its own
+  if (!g.userData.neon) {
+    const u = g.userData, units = [...(u.missiles || []), ...(u.barrels || [])];
+    const own = new Set([...(u.props || []), ...(u.flames || []), ...(u.lift || []), ...units]);
+    bakeInPlace(g, (o) => own.has(o));
+    for (const m of [...units, ...(u.props || [])]) bakeInPlace(m);
+  }
   return g;
+}
+
+// ---- far off: one mesh for the whole plane ---------------------------------
+
+// A painted part's colour seen from far off: the average of its texture
+const meanOf = new WeakMap();
+function meanColor(map) {
+  if (meanOf.has(map)) return meanOf.get(map);
+  const c = new Color(1, 1, 1);
+  try {
+    const img = map.image, cv = document.createElement('canvas');
+    cv.width = cv.height = 8;
+    const x = cv.getContext('2d');
+    x.drawImage(img, 0, 0, 8, 8);
+    const d = x.getImageData(0, 0, 8, 8).data;
+    let r = 0, gr = 0, b = 0;
+    for (let i = 0; i < d.length; i += 4) r += d[i], gr += d[i + 1], b += d[i + 2];
+    c.setRGB(r / 16320, gr / 16320, b / 16320, SRGBColorSpace);
+  } catch {}
+  meanOf.set(map, c);
+  return c;
+}
+
+/**
+ * The same plane as a single mesh: every solid part, in its colour, merged
+ * (what spins, burns or glows is left out). A plane a few hundred metres off
+ * is a handful of pixels, and costs one draw instead of forty.
+ */
+function farMesh(g) {
+  g.updateMatrixWorld(true);
+  const inv = new Matrix4().copy(g.matrixWorld).invert(), M = new Matrix4(), skip = new Set([...(g.userData.props || []), ...(g.userData.flames || []), ...(g.userData.lift || [])]);
+  const parts = [];
+  g.traverse((o) => {
+    if (!o.isMesh || o.isInstancedMesh || Array.isArray(o.material)) return;
+    for (let a = o; a && a !== g; a = a.parent) if (skip.has(a) || !a.visible) return;
+    const m = o.material;
+    if (m.transparent || m.blending === AdditiveBlending || !m.color) return;
+    const geo = (o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone());
+    for (const k of Object.keys(geo.attributes)) if (k !== 'position' && k !== 'normal') geo.deleteAttribute(k);
+    if (!geo.attributes.normal) geo.computeVertexNormals();
+    geo.applyMatrix4(M.multiplyMatrices(inv, o.matrixWorld));
+    const c = m.color.clone();
+    if (m.map?.image) c.multiply(meanColor(m.map));
+    const n = geo.attributes.position.count, col = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) col[i * 3] = c.r, col[i * 3 + 1] = c.g, col[i * 3 + 2] = c.b;
+    geo.setAttribute('color', new BufferAttribute(col, 3));
+    parts.push(geo);
+  });
+  const merged = parts.length ? mergeGeometries(parts) : null;
+  parts.forEach((p) => p.dispose());
+  if (!merged) return null;
+  const mesh = new Mesh(merged, new MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0.25 }));
+  mesh.name = 'farLook';
+  mesh.visible = false;
+  return mesh;
+}
+
+/**
+ * Near or far: the full plane, or its one-mesh stand-in. A margin either way
+ * so a plane at the edge does not flicker between the two.
+ */
+export const FAR_AT = 260;
+export function lodPlane(g, dist) {
+  const u = g.userData;
+  const far = u.far ? dist > FAR_AT - 30 : dist > FAR_AT + 30;
+  if (far === !!u.far) return;
+  if (far && u.farMesh === undefined) { u.farMesh = farMesh(g); if (u.farMesh) g.add(u.farMesh); }
+  if (!u.farMesh) return;
+  u.far = far;
+  for (const c of g.children) c.visible = c === u.farMesh ? far : !far;
+  // back near: what was hidden comes back as it should be
+  if (!far) { u.missiles?.forEach((m) => (m.visible = m.userData.shown !== false)); if (u.lift) for (const j of u.lift) j.visible = false; }
 }
 
 /** Per frame: props turn, flames burn with the burner, missiles hang while they are there. */
 export function animatePlane(g, dt, { boost = false, speed = 60, time = 0, ammo = null, ammoMax = 1, hover = false } = {}) {
   const u = g.userData;
+  if (u.far) {
+    // far off only the count of missiles is kept, for when it comes back near
+    if (ammo !== null && u.missiles?.length) {
+      const n = Math.round(u.missiles.length * ammo / Math.max(1, ammoMax || 1) / 2) * 2;
+      u.missiles.forEach((m, i) => (m.userData.shown = i < n));
+    }
+    return;
+  }
   // a hover: the jets down roar, the ones behind idle
   if (u.lift) {
     for (const j of u.lift) { j.visible = hover; j.scale.z = 2.6 + Math.sin(time * 37 + j.position.x) * 0.4; }
@@ -1142,6 +1231,6 @@ export function animatePlane(g, dt, { boost = false, speed = 60, time = 0, ammo 
   // the missiles under the wings go as they are fired (in pairs, kept even)
   if (ammo !== null && u.missiles?.length) {
     const n = Math.round(u.missiles.length * ammo / Math.max(1, ammoMax || 1) / 2) * 2;
-    u.missiles.forEach((m, i) => (m.visible = i < n));
+    u.missiles.forEach((m, i) => (m.visible = m.userData.shown = i < n));
   }
 }

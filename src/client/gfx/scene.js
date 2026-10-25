@@ -8,11 +8,12 @@ import {
   ConeGeometry, CylinderGeometry, DataTexture, DirectionalLight, DoubleSide, DynamicDrawUsage, Fog, Group, HemisphereLight,
   InstancedBufferAttribute, InstancedMesh, LinearFilter, LinearMipmapLinearFilter, LineBasicMaterial, LineSegments,
   BufferGeometry, Float32BufferAttribute, Mesh, MeshBasicMaterial, MeshStandardMaterial, Object3D, PerspectiveCamera,
-  PlaneGeometry, PMREMGenerator, RGBAFormat, RepeatWrapping, Scene, ShaderMaterial, SphereGeometry, SRGBColorSpace, Sprite,
-  SpriteMaterial, TubeGeometry, Vector3, WebGLRenderer, ClampToEdgeWrapping, RingGeometry, CircleGeometry,
+  PlaneGeometry, PMREMGenerator, RGBAFormat, RepeatWrapping, Scene, ShaderMaterial, SphereGeometry, SRGBColorSpace,
+  TubeGeometry, Vector3, WebGLRenderer, ClampToEdgeWrapping, RingGeometry, CircleGeometry, UniformsLib, UniformsUtils,
 } from 'three';
 import { makeStreets } from './streets.js';
 import { makeSites } from './sites.js';
+import { bakeInPlace } from './bake.js';
 import { AIRFIELD, ARENA, BRIDGE, BUILDINGS, GRID, ISLANDS, PLACES, PORT, cityAt, desertAt, noise, siteAt, terrainAt, inBay } from '../../shared/arena.js';
 
 export const SKY = { top: 0x3b78c9, horizon: 0xd4e6f2, sun: 0xfff2d6, fog: 0xcfe2ef };
@@ -63,7 +64,7 @@ export function makeWorld(renderer) {
   scene.add(sea);
   const city = makeCity();
   scene.add(city);
-  const bridge = makeBridge();
+  const bridge = bakeInPlace(makeBridge());
   scene.add(bridge);
   const trees = makeTrees(heights);
   scene.add(trees);
@@ -126,7 +127,7 @@ export function makeWorld(renderer) {
     ships.group.visible = !low;
     streets.group.visible = !low;
     streets.setQuality(level);
-    clouds.children.forEach((c, i) => (c.visible = !low || i % 3 === 0));
+    clouds.userData.thin(low);
     sea.material.uniforms.detail.value = low ? 0 : 1;
     // clear air: the haze starts far out, where it only softens the horizon
     const far = low ? 3000 : med ? 3800 : 4400;
@@ -322,6 +323,14 @@ function makeLand(H) {
     pos.setY(v, H.h[j * H.n + i]);
   }
   geo.computeVertexNormals();
+  // the sea is opaque: ground a few metres under it is never seen, so it is not drawn
+  const idx = [], n = H.n, h = H.h;
+  for (let j = 0; j < SEG; j++) for (let i = 0; i < SEG; i++) {
+    const a = j * n + i, b = a + n, c = b + 1, d = a + 1;
+    if (Math.max(h[a], h[b], h[c], h[d]) < -2.5) continue;
+    idx.push(a, b, d, b, c, d);
+  }
+  geo.setIndex(idx);
   const mat = new MeshStandardMaterial({ map: paintGround(H), roughness: 0.95, metalness: 0 });
   // up close the picture is soft: a fine grain of noise over it, by place
   mat.onBeforeCompile = (sh) => {
@@ -434,19 +443,26 @@ function makeCity() {
   group.userData.eve = eve;
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.uEve = eve;
-    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aKind;\nvarying float vKind;\nvarying vec3 vBW;\nvarying vec3 vBN;')
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aKind;\nvarying float vKind;\nvarying vec3 vBW;\nvarying vec3 vBN;\nvarying float vLX;\nvarying float vHalf;\nvarying float vTop;')
       .replace('#include <begin_vertex>', `#include <begin_vertex>
         vec4 bw = vec4(transformed, 1.0);
         vec3 bn = objectNormal;
+        // where on its face this point is, in metres: across from the corner, down from the top
+        vec3 sc = vec3(1.0);
         #ifdef USE_INSTANCING
           bw = instanceMatrix * bw;
           bn = mat3(instanceMatrix) * bn;
+          sc = vec3(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz), length(instanceMatrix[2].xyz));
         #endif
+        bool sideX = abs(objectNormal.x) > 0.5;
+        vLX = sideX ? position.z * sc.z : position.x * sc.x;
+        vHalf = sideX ? sc.z * 0.5 : sc.x * 0.5;
+        vTop = (1.0 - position.y) * sc.y;
         vBW = (modelMatrix * bw).xyz;
         vBN = normalize(bn);
         vKind = aKind;`);
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
-      varying float vKind; varying vec3 vBW; varying vec3 vBN; uniform float uEve; float gLit; float gWin;
+      varying float vKind; varying vec3 vBW; varying vec3 vBN; varying float vLX; varying float vHalf; varying float vTop; uniform float uEve; float gLit; float gWin;
       float bh(vec2 p){ return fract(sin(dot(p, vec2(41.3, 289.1))) * 23758.5453); }`)
       .replace('#include <color_fragment>', `#include <color_fragment>
         float wall = 1.0 - step(0.5, abs(vBN.y));
@@ -465,8 +481,20 @@ function makeCity() {
         float aa = clamp(1.6 - max(fwidth(cell.x), fwidth(cell.y)) * 3.0, 0.0, 1.0);
         win = mix(cov, win, aa);
         win *= wall * step(3.0, vBW.y);
+        // the frame that holds it all, wide enough to read from across the bay:
+        // the corners, a crown at the top, and a floor slab every few storeys
+        float edge = vHalf - abs(vLX), ew = max(fwidth(edge), 0.02);
+        float trim = 1.0 - smoothstep(0.7, 0.7 + ew * 1.5, edge);
+        float crown = 1.0 - smoothstep(1.2, 1.2 + max(fwidth(vTop), 0.02) * 1.5, vTop);
+        float every = vKind < 0.5 ? 5.0 : 4.0;
+        float by = (vBW.y - 3.0) / (floorH * every), fy = fract(by), wy = max(fwidth(by), 0.001);
+        float slab = (1.0 - smoothstep(0.045, 0.045 + wy * 1.5, fy)) * step(3.0, vBW.y);
+        float solid = max(max(trim, crown), slab) * wall;
+        win *= 1.0 - solid;
         float lit = step(0.9, bh(floor(cell) + floor(vBW.xz * 0.01))) * aa;
-        vec3 glass = mix(vec3(0.16, 0.24, 0.32), vec3(0.62, 0.58, 0.48), lit * 0.55);
+        // panes not all alike: some catch more of the sky than others
+        float pane = mix(0.85, 0.7 + 0.5 * bh(floor(cell) * 3.1 + 7.0), aa);
+        vec3 glass = mix(vec3(0.09, 0.15, 0.21) * pane, vec3(0.62, 0.58, 0.48), lit * 0.55);
         diffuseColor.rgb = mix(diffuseColor.rgb, glass, win);
         // in the evening a good share of the windows are lit, warm
         gLit = step(0.62, bh(floor(cell) * 1.7 + floor(vBW.xz * 0.013))) * aa; gWin = win;
@@ -475,7 +503,7 @@ function makeCity() {
         diffuseColor.rgb *= mix(0.62, 1.0, smoothstep(2.0, 4.5, vBW.y));`)
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(1.0, 0.72, 0.42) * gLit * gWin * uEve * 0.9;')
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.06, win);')
-      .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = mix(metalnessFactor, 0.65, win);');
+      .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = mix(metalnessFactor, 0.5, win);');
   };
   const mesh = new InstancedMesh(box, mat, n);
   const o = new Object3D(), c = new Color();
@@ -758,10 +786,7 @@ function puffTexture() {
 }
 
 function makeClouds() {
-  const r = rng(99), group = new Group(), puffs = [];
-  const tex = puffTexture();
-  const mat = new SpriteMaterial({ map: tex, transparent: true, depthWrite: false, fog: true, color: 0xffffff });
-  const shade = new SpriteMaterial({ map: tex, transparent: true, depthWrite: false, fog: true, color: 0xd5dde6 });
+  const r = rng(99), puffs = [], spots = [];
   // few, and high: up near the ceiling and out toward the edge, where they
   // are scenery and a place to hide — not a wall across every fight
   for (let c = 0; c < 26; c++) {
@@ -769,16 +794,50 @@ function makeClouds() {
     const cx = Math.cos(a) * d, cz = Math.sin(a) * d, cy = 470 + r() * 60;
     const n = 5 + Math.floor(r() * 5), size = 50 + r() * 40;
     for (let i = 0; i < n; i++) {
-      const s = new Sprite(i % 3 ? mat : shade);
       const sx = size * (0.8 + r() * 0.7);
-      s.scale.set(sx * 1.6, sx, 1);
-      s.position.set(cx + (r() - 0.5) * size * 2.6, cy + (r() - 0.4) * size * 0.35 - (i % 3 ? 0 : 6), cz + (r() - 0.5) * size * 1.6);
-      group.add(s);
-      puffs.push([s.position.x, s.position.y, s.position.z, sx * 0.55]);
+      const x = cx + (r() - 0.5) * size * 2.6, y = cy + (r() - 0.4) * size * 0.35 - (i % 3 ? 0 : 6), z = cz + (r() - 0.5) * size * 1.6;
+      spots.push({ x, y, z, w: sx * 1.6, h: sx, shade: i % 3 ? 0 : 1, keep: spots.length % 3 === 0 });
+      puffs.push([x, y, z, sx * 0.55]);
     }
   }
+  // every puff of every cloud in one draw: quads that turn to face the camera
+  // (the ones kept on 'low' first, so thinning them is a shorter count)
+  spots.sort((a, b) => b.keep - a.keep);
+  const uniforms = UniformsUtils.merge([UniformsLib.fog, { map: { value: null }, lit: { value: new Color(0xffffff) }, shade: { value: new Color(0xd5dde6) } }]);
+  uniforms.map.value = puffTexture();
+  const mat = new ShaderMaterial({
+    uniforms, transparent: true, depthWrite: false, fog: true,
+    vertexShader: `attribute float aShade; varying vec2 vUv; varying float vShade;
+      #include <fog_pars_vertex>
+      void main() {
+        vUv = uv; vShade = aShade;
+        vec4 mvPosition = modelViewMatrix * vec4(instanceMatrix[3].xyz, 1.0);
+        mvPosition.xy += position.xy * vec2(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz));
+        gl_Position = projectionMatrix * mvPosition;
+        #include <fog_vertex>
+      }`,
+    fragmentShader: `uniform sampler2D map; uniform vec3 lit; uniform vec3 shade; varying vec2 vUv; varying float vShade;
+      #include <fog_pars_fragment>
+      void main() {
+        vec4 t = texture2D(map, vUv);
+        gl_FragColor = vec4(t.rgb * mix(lit, shade, vShade), t.a);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+        #include <fog_fragment>
+      }`,
+  });
+  const geo = new PlaneGeometry(1, 1);
+  geo.setAttribute('aShade', new InstancedBufferAttribute(new Float32Array(spots.map((p) => p.shade)), 1));
+  const mesh = new InstancedMesh(geo, mat, spots.length);
+  const O = new Object3D();
+  spots.forEach((p, i) => { O.position.set(p.x, p.y, p.z); O.scale.set(p.w, p.h, 1); O.updateMatrix(); mesh.setMatrixAt(i, O.matrix); });
+  mesh.frustumCulled = false;
+  const group = new Group();
+  group.add(mesh);
   group.userData.puffs = puffs;
-  group.userData.mats = [mat, shade];
+  // (what the time of day recolours)
+  group.userData.mats = [{ color: uniforms.lit.value }, { color: uniforms.shade.value }];
+  group.userData.thin = (low) => { mesh.count = low ? spots.filter((p) => p.keep).length : spots.length; };
   return group;
 }
 
