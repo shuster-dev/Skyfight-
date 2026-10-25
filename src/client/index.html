@@ -284,8 +284,21 @@
     .h-tabs button { flex-direction: row; justify-content: center; gap: 6px; padding: 5px 4px; }
     .h-tabs svg { width: 17px; height: 17px; }
     /* the plane card too: under the tabs, above the mode switch, growing down */
-    .h-plane { top: 98px; bottom: 112px; justify-content: flex-start; }
-    .h-plane .pname { font-size: 38px; margin: 2px 0 0; }
+    .h-plane { top: 98px; bottom: 78px; justify-content: flex-start; }
+    .h-plane .pname { font-size: 30px; margin: 2px 0 0; }
+    /* sideways: the plane's card, its paints and the strip all clear the launch bar;
+       the mode switch and who is online move to the free corner on the left */
+    #tab-planes .load { display: none; }
+    #tab-planes .h-act.big { margin-top: 6px; padding: 7px 14px; font-size: 13px; }
+    #tab-planes .paints-row { margin-top: 6px; }
+    #tab-planes .sw { width: 18px; height: 18px; }
+    .hp-strip { margin-top: 6px; padding-bottom: 2px; }
+    .hp-card { width: 76px; padding: 5px 6px; gap: 2px; }
+    .hp-card b { font-size: 12.5px; }
+    .hp-card small { display: none; }
+    .h-mode { right: auto; left: 18px; bottom: max(20px, env(safe-area-inset-bottom)); }
+    #h-online { left: 18px; bottom: max(52px, calc(env(safe-area-inset-bottom) + 32px)); }
+    .h-hint { top: auto; left: 18px; bottom: 90px; transform: none; }
     .h-plane .role { display: none; }
     .h-plane .row { margin-top: 6px; }
     .h-plane .chev { width: 36px; height: 36px; }
@@ -390,6 +403,7 @@
   .tagp .mini.hot { width: 70px; height: 6px; box-shadow: 0 0 0 1px rgba(255,255,255,0.6), 0 0 10px rgba(255,80,80,0.6); }
   .tagp .mini.hot i { background: linear-gradient(90deg, #ff4b5c, #ff8a5c); }
   .tagp.off { color: #ff8a95; }
+  .tagp.far { font-size: 9.5px; font-weight: 600; opacity: 0.72; }
   .arrow { position: absolute; width: 0; height: 0; border-left: 9px solid transparent; border-right: 9px solid transparent; border-bottom: 16px solid var(--red); filter: drop-shadow(0 0 3px #000); }
   /* patched up on a repair pad: the screen's edges glow green a moment */
   #heal-flash { position: absolute; inset: 0; pointer-events: none; opacity: 0; box-shadow: inset 0 0 90px rgba(77,255,154,0.75); }
@@ -809,7 +823,7 @@
     </label>
     <label class="switch">סימון אויבים
       <select id="set-marks" class="sel">
-        <option value="near">קרובים בלבד (600 מ')</option><option value="full">הכול (עד 2.5 ק"מ)</option><option value="off">כבוי</option>
+        <option value="near">קרובים בלבד (250 מ')</option><option value="full">הכול (עד 2.5 ק"מ)</option><option value="off">כבוי</option>
       </select>
     </label>
     <label class="switch">איכות גרפיקה
