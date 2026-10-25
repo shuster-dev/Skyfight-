@@ -13,7 +13,7 @@ import {
 } from 'three';
 import { makeStreets } from './streets.js';
 import { makeSites } from './sites.js';
-import { AIRFIELD, ARENA, BRIDGE, BUILDINGS, GRID, ISLANDS, PORT, cityAt, noise, siteAt, terrainAt, inBay } from '../../shared/arena.js';
+import { AIRFIELD, ARENA, BRIDGE, BUILDINGS, GRID, ISLANDS, PLACES, PORT, cityAt, desertAt, noise, siteAt, terrainAt, inBay } from '../../shared/arena.js';
 
 export const SKY = { top: 0x3b78c9, horizon: 0xd4e6f2, sun: 0xfff2d6, fog: 0xcfe2ef };
 export const SUN_DIR = { x: -0.42, y: 0.5, z: -0.76 };
@@ -39,7 +39,7 @@ export function makeRenderer(canvas) {
 }
 
 /** The terrain is drawn over this square; the sea runs on past it. */
-const SPAN = 3600, SEG = MOBILE ? 220 : 300;
+const SPAN = 5800, SEG = MOBILE ? 300 : 440;
 
 export function makeWorld(renderer) {
   const scene = new Scene();
@@ -201,7 +201,7 @@ function sampleHeights() {
 
 /** The ground's picture from above: beaches, grass, forest, rock, snow, streets and parks. */
 function paintGround(H) {
-  const N = MOBILE ? 1024 : 2048, cv = document.createElement('canvas');
+  const N = MOBILE ? 1536 : 3072, cv = document.createElement('canvas');
   cv.width = cv.height = N;
   const g = cv.getContext('2d'), img = g.createImageData(N, N), px = img.data;
   const step = GRID.block + GRID.street;
@@ -245,13 +245,29 @@ function paintGround(H) {
       // the boulevard onto the bridge
       if (Math.abs(x - BRIDGE.x) < 14 && z > BRIDGE.z0 - 220 && z < BRIDGE.z1 + 220) { const a = 62 + n2 * 10; set(k, a, a, a + 4); continue; }
       const slope = Math.abs(H.at(x + 6, z) - H.at(x - 6, z)) + Math.abs(H.at(x, z + 6) - H.at(x, z - 6));
+      const desert = desertAt(x, z), dn = noise(x * 0.004 - 3, z * 0.004 + 8);
+      // the Dead Sea's shore: white salt
+      const DS = PLACES.deadSea, ds = Math.hypot((x - DS.x) / DS.rx, (z - DS.z) / DS.rz);
+      if (ds < 1.25 && h < 14) { const w = 0.9 + 0.1 * n2; set(k, 236 * w, 232 * w, 220 * w); continue; }
       if (h < 3.2) { const w = 0.85 + 0.15 * n2; set(k, 222 * w, 205 * w, 160 * w); continue; } // the beach
-      if (h > 250 + n1 * 30 && slope < 14) { set(k, 236, 239, 243); continue; } // snow on the high tops only
-      if (slope > 15 || h > 165 + n1 * 40) { const w = 0.6 + 0.4 * n2; set(k, 118 * w, 108 * w, 94 * w); continue; } // rock
-      const forest = noise(x * 0.008 + 11, z * 0.008 - 4) > 0.55;
+      if (h > 360 + n1 * 30 && slope < 18) { set(k, 238, 241, 245); continue; } // snow on the Hermon
+      if (desert > dn * 0.6 + 0.2) {
+        // the desert: sand and stone, dunes, the dark red granite round Eilat
+        const w = 0.82 + 0.18 * n2, dune = 0.94 + 0.06 * Math.sin(x * 0.09 + z * 0.035 + n1 * 6);
+        if (slope > 14) { const r = smooth01(1850, 2150, z); set(k, (166 + 22 * r) * w, (136 - 30 * r) * w, (104 - 30 * r) * w); continue; }
+        set(k, 222 * w * dune, 190 * w * dune, 138 * w * dune);
+        continue;
+      }
+      if (slope > 18 || h > 300 + n1 * 40) { const w = 0.6 + 0.4 * n2; set(k, 128 * w, 116 * w, 98 * w); continue; } // rock
+      // the hills: pine forests (the Carmel, the Galilee, round Jerusalem),
+      // olive-grey scrub, golden grass on the Golan, green fields on the plain
+      const golan = x > 1950 && z < -1000;
+      const forest = !golan && h > 40 && noise(x * 0.008 + 11, z * 0.008 - 4) > 0.5;
       const w = 0.7 + 0.3 * n2 + 0.15 * n1;
-      if (forest) set(k, 52 * w, 92 * w, 48 * w);
-      else set(k, 96 * w, 140 * w, 70 * w);
+      if (golan) set(k, 168 * w, 150 * w, 92 * w);
+      else if (forest) set(k, 52 * w, 88 * w, 46 * w);
+      else if (h > 60) set(k, 128 * w, 132 * w, 84 * w);
+      else set(k, 104 * w, 142 * w, 72 * w);
     }
   }
   g.putImageData(img, 0, 0);
@@ -261,6 +277,8 @@ function paintGround(H) {
   tex.minFilter = LinearMipmapLinearFilter;
   return tex;
 }
+
+const smooth01 = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
 /** The airfield from above: runway with its markings, taxiway, apron, mown grass. */
 function paintField(x, z, n1, n2, set, k) {
@@ -690,16 +708,18 @@ function makeShips() {
 
 function makeTrees(H) {
   const r = rng(31), spots = [];
-  const target = MOBILE ? 1800 : 3200;
-  for (let tries = 0; spots.length < target && tries < target * 12; tries++) {
-    const x = -1300 + r() * 2600, z = -1300 + r() * 2600;
+  const target = MOBILE ? 3000 : 6000;
+  for (let tries = 0; spots.length < target && tries < target * 14; tries++) {
+    const x = -1000 + r() * 3400, z = -2500 + r() * 4200;
+    // no trees in the desert or on the Golan's open grass
+    if (desertAt(x, z) > 0.3 || (x > 1950 && z < -1000)) continue;
     const h = H.at(x, z);
-    if (h < 5 || h > 170 || cityAt(x, z) || inBay(x, z) > 0 || siteAt(x, z, 25)) continue;
+    if (h < 5 || h > 300 || cityAt(x, z) || inBay(x, z) > 0 || siteAt(x, z, 25)) continue;
     if (Math.abs(x - BRIDGE.x) < 20 && z > BRIDGE.z0 - 230 && z < BRIDGE.z1 + 230) continue;
     const slope = Math.abs(H.at(x + 6, z) - H.at(x - 6, z)) + Math.abs(H.at(x, z + 6) - H.at(x, z - 6));
     if (slope > 14) continue;
     // in woods mostly, a few alone
-    if (noise(x * 0.008 + 11, z * 0.008 - 4) < 0.55 && r() > 0.08) continue;
+    if (noise(x * 0.008 + 11, z * 0.008 - 4) < 0.5 && r() > 0.06) continue;
     spots.push([x, h, z, 0.75 + r() * 0.6]);
   }
   const g = new Group(), o = new Object3D();
@@ -744,7 +764,7 @@ function makeClouds() {
   const shade = new SpriteMaterial({ map: tex, transparent: true, depthWrite: false, fog: true, color: 0xd5dde6 });
   // few, and high: up near the ceiling and out toward the edge, where they
   // are scenery and a place to hide — not a wall across every fight
-  for (let c = 0; c < 14; c++) {
+  for (let c = 0; c < 26; c++) {
     const a = r() * Math.PI * 2, d = 450 + r() * (ARENA.radius + 300);
     const cx = Math.cos(a) * d, cz = Math.sin(a) * d, cy = 470 + r() * 60;
     const n = 5 + Math.floor(r() * 5), size = 50 + r() * 40;
