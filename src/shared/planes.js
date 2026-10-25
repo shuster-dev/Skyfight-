@@ -213,6 +213,20 @@ export const START_GUN = 'g1', START_MISSILE = 'm1';
 export const ARMS = { guns: GUNS, missiles: MISSILES };
 
 /**
+ * The pace of a fight: every plane flies at this share of its listed speed.
+ * Newcomers found the sky too fast to aim in; a little slower, everyone has
+ * a moment longer on target, and the same turn makes a tighter circle.
+ */
+export const PACE = 0.86;
+
+/**
+ * How much a pilot's guns are helped onto a target, by level: a newcomer's a
+ * good deal (the cone the guns are pulled into is wider, the rounds a little
+ * fatter), fading out by level 10 — when they have learned to lead a target.
+ */
+export const aimHelp = (level = 1) => 1 + 0.7 * Math.max(0, Math.min(1, (10 - (level | 0)) / 9));
+
+/**
  * A plane as this pilot flies it: the plane's numbers with its upgrades on,
  * and the gun and missile it carries.
  */
@@ -227,8 +241,8 @@ export function statsOf(planeId, tiers = {}, arms = {}) {
   return {
     plane: p.id,
     hp: Math.round(up('armor', 'hp', p.hp)),
-    speed: up('engine', 'speed', p.speed), turn: up('engine', 'turn', p.turn), climb: up('engine', 'climb', p.climb),
-    boost: up('engine', 'boost', p.boost), fill: up('engine', 'fill', p.fill),
+    speed: up('engine', 'speed', p.speed) * PACE, turn: up('engine', 'turn', p.turn), climb: up('engine', 'climb', p.climb),
+    boost: up('engine', 'boost', p.boost) * PACE, fill: up('engine', 'fill', p.fill),
     rate: p.rate * gunK * G.rate, dmg: p.dmg * gunK * G.dmg,
     gun: G.id, gunRange: Math.round(up('weapons', 'gunRange', p.gunRange || G.range)),
     // the weapons tier trues the guns up too: less scatter, more help onto a target

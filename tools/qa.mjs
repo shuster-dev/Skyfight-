@@ -1,6 +1,6 @@
 // The rules, checked without a server or a browser: flying, shooting, paying,
 // and the hangar's prices. `npm run qa`
-import { GUNS, MISSILES, GUN_ORDER, MISSILE_ORDER, PLANES, PLANE_ORDER, UPGRADES, TIER_COST, TIER_LEVEL, statsOf, xpAt, xpStep, levelOf, levelProgress, killReward, cleanCallsign, nextTier, MAX_LEVEL, rudeName } from '../src/shared/planes.js';
+import { GUNS, MISSILES, GUN_ORDER, MISSILE_ORDER, PLANES, PLANE_ORDER, UPGRADES, TIER_COST, TIER_LEVEL, statsOf, xpAt, xpStep, levelOf, levelProgress, killReward, cleanCallsign, nextTier, MAX_LEVEL, rudeName, PACE, aimHelp } from '../src/shared/planes.js';
 import { VOICE, voiceGain } from '../src/shared/voice.js';
 import { AIRFIELD, ARENA, BRIDGE, BUILDINGS, PORT, STRUCTURES, HEAL, HEALS, groundAt, healAt, hitsSolid, inBay, spawnPoint, surfaceAt, terrainAt, underBridge } from '../src/shared/arena.js';
 import { fly, flyQ, forward, newBody, newBodyQ, plausibleMove, BOOST, BRAKE, Q } from '../src/shared/flight.js';
@@ -12,6 +12,12 @@ const ok = (name, cond, info) => {
   if (cond) { pass++; console.log('  ok  ', name); } else { fail++; console.log('  FAIL', name, info === undefined ? '' : JSON.stringify(info)); }
 };
 const near = (a, b, e = 1e-6) => Math.abs(a - b) <= e;
+
+console.log('\nthe pace, and help for newcomers');
+{
+  ok('the sky is a little slower than the planes are listed: every plane at the same share', PACE > 0.8 && PACE < 0.95 && PLANE_ORDER.every((k) => near(statsOf(k).speed, PLANES[k].speed * PACE)));
+  ok('a newcomer\'s guns are helped a good deal more, fading out by level 10', aimHelp(1) > 1.6 && aimHelp(5) > 1.2 && aimHelp(5) < aimHelp(1) && aimHelp(10) === 1 && aimHelp(30) === 1);
+}
 
 console.log('\nvoice');
 {
@@ -49,7 +55,7 @@ ok('three upgrades', Object.keys(UPGRADES).join() === 'engine,weapons,armor');
 {
   const ALL5 = { engine: 5, weapons: 5, armor: 5 };
   const base = statsOf('sparrow'), up = statsOf('sparrow', ALL5), best = statsOf('phantom');
-  ok('no upgrades: the plane as it is', base.hp === 250 && base.speed === 56 && base.missiles === 1);
+  ok('no upgrades: the plane as it is', base.hp === 250 && near(base.speed, 56 * PACE) && base.missiles === 1);
   ok('the starter is heavy and slow to fire', base.turn < best.turn && base.speed < best.speed && base.rate * base.dmg < Math.min(...PLANE_ORDER.slice(1).map((k) => statsOf(k).rate * statsOf(k).dmg)));
   ok('engine 5: 40% faster, a quarter quicker to turn, half again the burner', near(up.speed, base.speed * 1.4) && near(up.turn, base.turn * 1.25) && near(up.boost, base.boost * 1.5) && near(up.fill, base.fill * 1.75));
   ok('weapons 5: 60% more damage a second, 40% more reach, missiles reload much faster', near(up.rate * up.dmg, base.rate * base.dmg * 1.6) && up.gunRange === Math.round(base.gunRange * 1.4) && near(up.reload, base.reload * 0.55));
@@ -59,7 +65,7 @@ ok('three upgrades', Object.keys(UPGRADES).join() === 'engine,weapons,armor');
   ok('the best plane still gains from an upgrade', statsOf('phantom', ALL5).speed > best.speed && statsOf('phantom', ALL5).rate * statsOf('phantom', ALL5).dmg > best.rate * best.dmg);
   ok('armour 3+: one more flare', statsOf('sparrow', { armor: 3 }).flares === base.flares + 1 && statsOf('sparrow', { armor: 2 }).flares === base.flares);
   ok('weapons 3+: one more missile', statsOf('sparrow', { weapons: 3 }).missiles === 2 && statsOf('sparrow', { weapons: 2 }).missiles === 1);
-  ok('nonsense tiers are clamped', statsOf('sparrow', { engine: 99 }).speed === up.speed && statsOf('sparrow', { engine: -4 }).speed === 56);
+  ok('nonsense tiers are clamped', statsOf('sparrow', { engine: 99 }).speed === up.speed && statsOf('sparrow', { engine: -4 }).speed === base.speed);
   ok('the free gun fights from 250 m, the free missile locks from 300 m', statsOf('sparrow').gunRange === 250 && statsOf('sparrow').mRange === 300);
   ok('a better gun reaches further', GUN_ORDER.every((k, i) => !i || GUNS[k].range > GUNS[GUN_ORDER[i - 1]].range));
   ok('a better missile reaches further and hits harder', MISSILE_ORDER.every((k, i) => !i || (MISSILES[k].range > MISSILES[MISSILE_ORDER[i - 1]].range && MISSILES[k].dmg > MISSILES[MISSILE_ORDER[i - 1]].dmg)));
@@ -292,7 +298,7 @@ console.log('\nflying');
   const st = statsOf('sparrow');
   const b = newBody({ x: 0, y: 300, z: 0, yaw: 0 }, st);
   for (let i = 0; i < 30; i++) fly(b, {}, st, 1 / 30);
-  ok('yaw 0 flies toward -z at cruise', b.z < -52 && near(b.x, 0, 1e-6) && near(b.speed, st.speed, 0.5), b);
+  ok('yaw 0 flies toward -z at cruise', b.z < -st.speed * 0.95 && near(b.x, 0, 1e-6) && near(b.speed, st.speed, 0.5), b);
   const r = newBody({ x: 0, y: 300, z: 0, yaw: 0 }, st);
   for (let i = 0; i < 30; i++) fly(r, { turn: 1 }, st, 1 / 30);
   ok('right turns right (+x when heading -z)', r.x > 5, r.x);
@@ -315,7 +321,7 @@ console.log('\nflying');
   ok('past the edge the plane is turned home', Math.hypot(e.x, e.z) < ARENA.radius + 150 && forward(e.yaw, 0).x < 0, { x: e.x, yaw: e.yaw });
   const bo = newBody({ x: 0, y: 300, z: 0 }, st);
   for (let i = 0; i < 60; i++) fly(bo, { boost: true }, st, 1 / 30);
-  ok('the burner speeds up and burns the tank', bo.speed > 80 && bo.fuel < 0.6, bo);
+  ok('the burner speeds up and burns the tank', bo.speed > st.speed * 1.4 && bo.fuel < 0.6, bo);
   for (let i = 0; i < 30 * 8; i++) fly(bo, { boost: true }, st, 1 / 30);
   ok('an empty tank burns no more, and does not sputter back on', !bo.boosting && bo.dry && bo.fuel < BOOST.relight);
 }

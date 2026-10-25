@@ -16,13 +16,15 @@ for (const [name, vp] of [['landscape', { width: 844, height: 390 }], ['portrait
   const page = await browser.newPage({ viewport: vp, hasTouch: true, isMobile: true });
   await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: 'load' });
   await page.waitForSelector('#btn-go:not([disabled])', { timeout: 60000 });
-  await page.evaluate(() => localStorage.setItem('sky.coached', '9'));
+  await page.evaluate(() => localStorage.setItem('sky.tut', 'done'));
   await page.fill('#in-name', 'שוסטר');
   await page.click('#btn-go');
   await page.waitForSelector('#screen-hangar:not(.hidden)', { timeout: 60000 });
+  await page.click('#btn-settings2');
   await page.fill('#gift-code', 'SHUSTER');
   await page.click('#gift-form button');
   await wait(2500);
+  await page.click('#btn-settings-close');
   await page.click('#btn-launch');
   await page.waitForFunction(() => window.__sky.mode === 'air' && window.__sky.me?.alive, null, { timeout: 90000 });
   await page.waitForSelector('#btn-hover:not(.hidden)', { timeout: 10000 });

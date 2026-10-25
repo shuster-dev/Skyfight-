@@ -253,6 +253,8 @@ $('#login-form').addEventListener('submit', async (e) => {
 function openSettings() {
   $('#set-sound').checked = !sound.muted;
   $('#set-invert').checked = controls.invert;
+  show('#set-control-row', controls.touch);
+  $('#set-control').value = controls.scheme;
   $('#set-quality').value = Q.pick;
   $('#set-sky').value = world.time;
   $('#set-voice').value = voice.mode;
@@ -265,6 +267,23 @@ $('#btn-settings2').addEventListener('click', openSettings);
 $('#btn-settings-close').addEventListener('click', () => show('#sheet-settings', false));
 $('#set-sound').addEventListener('change', (e) => { sound.setMuted(!e.target.checked); paintSoundBtn(); });
 $('#set-invert').addEventListener('change', (e) => controls.setInvert(e.target.checked));
+// how a phone flies: the stick on the screen, or tilting the phone
+$('#set-control').addEventListener('change', (e) => {
+  if (e.target.value !== 'tilt') return void (controls.setScheme('stick'), paintControls());
+  controls.enableTilt().then((ok) => {
+    if (!ok) { e.target.value = 'stick'; toast('הטלפון הזה לא נותן לקרוא את ההטיה', 'bad'); return; }
+    controls.setScheme('tilt'); paintControls();
+    toast('מחזיקים את הטלפון כמו בטיסה ישרה — ו"ישר כאן" מכייל מחדש');
+  });
+});
+$('#btn-tut').addEventListener('click', () => { try { localStorage.removeItem('sky.tut'); } catch {} toast('ההדרכה תופיע בטיסה הבאה'); show('#sheet-settings', false); });
+/** The resting stick, and the button that says "this is level" (with the tilt on). */
+function paintControls() {
+  controls.paintStick();
+  show('#btn-calib', S.mode === 'air' && controls.touch && controls.scheme === 'tilt');
+}
+$('#btn-calib').addEventListener('click', () => { controls.calibrate(); toast('ישר כאן — כך זו טיסה ישרה'); });
+addEventListener('resize', () => controls.paintStick());
 $('#btn-sound').addEventListener('click', () => { sound.unlock(); sound.setMuted(!sound.muted); paintSoundBtn(); });
 // muted: the speaker crossed out
 const paintSoundBtn = () => $('#btn-sound').classList.toggle('muted', sound.muted);
@@ -344,15 +363,28 @@ function renderPlanes() {
   $('#hp-name').textContent = d.he;
   $('#hp-name').classList.toggle('ace', !!d.ace);
   $('#hp-role').textContent = d.role;
-  $('#hp-dots').innerHTML = row.map((id) => `<i class="${id === k ? 'on' : ''} ${planeOwned(p, id) ? 'own' : ''} ${PLANES[id].gift ? 'gift' : PLANES[id].ace ? 'ace' : ''}"></i>`).join('');
+  // every plane in a strip: its name, its level, and what it is to you —
+  // flying it, yours, its price, or the level it opens at
+  $('#hp-strip').innerHTML = row.map((id) => {
+    const q = PLANES[id], mine = planeOwned(p, id), can = planeOpen(p, id);
+    const st = p.plane === id ? '<span class="st use">בשימוש</span>' : mine ? '<span class="st own">שלך</span>'
+      : q.gift ? '<span class="st own">מתנה</span>' : can ? `<span class="st buy num">${fmt(q.price)}</span>` : `<span class="st lock">רמה ${q.level}</span>`;
+    return `<button type="button" class="hp-card ${id === k ? 'on' : ''} ${!mine && !can ? 'lock' : ''} ${q.ace || q.gift ? 'ace' : ''}" data-plane="${id}"><b>${esc(q.he)}</b><small>${q.gift ? 'מתנה' : `${esc(q.era)} · רמה ${q.level}`}</small>${st}</button>`;
+  }).join('');
+  // keep the one on the table in view
+  const on = $('#hp-strip .hp-card.on');
+  if (on && renderPlanes.last !== k) on.scrollIntoView({ block: 'nearest', inline: 'center', behavior: renderPlanes.last ? 'smooth' : 'auto' });
+  renderPlanes.last = k;
   const act = $('#hp-act');
-  act.className = 'h-act';
+  act.className = 'h-act big';
   act.disabled = false;
   delete act.dataset.pick; delete act.dataset.buy;
-  if (sel) { act.textContent = 'בשימוש'; act.classList.add('ok'); act.disabled = true; }
-  else if (own) { act.textContent = 'בחר'; act.dataset.pick = k; }
-  else if (open) { act.innerHTML = `קנה · <span class="num">${fmt(d.price)}</span>`; act.classList.add('buy'); act.dataset.buy = k; act.disabled = p.gold < d.price; }
-  else { act.textContent = `נפתח ברמה ${d.level}`; act.disabled = true; }
+  if (sel) { act.textContent = 'זה המטוס שלך — לחצו המראה'; act.classList.add('ok'); act.disabled = true; }
+  else if (own) { act.textContent = `טוס עם ה${d.he}`; act.dataset.pick = k; }
+  else if (open) { act.innerHTML = p.gold >= d.price ? `קנה ב־<span class="num">${fmt(d.price)}</span> זהב` : `חסר זהב · צריך <span class="num">${fmt(d.price)}</span>`; act.classList.add('buy'); act.dataset.buy = k; act.disabled = p.gold < d.price; }
+  else { act.textContent = `ייפתח כשתגיעו לרמה ${d.level}`; act.disabled = true; }
+  // the first visit: what to do here
+  show('#h-hint', !tutDone() && sel);
   // what this plane carries, as it was left: its own weapons and paint
   const lo = loadOf(k);
   $('#hp-load').innerHTML = own ? `<span>${esc(GUNS[lo.gun]?.he || '')}</span><span>${esc(MISSILES[lo.missile]?.he || '')}</span><span>${esc(PAINTS[paintOf(k)]?.he || '')}</span>` : '';
@@ -365,7 +397,7 @@ function renderPlanes() {
   pa.className = 'h-act small';
   pa.disabled = false;
   delete pa.dataset.wear; delete pa.dataset.buy;
-  if (pv === worn) { pa.textContent = `צבע: ${P.he}`; pa.disabled = true; }
+  if (pv === worn) { pa.textContent = P.he; pa.disabled = true; }
   else if (!own) { pa.textContent = `צבע ${P.he} · ניסיון`; pa.disabled = true; }
   else if (p.paints.includes(pv)) { pa.textContent = `צבע ${P.he} · החל`; pa.dataset.wear = pv; }
   else { pa.innerHTML = `צבע ${P.he} · <span class="num">${fmt(P.price)}</span>`; pa.classList.add('buy'); pa.dataset.buy = pv; pa.disabled = p.gold < P.price; }
@@ -422,9 +454,17 @@ const step = (dir) => {
   hangar.show(viewing, paintOf(viewing), lookOf(viewing));
   renderPlanes();
 };
-// in a right-to-left page the arrow on the right goes back
-$('#hp-prev').addEventListener('click', () => step(-1));
-$('#hp-next').addEventListener('click', () => step(1));
+// a card in the strip puts that plane on the table
+$('#hp-strip').addEventListener('click', (e) => {
+  const id = e.target.closest('[data-plane]')?.dataset.plane;
+  if (!id || id === (viewing || S.pilot.plane)) return;
+  viewing = id;
+  paintView = '';
+  hangar.show(viewing, paintOf(viewing), lookOf(viewing));
+  renderPlanes();
+});
+// arrow keys on a keyboard: the next plane and the one before
+addEventListener('keydown', (e) => { if (S.mode === 'hangar' && tab === 'planes' && e.target?.tagName !== 'INPUT' && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) step(e.code === 'ArrowLeft' ? 1 : -1); });
 // a swipe across the hangar turns the table
 {
   let sx = null;
@@ -807,6 +847,8 @@ $('#btn-launch').addEventListener('click', () => { sound.unlock(); launch(); });
 
 async function launch() {
   voice.prime();
+  // tilting asks the player on iOS, and only from a tap: this is the tap
+  if (controls.touch && controls.scheme === 'tilt') controls.enableTilt().then((ok) => { if (!ok) controls.setScheme('stick'), toast('אין גישה להטיית הטלפון — טסים עם הג׳ויסטיק', 'bad'); paintControls(); });
   const btn = $('#btn-launch');
   btn.disabled = true;
   btn.textContent = 'ממריא…';
@@ -827,6 +869,7 @@ async function launch() {
     show('#touch', controls.touch);
     show('#keys-help', !controls.touch);
     controls.enabled = true;
+    paintControls();
     $('#feed').innerHTML = '';
   } catch (x) {
     const why = /banned/.test(x?.message) ? 'banned' : /rename/.test(x?.message) ? 'rename' : '';
@@ -863,7 +906,9 @@ function hook(room) {
     me.alive = true; me.hp = m.hp; me.ammo = m.ammo; me.reloadT = 0; me.crashed = false; me.flares = m.flares ?? me.stats.flares; me.flareT = 0;
     me.shieldUntil = performance.now() + m.shield * 1000;
     controls.setHover(false);
-    coach();
+    // tilting: level is however the phone is held as the plane comes in
+    if (controls.scheme === 'tilt') controls.calibrate();
+    tutStart();
     me.mesh.visible = true;
     // the camera starts behind, not wherever the last life ended
     const f = forward(me.body.yaw, 0);
@@ -892,6 +937,7 @@ function hook(room) {
   room.onMessage('pinvite', onPartyInvite);
   room.onMessage('party', onParty);
   room.onMessage('hit', (m) => {
+    TUT.hit = true;
     S.hitFlash = 0.12;
     sound.hit();
     const o = m.v === 'boss' ? S.boss : S.others.get(m.v);
@@ -909,7 +955,7 @@ function hook(room) {
     sound.hurt();
     hitFrom(m.by);
   });
-  room.onMessage('fired', (m) => { if (S.me) S.me.ammo = m.ammo; sound.launch(); });
+  room.onMessage('fired', (m) => { if (S.me) S.me.ammo = m.ammo; sound.launch(); TUT.missile = true; });
   room.onMessage('flared', (m) => {
     if (S.me) S.me.flares = m.flares;
     if (m.pulled) S.warnUntil = 0;
@@ -1134,6 +1180,7 @@ async function leaveSky(why) {
   if (S.mode !== 'air') return;
   S.leaving = true;
   show('#players', false); show('#pinvite', false);
+  if (TUT.on) TUT.on = false, tutPaint();
   voice.stop();
   // nothing more goes out on a socket that is closing; the room is told we
   // are going, but nobody waits for it to answer
@@ -1198,6 +1245,9 @@ function air(dt, time) {
     o.mesh.position.set(a.x + (c.x - a.x) * k, a.y + (c.y - a.y) * k, a.z + (c.z - a.z) * k);
     o.mesh.quaternion.slerpQuaternions(a.q, c.q, Math.min(1, k));
     o.mesh.visible = o.alive;
+    // far off, a plane is drawn bigger than it is: a speck at 700 m is a
+    // plane you can see (it is only the picture; what you hit is the same)
+    if (S.me?.mesh) o.mesh.scale.setScalar(1 + MathUtils.clamp((o.mesh.position.distanceTo(S.me.mesh.position) - 150) / 450, 0, 1.3));
     o.x = o.mesh.position.x; o.y = o.mesh.position.y; o.z = o.mesh.position.z;
     const fv = tmpV.set(0, 0, -1).applyQuaternion(o.mesh.quaternion);
     o.yaw = Math.atan2(-fv.x, -fv.z); o.pitch = Math.asin(MathUtils.clamp(fv.y, -1, 1)); o.speed = c.speed;
@@ -1213,6 +1263,7 @@ function air(dt, time) {
   if (me?.body && me.alive) {
     const input = controls.read();
     const res = me.crashed ? '' : flyQ(me.body, input, me.stats, dt);
+    tutTick(dt, input, me.body);
     const b = me.body;
     me.mesh.position.set(b.x, b.y, b.z);
     const dq = drawnQ(b);
@@ -1424,14 +1475,62 @@ function threat(dt) {
  * time to break, or to brake and let it overshoot.
  */
 /** The first two sorties: a legend of what each button does, for a few seconds. */
-function coach() {
-  let n = 0;
-  try { n = Number(localStorage.getItem('sky.coached')) || 0; localStorage.setItem('sky.coached', String(n + 1)); } catch {}
-  if (n >= 2) return;
-  show('#coach');
-  clearTimeout(coach.t);
-  coach.t = setTimeout(() => show('#coach', false), 7000);
+// ---- the first flight: a lesson, a step at a time --------------------------
+// Each step says one thing, lights up the control it is about, and moves on
+// when the player has done it (or after a while). While it runs the bots
+// pick on someone else. Skippable; again from the settings.
+const TUT = { on: false, i: 0, t: 0, yaw: null, turned: 0, fired: 0, hit: false, missile: false };
+function tutSteps() {
+  const touch = controls.touch, tilt = touch && controls.scheme === 'tilt';
+  return [
+    { h: 'טיסה', p: tilt ? 'הטו את הטלפון ימינה ושמאלה כדי לפנות, קדימה ואחורה כדי לצלול ולטפס' : touch ? 'גררו את הג׳ויסטיק משמאל: ימינה ושמאלה לפנייה, למעלה ולמטה לטיפוס וצלילה' : 'החצים או WASD: ימינה ושמאלה לפנייה, למעלה ולמטה לטיפוס וצלילה', hl: touch && !tilt ? '#stick' : '', done: () => TUT.turned > 1.4 },
+    { h: 'ירי', p: touch ? 'החזיקו את הכפתור האדום "מקלע" כדי לירות' : 'רווח או קליק שמאלי — ירי', hl: touch ? '#btn-fire' : '', done: () => TUT.fired > 0.8 },
+    { h: 'איפה האויבים', p: 'כל מטוס במסגרת אדומה הוא אויב. אויב מחוץ למסך? חץ אדום בקצה המסך מראה לאן לפנות', done: () => TUT.t > 7 },
+    { h: 'לפגוע', p: 'שימו את הכוונת על מסגרת אדומה וירו — הכוונת עוזרת לכם להתביית', done: () => TUT.hit || TUT.t > 15 },
+    { h: 'טיל', p: touch ? 'אויב קרוב ומולכם? לחצו "טיל" — הוא רודף אחריו לבד' : 'אויב קרוב ומולכם? E — טיל, והוא רודף אחריו לבד', hl: touch ? '#btn-missile' : '', done: () => TUT.missile || TUT.t > 10 },
+    { h: 'מוכנים!', p: 'טורבו להאצה · בלימה לפנייה חדה · נורים נגד טיל שרודף אחריכם. בהצלחה!', done: () => TUT.t > 5 },
+  ];
 }
+const tutDone = () => { try { return localStorage.getItem('sky.tut') === 'done'; } catch { return false; } };
+function tutStart() {
+  if (TUT.on || tutDone()) return;
+  Object.assign(TUT, { on: true, i: 0, t: 0, yaw: null, turned: 0, fired: 0, hit: false, missile: false });
+  S.room?.send('tut', { on: true });
+  tutPaint();
+}
+function tutPaint() {
+  const steps = tutSteps(), st = steps[TUT.i];
+  $$('.tut-hl').forEach((e) => e.classList.remove('tut-hl'));
+  if (!TUT.on || !st) return show('#tut', false);
+  $('#tut-n').textContent = `${TUT.i + 1}/${steps.length}`;
+  $('#tut-h').textContent = st.h;
+  $('#tut-p').textContent = st.p;
+  show('#tut');
+  if (st.hl) $(st.hl)?.classList.add('tut-hl');
+}
+function tutEnd() {
+  if (!TUT.on) return;
+  TUT.on = false;
+  try { localStorage.setItem('sky.tut', 'done'); } catch {}
+  S.room?.send('tut', { on: false });
+  tutPaint();
+}
+/** Per frame in the air: what the player has done of the step on screen. */
+function tutTick(dt, input, b) {
+  if (!TUT.on || !b) return;
+  TUT.t += dt;
+  if (TUT.yaw !== null) TUT.turned += Math.abs(Math.atan2(Math.sin(b.yaw - TUT.yaw), Math.cos(b.yaw - TUT.yaw))) + Math.abs(input.climb) * dt * 0.5;
+  TUT.yaw = b.yaw;
+  if (input.fire) TUT.fired += dt;
+  const steps = tutSteps();
+  if (steps[TUT.i]?.done()) {
+    TUT.i++; TUT.t = 0;
+    sound.coin?.();
+    if (TUT.i >= steps.length) return tutEnd();
+    tutPaint();
+  }
+}
+$('#tut-skip').addEventListener('click', tutEnd);
 
 function tail(dt) {
   const el = $('#tail'), b = S.me?.alive && S.me.body;
@@ -1545,35 +1644,63 @@ function tagEl(i) {
   if (!tagEls[i]) { const d = document.createElement('div'); $('#tags').appendChild(d); tagEls[i] = { d, cls: '', html: '' }; }
   return tagEls[i];
 }
-function setTag(i, cls, html, x, y) {
+function setTag(i, cls, html, x, y, size = 0, rot = null) {
   const t = tagEl(i);
   if (t.cls !== cls) t.d.className = t.cls = cls;
   if (t.html !== html) t.d.innerHTML = t.html = html;
-  t.d.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0)${cls.startsWith('tagp') ? ' translate(-50%, -100%)' : ''}`;
+  const centre = cls.startsWith('tagbox') || cls.startsWith('tagarrow');
+  t.d.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0)${cls.startsWith('tagp') ? ' translate(-50%, -100%)' : centre ? ' translate(-50%, -50%)' : ''}`;
+  if (size && t.size !== size) t.d.style.width = t.d.style.height = `${size}px`, (t.size = size);
+  if (rot !== null) t.d.style.setProperty('--rot', `${rot.toFixed(2)}rad`);
   t.d.style.display = '';
 }
+/**
+ * Who is out there, so a newcomer sees them: a red frame round every enemy in
+ * view (blue for the side or the party), the nearest two named with their
+ * range, and for the nearest enemies out of view an arrow at the edge of the
+ * screen pointing the way, with how far.
+ */
+const SEE = 2500;
+const TQ = new Vector3();
 function tags() {
   const me = S.me?.mesh?.position;
   let n = 0;
   if (me && S.me.alive) {
+    const enemy = new Set(foes().map((o) => o.key));
     const list = [];
     for (const o of S.others.values()) if (o.alive) list.push({ o, d: o.mesh.position.distanceTo(me) });
     list.sort((a, b) => a.d - b.d);
-    let named = 0;
+    let named = 0, arrows = 0;
+    const W = innerWidth, H = innerHeight;
     for (const { o, d } of list) {
-      if (d > 1600) break;
-      P.copy(o.mesh.position); P.y += 3.5;
-      if (P.clone().project(camera).z > 1 || !project(P)) continue;
-      const r = S.roster.get(o.key);
-      const side = S.teams ? (r?.team === S.myTeam ? ' mate' : ' foe') : r?.pc >= 0 ? ` pc${r.pc % 6}` : '';
-      if (named < 2 && d < 900) {
-        named++;
-        // the plane under fire: a bigger bar, and the bit just shot off flashing white
-        const hot = o.hitAt && performance.now() - o.hitAt < 2500;
-        const bar = o.hp < 100 || hot ? `<div class="mini${hot ? ' hot' : ''}"><i style="width:${o.hp}%"></i></div>` : '';
-        const spk = voice.talking(o.key) ? '<i class="spk"><b></b><b></b><b></b></i>' : '';
-        setTag(n++, `tagp${side}`, `${spk}${esc(r?.name || '')} · <span class="num">${Math.round(d / 10) * 10}</span>${bar}`, P.x, P.y);
-      } else setTag(n++, `tagdot${side}`, '', P.x, P.y);
+      if (d > SEE) break;
+      const r = S.roster.get(o.key), foe = enemy.has(o.key);
+      const side = S.teams ? (r?.team === S.myTeam ? ' mate' : ' foe') : r?.pc >= 0 ? ` pc${r.pc % 6}` : foe ? ' foe' : '';
+      TQ.copy(o.mesh.position).project(camera);
+      const behind = TQ.z > 1, sx = (TQ.x * 0.5 + 0.5) * W, sy = (-TQ.y * 0.5 + 0.5) * H;
+      const inView = !behind && sx > 0 && sx < W && sy > 0 && sy < H;
+      if (inView) {
+        // the frame: smaller the further, never too small to see
+        setTag(n++, `tagbox${side}`, '', sx, sy, Math.round(MathUtils.clamp(4200 / d, 26, 76)));
+        P.copy(o.mesh.position); P.y += 3.5 * o.mesh.scale.y;
+        if (named < 2 && d < 900 && project(P)) {
+          named++;
+          // the plane under fire: a bigger bar, and the bit just shot off flashing white
+          const hot = o.hitAt && performance.now() - o.hitAt < 2500;
+          const bar = o.hp < 100 || hot ? `<div class="mini${hot ? ' hot' : ''}"><i style="width:${o.hp}%"></i></div>` : '';
+          const spk = voice.talking(o.key) ? '<i class="spk"><b></b><b></b><b></b></i>' : '';
+          setTag(n++, `tagp${side}`, `${spk}${esc(r?.name || '')} · <span class="num">${Math.round(d / 10) * 10}</span>${bar}`, P.x, P.y - 18);
+        }
+      } else if (foe && arrows < 3) {
+        // out of view: an arrow at the edge, the way to turn
+        arrows++;
+        let vx = sx - W / 2, vy = sy - H / 2;
+        if (behind) vx = -vx, vy = -vy;
+        if (Math.abs(vx) < 1 && Math.abs(vy) < 1) vy = 1;
+        const a = Math.atan2(vy, vx), mx = W / 2 - 46, my = H / 2 - 70;
+        const k = Math.min(mx / Math.abs(Math.cos(a) || 1e-6), my / Math.abs(Math.sin(a) || 1e-6));
+        setTag(n++, `tagarrow${side}`, `<i></i><span class="num">${Math.round(d / 10) * 10}</span>`, W / 2 + Math.cos(a) * k, H / 2 + Math.sin(a) * k, 0, a);
+      }
     }
     const B = S.boss;
     if (B?.mesh) {

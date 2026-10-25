@@ -23,6 +23,8 @@ await page.waitForSelector('#screen-hangar:not(.hidden)', { timeout: 60000 });
 await wait(1500);
 // CODES=SHUSTER,NEON for others; the first is typed on camera
 const codes = (process.env.CODES || 'alfasi').split(',');
+// the gift code is in the settings
+await page.click('#btn-settings2');
 await page.fill('#gift-code', codes[0]);
 await page.screenshot({ path: `${OUT}/1-code.png` });
 for (const code of codes) {
@@ -30,6 +32,7 @@ for (const code of codes) {
   await page.click('#gift-form button');
   await wait(2500);
 }
+await page.click('#btn-settings-close');
 await page.screenshot({ path: `${OUT}/2-heli.png` });
 // (software rendering is slow: hold the banner still so the picture catches it)
 await page.addStyleTag({ content: '#royal { animation: none !important; }' });

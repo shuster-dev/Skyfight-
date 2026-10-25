@@ -1,6 +1,8 @@
 // The stick and the triggers. On a keyboard: arrows or WASD to fly, space to
 // shoot, shift for the burner, E for a missile. On a phone: a stick that
-// appears wherever the left thumb lands, and three buttons for the right.
+// rests, faint, low on the left (so a newcomer sees there is one) and jumps
+// to wherever the left thumb lands — or, for those who choose it, the phone
+// itself: tilt it to turn and to climb.
 const $ = (s) => document.querySelector(s);
 
 export class Controls {
@@ -12,6 +14,9 @@ export class Controls {
     this.flareQueued = false;
     this.invert = (() => { try { return localStorage.getItem('sky.invert') === '1'; } catch { return false; } })();
     this.touch = matchMedia('(pointer: coarse)').matches;
+    // how a phone flies: 'stick' or 'tilt' (the settings say)
+    this.scheme = (() => { try { return localStorage.getItem('sky.control') === 'tilt' ? 'tilt' : 'stick'; } catch { return 'stick'; } })();
+    this.tilt = { on: false, x: 0, y: 0, nx: 0, ny: 0, seen: false };
     this.enabled = false;
     this.look = { yaw: 0, pitch: 0, held: false, at: 0, lx: 0, ly: 0 };
     this.lookId = null;
@@ -83,6 +88,42 @@ export class Controls {
     $('#btn-hover').addEventListener('pointerdown', (e) => { e.preventDefault(); this.setHover(!this.hover); });
   }
 
+  // ---- flying by tilting the phone ---------------------------------------
+
+  /**
+   * Turn the tilt on: iOS asks the player first, and only from a tap — so
+   * call this straight from one. Resolves to whether it works.
+   */
+  async enableTilt() {
+    if (this.tilt.on) return true;
+    const DOE = window.DeviceOrientationEvent;
+    if (!DOE) return false;
+    try { if (typeof DOE.requestPermission === 'function' && (await DOE.requestPermission()) !== 'granted') return false; } catch { return false; }
+    addEventListener('deviceorientation', (e) => {
+      if (e.beta == null || e.gamma == null) return;
+      // which way is "right" and "up" depends on how the phone is held
+      const a = (screen.orientation?.angle ?? window.orientation ?? 0) % 360;
+      const [x, y] = a === 90 ? [e.beta, -e.gamma] : a === 270 || a === -90 ? [-e.beta, e.gamma] : [e.gamma, e.beta];
+      this.tilt.x = x; this.tilt.y = y;
+      if (!this.tilt.seen) this.tilt.seen = true, this.calibrate();
+    });
+    this.tilt.on = true;
+    return true;
+  }
+  /** However the phone is held now is level flight. */
+  calibrate() { this.tilt.nx = this.tilt.x; this.tilt.ny = this.tilt.y; }
+  setScheme(s) {
+    this.scheme = s === 'tilt' ? 'tilt' : 'stick';
+    try { localStorage.setItem('sky.control', this.scheme); } catch {}
+    this.paintStick();
+  }
+  /** The tilt as a stick: a few degrees of nothing, then full at about 25°. */
+  readTilt() {
+    const t = this.tilt, R = 25, dead = 3;
+    const ax = (v) => Math.sign(v) * Math.min(1, Math.max(0, Math.abs(v) - dead) / (R - dead));
+    return { x: ax(t.x - t.nx), y: ax(t.y - t.ny) };
+  }
+
   /** Standing in the air, or flying: the plane says whether it can (canHover). */
   setHover(on) {
     this.hover = !!on && !!this.canHover;
@@ -128,8 +169,17 @@ export class Controls {
 
   paintStick() {
     const base = $('#stick'), knob = $('#stick-knob');
-    if (this.stick.id === null) { base.classList.add('hidden'); return; }
-    base.classList.remove('hidden');
+    if (this.stick.id === null) {
+      // at rest: faint, low on the left — there is a stick, and that is where
+      // the thumb goes (not with the tilt on)
+      const rest = this.touch && this.scheme === 'stick';
+      base.classList.toggle('hidden', !rest);
+      base.classList.add('rest');
+      base.style.transform = `translate(${Math.max(20, innerWidth * 0.12)}px, ${innerHeight - 220}px)`;
+      knob.style.transform = 'translate(0, 0)';
+      return;
+    }
+    base.classList.remove('hidden', 'rest');
     base.style.transform = `translate(${this.stick.ox - 70}px, ${this.stick.oy - 70}px)`;
     knob.style.transform = `translate(${this.stick.x * 50}px, ${this.stick.y * 50}px)`;
   }
@@ -144,6 +194,12 @@ export class Controls {
     const k = (c) => this.keys.has(c);
     let turn = (k('ArrowRight') || k('KeyD') ? 1 : 0) - (k('ArrowLeft') || k('KeyA') ? 1 : 0);
     let climb = (k('ArrowUp') || k('KeyW') ? 1 : 0) - (k('ArrowDown') || k('KeyS') ? 1 : 0);
+    // tilting the phone, when chosen (a thumb on the stick still wins)
+    if (this.scheme === 'tilt' && this.tilt.on && this.stick.id === null) {
+      const t = this.readTilt();
+      turn = Math.sign(t.x) * t.x * t.x * 0.4 + t.x * 0.6;
+      climb = t.y;
+    }
     if (this.stick.id !== null) {
       // a little dead zone, then a curve: fine control near the middle
       const curve = (v) => Math.sign(v) * Math.max(0, Math.abs(v) - 0.08) / 0.92;

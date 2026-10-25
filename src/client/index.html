@@ -108,6 +108,26 @@
   .h-plane .era .ace { display: inline-block; margin-inline-start: 6px; padding: 1px 8px; border-radius: 999px; color: #1d1405; background: linear-gradient(90deg, #f1d27a, #ffb347); letter-spacing: 1px; box-shadow: 0 0 12px rgba(241,210,122,0.6); }
   .h-plane .pname.ace { background: linear-gradient(180deg, #fff 30%, #f1d27a); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 0 14px rgba(241,210,122,0.35)); text-shadow: none; }
   .h-plane .role { font-size: 15px; color: rgba(255,255,255,0.7); }
+  .h-act.big { display: block; width: 100%; margin-top: 12px; padding: 13px 18px; font-size: 16px; }
+  .h-act.big.ok, .h-act.big.ok:disabled { background: rgba(47,211,189,0.16); border-color: rgba(47,211,189,0.7); color: #c9fff4; opacity: 1; }
+  .h-act.big.buy:not(:disabled) { color: #1d1405; background: linear-gradient(180deg, #ffe08a, #e8b94a); border-color: transparent; }
+  .paints-row .pl { font-size: 12px; font-weight: 700; color: var(--dim); }
+  .hp-strip { display: flex; gap: 8px; margin: 12px -18px 0; padding: 4px 18px 6px; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .hp-strip::-webkit-scrollbar { display: none; }
+  .hp-card { flex: none; width: 92px; scroll-snap-align: center; display: grid; gap: 3px; padding: 8px 8px 9px; text-align: center; border-radius: 12px; background: rgba(8, 14, 24, 0.7); border: 1px solid rgba(255,255,255,0.12); color: #fff; }
+  .hp-card b { font-size: 14px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hp-card small { font-size: 10.5px; font-weight: 700; color: var(--dim); white-space: nowrap; }
+  .hp-card .st { font-size: 11px; font-weight: 800; padding: 2px 0; border-radius: 6px; }
+  .hp-card .st.use { color: #04201c; background: var(--teal); }
+  .hp-card .st.own { color: #bff6ec; background: rgba(47,211,189,0.16); }
+  .hp-card .st.buy { color: #ffe08a; background: rgba(241,210,122,0.12); }
+  .hp-card .st.lock { color: rgba(255,255,255,0.55); background: rgba(255,255,255,0.06); }
+  .hp-card.lock { opacity: 0.62; }
+  .hp-card.ace b { color: #f1d27a; }
+  .hp-card.on { border-color: #fff; box-shadow: 0 0 0 1px #fff, 0 6px 18px rgba(0,0,0,0.4); background: rgba(30, 44, 64, 0.85); }
+  /* the first visit: what to do here, said once, by the launch button */
+  .h-hint { position: absolute; left: 50%; top: calc(max(10px, env(safe-area-inset-top)) + 140px); transform: translateX(-50%); padding: 7px 16px; border-radius: 999px; font-size: 13px; font-weight: 800; color: #04201c; background: var(--teal); box-shadow: 0 0 0 0 rgba(57,230,200,0.7); animation: tutHl 1.6s ease-in-out infinite; pointer-events: none; white-space: nowrap; z-index: 3; }
+  #sheet-settings .gift-row { max-width: none; margin: 4px 0 8px; }
   .h-plane .row { display: flex; align-items: center; gap: 12px; margin-top: 14px; justify-content: flex-start; }
   .h-dots { display: flex; gap: 3px; min-width: 0; flex-shrink: 1; }
   .h-dots i { width: 10px; height: 3px; flex-shrink: 1; min-width: 4px; background: rgba(255,255,255,0.2); }
@@ -323,6 +343,18 @@
   #compass-box { position: absolute; top: max(8px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); width: min(460px, 44vw); pointer-events: none; }
   #compass { width: 100%; height: 54px; display: block; }
   @media (max-width: 700px) and (orientation: portrait) { #compass-box { top: calc(max(8px, env(safe-area-inset-top)) + 64px); width: 92vw; } #menu-btn, #invite-btn { top: calc(max(10px, env(safe-area-inset-top)) + 146px); } }
+  /* every enemy in view framed, the nearest out of view an arrow at the edge */
+  .tagbox { position: absolute; left: 0; top: 0; will-change: transform; border-radius: 6px; pointer-events: none;
+    background: linear-gradient(currentColor, currentColor) top left / 9px 2px no-repeat, linear-gradient(currentColor, currentColor) top left / 2px 9px no-repeat,
+      linear-gradient(currentColor, currentColor) top right / 9px 2px no-repeat, linear-gradient(currentColor, currentColor) top right / 2px 9px no-repeat,
+      linear-gradient(currentColor, currentColor) bottom left / 9px 2px no-repeat, linear-gradient(currentColor, currentColor) bottom left / 2px 9px no-repeat,
+      linear-gradient(currentColor, currentColor) bottom right / 9px 2px no-repeat, linear-gradient(currentColor, currentColor) bottom right / 2px 9px no-repeat;
+    color: #ff5262; filter: drop-shadow(0 0 3px rgba(0,0,0,0.8)); }
+  .tagbox.mate { color: #8fc0ff; }
+  .tagarrow { position: absolute; left: 0; top: 0; will-change: transform; display: grid; place-items: center; width: 44px; height: 44px; color: #ff5262; pointer-events: none; }
+  .tagarrow i { position: absolute; inset: 6px; transform: rotate(var(--rot)); }
+  .tagarrow i::before { content: ''; position: absolute; right: -2px; top: 50%; margin-top: -9px; border: 9px solid transparent; border-left: 14px solid currentColor; filter: drop-shadow(0 0 4px rgba(0,0,0,0.7)); }
+  .tagarrow span { font-size: 10px; font-weight: 800; color: #ffd0d4; text-shadow: 0 1px 2px #000; }
   .tagdot { position: absolute; left: 0; top: 0; will-change: transform; width: 5px; height: 5px; margin: -2.5px; border-radius: 50%; background: rgba(255, 120, 130, 0.9); box-shadow: 0 0 3px #000; }
   .tagdot.mate { background: #8fc0ff; }
   #hud .tr { position: absolute; top: max(10px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left)); width: min(150px, 34vw); background: rgba(8, 12, 18, 0.45); border-radius: 8px; padding: 4px 8px; font-size: 11px; line-height: 1.35; }
@@ -461,6 +493,7 @@
   #pinvite #pi-no { background: rgba(255,255,255,0.12); color: #fff; }
   /* each party in the sky its own colour, on names, dots and the compass */
   .pc0 { color: #6aa8ff !important; } .pc1 { color: #c08bff !important; } .pc2 { color: #ffb259 !important; } .pc3 { color: #ff7ad9 !important; } .pc4 { color: #a6f06a !important; } .pc5 { color: #5ff0e0 !important; }
+  .tagbox.pc0, .tagarrow.pc0 { color: #6aa8ff; } .tagbox.pc1 { color: #c08bff; } .tagbox.pc2 { color: #ffb259; } .tagbox.pc3 { color: #ff7ad9; } .tagbox.pc4 { color: #a6f06a; } .tagbox.pc5 { color: #5ff0e0; }
   .tagdot.pc0 { background: #6aa8ff; } .tagdot.pc1 { background: #c08bff; } .tagdot.pc2 { background: #ffb259; } .tagdot.pc3 { background: #ff7ad9; } .tagdot.pc4 { background: #a6f06a; } .tagdot.pc5 { background: #5ff0e0; }
   #teamscore { position: absolute; top: max(10px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); display: flex; gap: 8px; align-items: center; padding: 4px 14px; background: rgba(8, 12, 18, 0.5); border-radius: 4px; font-size: 14px; font-weight: 800; letter-spacing: 1px; }
   #teamscore .b { color: #6aa8ff; } #teamscore .r { color: #ff6a6a; } #teamscore .sep { opacity: 0.5; }
@@ -486,6 +519,18 @@
   /* the right half: drag to look around (the buttons sit on top of it) */
   #look-pad { position: absolute; top: 25%; bottom: 0; right: 0; width: 50%; pointer-events: auto; touch-action: none; }
   #stick { position: absolute; left: 0; top: 0; width: 140px; height: 140px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.35); background: rgba(255, 255, 255, 0.08); pointer-events: none; }
+  #tut { position: absolute; left: 50%; top: calc(max(10px, env(safe-area-inset-top)) + 190px); transform: translateX(-50%); width: min(420px, calc(100vw - 32px)); padding: 12px 16px 14px; border-radius: 14px; background: rgba(8, 12, 18, 0.86); border: 1px solid rgba(57, 230, 200, 0.55); box-shadow: 0 10px 40px rgba(0,0,0,0.45); z-index: 20; pointer-events: none; animation: tutIn .35s ease both; }
+  #tut .tut-top { display: flex; align-items: center; gap: 10px; }
+  #tut #tut-n { font-size: 11px; font-weight: 800; color: var(--teal); letter-spacing: 1px; direction: ltr; }
+  #tut b { flex: 1; font-size: 17px; }
+  #tut button { pointer-events: auto; padding: 5px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; color: #dfe7f2; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2); }
+  #tut p { margin: 6px 0 0; font-size: 15px; line-height: 1.45; color: #e6eef8; }
+  @keyframes tutIn { from { opacity: 0; transform: translate(-50%, -8px); } }
+  .tut-hl { animation: tutHl 1.2s ease-in-out infinite !important; }
+  @keyframes tutHl { 0%, 100% { box-shadow: 0 0 0 0 rgba(57, 230, 200, 0.9); } 50% { box-shadow: 0 0 0 14px rgba(57, 230, 200, 0); } }
+  #stick.rest { opacity: 0.5; border-style: dashed; transition: opacity .3s; }
+  #stick.rest::after { content: 'גררו לטיסה'; position: absolute; left: 0; right: 0; top: 146px; text-align: center; font-size: 12px; font-weight: 700; color: rgba(255,255,255,0.75); text-shadow: 0 1px 3px #000; }
+  #btn-calib { pointer-events: auto; position: absolute; left: max(14px, env(safe-area-inset-left)); bottom: max(120px, calc(env(safe-area-inset-bottom) + 110px)); padding: 8px 14px; border-radius: 999px; font-size: 13px; font-weight: 800; color: #fff; background: rgba(8, 12, 18, 0.45); border: 1px solid rgba(255,255,255,0.3); }
   #stick-knob { position: absolute; left: 40px; top: 40px; width: 60px; height: 60px; border-radius: 50%; background: rgba(255, 255, 255, 0.55); }
   .tbtn { position: absolute; pointer-events: auto; touch-action: none; border-radius: 50%; display: grid; place-items: center; color: #fff; border: 1.5px solid rgba(255, 255, 255, 0.35); background: rgba(8, 12, 18, 0.35); backdrop-filter: blur(4px); }
   .tbtn svg { width: 46%; height: 46%; stroke: #fff; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
@@ -504,14 +549,6 @@
   #btn-hover.on { box-shadow: 0 0 18px rgba(77, 255, 154, 0.8); }
   .tbtn.on { background: rgba(var(--k), 0.5); }
   /* the first flights: a legend of the buttons, each in its own colour */
-  #coach { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 6; display: grid; gap: 6px; padding: 12px 16px; border-radius: 14px; pointer-events: none;
-    background: rgba(8, 12, 18, 0.82); border: 1px solid rgba(255, 255, 255, 0.2); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5); animation: coach 0.4s ease both; }
-  #coach b { display: block; text-align: center; font-size: 13px; letter-spacing: 1px; color: var(--teal); margin-bottom: 2px; }
-  #coach div { display: flex; align-items: center; gap: 8px; font-size: 12.5px; white-space: nowrap; }
-  #coach i { width: 12px; height: 12px; border-radius: 50%; flex: none; background: rgb(var(--k)); box-shadow: 0 0 8px rgb(var(--k)); }
-  #coach span { font-weight: 800; min-width: 44px; }
-  #coach small { color: rgba(255, 255, 255, 0.75); font-size: 12px; }
-  @keyframes coach { from { opacity: 0; transform: translate(-50%, -46%); } }
   #btn-fire { right: max(18px, env(safe-area-inset-right)); bottom: max(80px, calc(env(safe-area-inset-bottom) + 70px)); width: 96px; height: 96px; }
   #btn-missile { right: max(124px, calc(env(safe-area-inset-right) + 110px)); bottom: max(140px, calc(env(safe-area-inset-bottom) + 130px)); width: 64px; height: 64px; font-size: 24px; }
   #btn-flare { right: max(132px, calc(env(safe-area-inset-right) + 118px)); bottom: max(220px, calc(env(safe-area-inset-bottom) + 210px)); width: 54px; height: 54px; font-size: 22px; }
@@ -621,14 +658,10 @@
     <div class="pname" id="hp-name"></div>
     <div class="role" id="hp-role"></div>
     <div class="load" id="hp-load"></div>
-    <div class="row">
-      <button class="chev" id="hp-prev" type="button" aria-label="הקודם"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
-      <div class="h-dots" id="hp-dots"></div>
-      <button class="chev" id="hp-next" type="button" aria-label="הבא"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
-      <button class="h-act" id="hp-act" type="button"></button>
-    </div>
-    <div class="row paints-row"><div class="paints" id="hp-paints"></div><button class="h-act small" id="hp-paint-act" type="button"></button></div>
-    <form class="gift-row" id="gift-form" autocomplete="off"><svg viewBox="0 0 24 24"><path d="M4 11h16v9H4zM3 7h18v4H3zM12 7v13M12 7c-1.5-3-5-3.5-5-1.2C7 7 9 7 12 7zm0 0c1.5-3 5-3.5 5-1.2C17 7 15 7 12 7z"/></svg><input id="gift-code" placeholder="קוד מתנה" maxlength="24" autocapitalize="characters" spellcheck="false" dir="ltr"><button type="submit">קבל</button></form>
+    <button class="h-act big" id="hp-act" type="button"></button>
+    <div class="row paints-row"><span class="pl">צבע</span><div class="paints" id="hp-paints"></div><button class="h-act small" id="hp-paint-act" type="button"></button></div>
+    <!-- every plane, side by side: what it is to you at a glance -->
+    <div class="hp-strip" id="hp-strip"></div>
   </div>
   <div class="h-panel ups hidden" id="tab-ups"></div>
   <div class="h-plane market hidden" id="tab-market">
@@ -661,8 +694,8 @@
   <div class="h-invite hidden" id="h-invite">הוזמנת לזירה של חבר — לחצו המראה</div>
   <div class="h-mode"><button type="button" data-mode="ffa" class="on">כולם נגד כולם</button><button type="button" data-mode="teams">קבוצות</button></div>
   <div class="online" id="h-online"><i></i><span>online players: <b class="num">–</b></span></div>
+  <div class="h-hint hidden" id="h-hint">בחרו מטוס מהרשימה ולחצו המראה</div>
   <div class="h-launch">
-    <button class="save hidden" id="btn-save" type="button">גיבוי לכל מכשיר</button>
     <button class="go" id="btn-launch" type="button">המראה</button>
   </div>
 </div>
@@ -709,13 +742,7 @@
     <div id="touch-pad"></div>
     <div id="look-pad"></div>
     <div id="stick" class="hidden"><div id="stick-knob"></div></div>
-    <div id="coach" class="hidden"><b>הכפתורים</b>
-      <div style="--k:255,77,94"><i></i><span>מקלע</span><small>החזק — יורה</small></div>
-      <div style="--k:255,154,60"><i></i><span>טיל</span><small>משגר על המטרה הנעולה</small></div>
-      <div style="--k:255,210,94"><i></i><span>נורים</span><small>מטעה טיל שרודף אחריך</small></div>
-      <div style="--k:111,230,255"><i></i><span>טורבו</span><small>החזק — מהירות מקסימלית</small></div>
-      <div style="--k:178,140,255"><i></i><span>בלימה</span><small>החזק — האטה ופנייה חדה</small></div>
-    </div>
+    <button id="btn-calib" class="hidden" type="button">⟳ ישר כאן</button>
     <button class="tbtn" id="btn-fire" type="button" aria-label="ירי מקלע"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/><circle cx="12" cy="12" r="1.2" fill="#fff"/></svg><span class="lbl">מקלע</span></button>
     <button class="tbtn" id="btn-missile" type="button" aria-label="שיגור טיל"><svg viewBox="0 0 24 24"><path d="M5 19l3-3M12 4l6 2 2 6-9 9-4-4 5-13z"/><path d="M7 13l-3 1 2 2M11 17l-1 3-2-2"/></svg><span class="lbl">טיל</span></button>
     <button class="tbtn" id="btn-flare" type="button" aria-label="נורים נגד טילים"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.2" fill="#fff"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8"/></svg><span class="lbl">נורים</span></button>
@@ -723,6 +750,8 @@
     <button class="tbtn hidden" id="btn-hover" type="button" aria-label="ריחוף במקום"><svg viewBox="0 0 24 24"><path d="M4 9h16M12 9v10M8 19h8M7 5l5 4 5-4"/></svg><span class="lbl">ריחוף</span></button>
     <button class="tbtn" id="btn-boost" type="button" aria-label="טורבו"><svg viewBox="0 0 24 24"><path d="M5 6l6 6-6 6M12 6l6 6-6 6"/></svg><span class="lbl">טורבו</span></button>
   </div>
+  <!-- the first flight's lesson -->
+  <div id="tut" class="hidden"><div class="tut-top"><span id="tut-n"></span><b id="tut-h"></b><button type="button" id="tut-skip">דלג</button></div><p id="tut-p"></p></div>
   <button class="icon-btn" id="invite-btn" type="button" aria-label="הזמן חבר"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5M18 7v6M15 10h6"/></svg></button>
   <button class="icon-btn" id="menu-btn" type="button" aria-label="האנגר"><svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7M6 10v10h12V10"/></svg></button>
   <button class="icon-btn hidden" id="voice-btn" type="button" aria-label="מיקרופון"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M9 21h6"/><path class="slash" d="M4 4l16 16"/></svg><span class="lbl">דיבור</span><i class="more" id="voice-more" aria-label="מצב דיבור">▾</i></button>
@@ -773,6 +802,11 @@
     <h3>הגדרות</h3>
     <label class="switch">קול <input type="checkbox" id="set-sound"></label>
     <label class="switch">הפוך למעלה/למטה <input type="checkbox" id="set-invert"></label>
+    <label class="switch hidden" id="set-control-row">שליטה במטוס
+      <select id="set-control" class="sel">
+        <option value="stick">ג׳ויסטיק על המסך</option><option value="tilt">הטיית הטלפון</option>
+      </select>
+    </label>
     <label class="switch">איכות גרפיקה
       <select id="set-quality" class="sel">
         <option value="auto">אוטומטית</option><option value="high">גבוהה</option><option value="med">בינונית</option><option value="low">נמוכה</option>
@@ -789,6 +823,9 @@
         <option value="day">צהריים</option><option value="sunset">שקיעה</option>
       </select>
     </label>
+    <form class="gift-row" id="gift-form" autocomplete="off"><svg viewBox="0 0 24 24"><path d="M4 11h16v9H4zM3 7h18v4H3zM12 7v13M12 7c-1.5-3-5-3.5-5-1.2C7 7 9 7 12 7zm0 0c1.5-3 5-3.5 5-1.2C17 7 15 7 12 7z"/></svg><input id="gift-code" placeholder="קוד מתנה" maxlength="24" autocapitalize="characters" spellcheck="false" dir="ltr"><button type="submit">קבל</button></form>
+    <button class="ghost" id="btn-save" type="button">גיבוי לכל מכשיר — שם משתמש וסיסמה</button>
+    <button class="ghost" id="btn-tut" type="button">להראות שוב את ההדרכה</button>
     <div class="note" id="set-account"></div>
     <button class="ghost" id="btn-logout" type="button">התנתק מהטייס הזה</button>
     <button class="ghost" id="btn-settings-close" type="button">סגור</button>
