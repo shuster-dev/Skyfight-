@@ -1663,8 +1663,8 @@ function setTag(i, cls, html, x, y, size = 0, rot = null) {
  * screen pointing the way, with how far.
  */
 // how much of it: 'full' (frames out to 2.5 km), 'near' (frames inside
-// 600 m, the default), 'off' (names only) — the settings say
-const MARKS = { full: 2500, near: 600, off: 0 };
+// 250 m, the default), 'off' (names only) — the settings say
+const MARKS = { full: 2500, near: 250, off: 0 };
 let marks = (() => { try { const m = localStorage.getItem('sky.marks'); return m in MARKS ? m : 'near'; } catch { return 'near'; } })();
 const TQ = new Vector3();
 function tags() {
@@ -1679,7 +1679,7 @@ function tags() {
     const W = innerWidth, H = innerHeight;
     const frameTo = MARKS[marks];
     for (const { o, d } of list) {
-      if (d > 2500) break;
+      if (d > 5000) break;
       const r = S.roster.get(o.key), foe = enemy.has(o.key);
       const side = S.teams ? (r?.team === S.myTeam ? ' mate' : ' foe') : r?.pc >= 0 ? ` pc${r.pc % 6}` : foe ? ' foe' : '';
       TQ.copy(o.mesh.position).project(camera);
@@ -1689,13 +1689,19 @@ function tags() {
         // the frame: smaller the further, never too small to see
         if (d < frameTo) setTag(n++, `tagbox${side}`, '', sx, sy, Math.round(MathUtils.clamp(4200 / d, 26, 76)));
         P.copy(o.mesh.position); P.y += 3.5 * o.mesh.scale.y;
-        if (named < 2 && d < 900 && project(P)) {
-          named++;
-          // the plane under fire: a bigger bar, and the bit just shot off flashing white
-          const hot = o.hitAt && performance.now() - o.hitAt < 2500;
-          const bar = o.hp < 100 || hot ? `<div class="mini${hot ? ' hot' : ''}"><i style="width:${o.hp}%"></i></div>` : '';
+        if (project(P)) {
           const spk = voice.talking(o.key) ? '<i class="spk"><b></b><b></b><b></b></i>' : '';
-          setTag(n++, `tagp${side}`, `${spk}${esc(r?.name || '')} · <span class="num">${Math.round(d / 10) * 10}</span>${bar}`, P.x, P.y - 18);
+          const lift = d < frameTo ? 18 : 6;
+          if (named < 2 && d < 900) {
+            named++;
+            // the plane under fire: a bigger bar, and the bit just shot off flashing white
+            const hot = o.hitAt && performance.now() - o.hitAt < 2500;
+            const bar = o.hp < 100 || hot ? `<div class="mini${hot ? ' hot' : ''}"><i style="width:${o.hp}%"></i></div>` : '';
+            setTag(n++, `tagp${side}`, `${spk}${esc(r?.name || '')} · <span class="num">${Math.round(d / 10) * 10}</span>${bar}`, P.x, P.y - lift);
+          } else {
+            // every other plane in view, however far: its name, small
+            setTag(n++, `tagp far${side}`, `${spk}${esc(r?.name || '')}`, P.x, P.y - lift);
+          }
         }
       } else if (foe && frameTo && arrows < 2) {
         // out of view: an arrow at the edge, the way to turn
