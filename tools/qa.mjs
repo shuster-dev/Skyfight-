@@ -2,7 +2,7 @@
 // and the hangar's prices. `npm run qa`
 import { GUNS, MISSILES, GUN_ORDER, MISSILE_ORDER, PLANES, PLANE_ORDER, UPGRADES, TIER_COST, TIER_LEVEL, statsOf, xpAt, xpStep, levelOf, levelProgress, killReward, cleanCallsign, nextTier, MAX_LEVEL, rudeName, PACE, aimHelp } from '../src/shared/planes.js';
 import { VOICE, voiceGain } from '../src/shared/voice.js';
-import { AIRFIELD, ARENA, BRIDGE, BUILDINGS, PORT, STRUCTURES, HEAL, HEALS, groundAt, healAt, hitsSolid, inBay, spawnPoint, surfaceAt, terrainAt, underBridge } from '../src/shared/arena.js';
+import { AIRFIELD, ARENA, BRIDGE, BUILDINGS, PLACES, PORT, STRUCTURES, HEAL, HEALS, desertAt, groundAt, healAt, hitsSolid, inBay, spawnPoint, surfaceAt, terrainAt, underBridge } from '../src/shared/arena.js';
 import { fly, flyQ, forward, newBody, newBodyQ, plausibleMove, BOOST, BRAKE, Q } from '../src/shared/flight.js';
 import { GUN, MISSILE, RAM, aimDir, blastDamage, closestOn, missileHurt, DODGE, dodgeChance, gunTarget, leadPoint, offNose, pickTarget, ramDamage, segmentHit, steerMissile } from '../src/shared/combat.js';
 import { buyArm, buyPaint, choosePaint, equipArm, newPilot, normalize, buyPlane, buyUpgrade, choosePlane, payKill, redeemGift, setNeon, view } from '../src/server/pilot.js';
@@ -206,6 +206,19 @@ console.log('\nthe arena');
   ok('the ground is the same every time', terrainAt(100, 33) === terrainAt(100, 33));
 }
 
+console.log('\nthe Land of Israel');
+{
+  const P = PLACES, T = terrainAt;
+  ok('twice the sky it was: 2.3 km to the edge', ARENA.radius === 2300);
+  ok('the sea to the west, and Haifa\'s bay bites into the coast in the north', T(-800, 0) < 0 && T(150, -1700) < 0 && T(200, -400) > 0);
+  ok('the Carmel runs down to the sea, Jerusalem on its hills, the Hermon above them all', T(240, -1300) > 100 && Math.abs(T(P.jerusalem.x, P.jerusalem.z) - P.jerusalem.h) < 12 && T(P.hermon.x, P.hermon.z) > 380 && T(P.hermon.x, P.hermon.z) < ARENA.ceiling - 40);
+  ok('water in the rift: the Kinneret and the Dead Sea; and the Red Sea at Eilat', T(P.kinneret.x, P.kinneret.z) < 0 && T(P.deadSea.x, P.deadSea.z) < 0 && T(P.eilat.x, P.eilat.z + 200) < 0);
+  ok('Masada stands up out of the shore, flat on top', T(P.masada.x, P.masada.z) > 110 && Math.abs(T(P.masada.x + 20, P.masada.z) - T(P.masada.x, P.masada.z)) < 5);
+  ok('the Ramon crater: a rim and a deep floor', T(P.ramon.x, P.ramon.z) < T(P.ramon.x + P.ramon.r * 1.6, P.ramon.z) - 60);
+  ok('desert in the south and by the Dead Sea, green in the north and the middle', desertAt(800, 1600) === 1 && desertAt(P.deadSea.x, P.deadSea.z) > 0.9 && desertAt(0, 0) === 0 && desertAt(1000, -1700) === 0);
+  ok('nothing in the sky is taller than the ceiling leaves room for', [P.hermon, P.jerusalem, P.masada].every((q) => surfaceAt(q.x, q.z) < ARENA.ceiling - 40));
+}
+
 console.log('\nthe airfield and the port');
 {
   const R = AIRFIELD.runway, S = (k) => STRUCTURES.filter((s) => s.kind === k);
@@ -215,7 +228,7 @@ console.log('\nthe airfield and the port');
   ok('the hangars, the tower and the tanks are solid', ['hangar', 'tower', 'tank'].every((k) => S(k).length && S(k).every((h) => hitsSolid(h.x, h.base + h.h - 1, h.z) === 'building')));
   ok('the cranes are solid, legs and boom, and you can fly under the boom', S('craneBoom').length === 3 && S('craneBoom').every((b) => hitsSolid(b.x - 20, b.base + 3, b.z) === 'building' && !hitsSolid(b.x - 20, b.base - 14, b.z)));
   ok('the freighter at the quay is solid, over deep water', S('hull').every((h) => hitsSolid(h.x, 8, h.z) === 'building' && terrainAt(h.x, h.z) < -5));
-  ok('the quay is flat paving, the sea off it deep', Math.abs(terrainAt(PORT.x0 + 40, -770) - 4.5) < 0.3 && terrainAt(PORT.x0 - 30, -770) < -5);
+  ok('the quay is flat paving, the sea off it deep', Math.abs(terrainAt(PORT.x0 + 40, (PORT.z0 + PORT.z1) / 2) - 4.5) < 0.3 && terrainAt(PORT.x0 - 30, (PORT.z0 + PORT.z1) / 2) < -5);
   ok('a stepped tower narrows above its step', BUILDINGS.some((b) => b.step) && BUILDINGS.filter((b) => b.step).every((b) => hitsSolid(b.x + b.w / 2 - 1, b.base + b.step.at + 3, b.z) === '' && hitsSolid(b.x, b.base + b.step.at + 3, b.z) === 'building'));
 }
 

@@ -253,6 +253,7 @@ $('#login-form').addEventListener('submit', async (e) => {
 function openSettings() {
   $('#set-sound').checked = !sound.muted;
   $('#set-invert').checked = controls.invert;
+  $('#set-marks').value = marks;
   show('#set-control-row', controls.touch);
   $('#set-control').value = controls.scheme;
   $('#set-quality').value = Q.pick;
@@ -267,6 +268,7 @@ $('#btn-settings2').addEventListener('click', openSettings);
 $('#btn-settings-close').addEventListener('click', () => show('#sheet-settings', false));
 $('#set-sound').addEventListener('change', (e) => { sound.setMuted(!e.target.checked); paintSoundBtn(); });
 $('#set-invert').addEventListener('change', (e) => controls.setInvert(e.target.checked));
+$('#set-marks').addEventListener('change', (e) => { marks = e.target.value in MARKS ? e.target.value : 'near'; try { localStorage.setItem('sky.marks', marks); } catch {} });
 // how a phone flies: the stick on the screen, or tilting the phone
 $('#set-control').addEventListener('change', (e) => {
   if (e.target.value !== 'tilt') return void (controls.setScheme('stick'), paintControls());
@@ -1660,7 +1662,10 @@ function setTag(i, cls, html, x, y, size = 0, rot = null) {
  * range, and for the nearest enemies out of view an arrow at the edge of the
  * screen pointing the way, with how far.
  */
-const SEE = 2500;
+// how much of it: 'full' (frames out to 2.5 km), 'near' (frames inside
+// 600 m, the default), 'off' (names only) — the settings say
+const MARKS = { full: 2500, near: 600, off: 0 };
+let marks = (() => { try { const m = localStorage.getItem('sky.marks'); return m in MARKS ? m : 'near'; } catch { return 'near'; } })();
 const TQ = new Vector3();
 function tags() {
   const me = S.me?.mesh?.position;
@@ -1672,8 +1677,9 @@ function tags() {
     list.sort((a, b) => a.d - b.d);
     let named = 0, arrows = 0;
     const W = innerWidth, H = innerHeight;
+    const frameTo = MARKS[marks];
     for (const { o, d } of list) {
-      if (d > SEE) break;
+      if (d > 2500) break;
       const r = S.roster.get(o.key), foe = enemy.has(o.key);
       const side = S.teams ? (r?.team === S.myTeam ? ' mate' : ' foe') : r?.pc >= 0 ? ` pc${r.pc % 6}` : foe ? ' foe' : '';
       TQ.copy(o.mesh.position).project(camera);
@@ -1681,7 +1687,7 @@ function tags() {
       const inView = !behind && sx > 0 && sx < W && sy > 0 && sy < H;
       if (inView) {
         // the frame: smaller the further, never too small to see
-        setTag(n++, `tagbox${side}`, '', sx, sy, Math.round(MathUtils.clamp(4200 / d, 26, 76)));
+        if (d < frameTo) setTag(n++, `tagbox${side}`, '', sx, sy, Math.round(MathUtils.clamp(4200 / d, 26, 76)));
         P.copy(o.mesh.position); P.y += 3.5 * o.mesh.scale.y;
         if (named < 2 && d < 900 && project(P)) {
           named++;
@@ -1691,15 +1697,15 @@ function tags() {
           const spk = voice.talking(o.key) ? '<i class="spk"><b></b><b></b><b></b></i>' : '';
           setTag(n++, `tagp${side}`, `${spk}${esc(r?.name || '')} · <span class="num">${Math.round(d / 10) * 10}</span>${bar}`, P.x, P.y - 18);
         }
-      } else if (foe && arrows < 3) {
+      } else if (foe && frameTo && arrows < 2) {
         // out of view: an arrow at the edge, the way to turn
         arrows++;
         let vx = sx - W / 2, vy = sy - H / 2;
         if (behind) vx = -vx, vy = -vy;
         if (Math.abs(vx) < 1 && Math.abs(vy) < 1) vy = 1;
-        const a = Math.atan2(vy, vx), mx = W / 2 - 46, my = H / 2 - 70;
+        const a = Math.atan2(vy, vx), mx = W / 2 - 46, my = H / 2 - 110;
         const k = Math.min(mx / Math.abs(Math.cos(a) || 1e-6), my / Math.abs(Math.sin(a) || 1e-6));
-        setTag(n++, `tagarrow${side}`, `<i></i><span class="num">${Math.round(d / 10) * 10}</span>`, W / 2 + Math.cos(a) * k, H / 2 + Math.sin(a) * k, 0, a);
+        setTag(n++, `tagarrow${side}`, `<i></i><span class="num">${Math.round(d / 10) * 10}</span>`, W / 2 + Math.cos(a) * k, H / 2 + 30 + Math.sin(a) * k, 0, a);
       }
     }
     const B = S.boss;

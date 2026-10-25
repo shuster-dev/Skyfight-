@@ -1,19 +1,23 @@
-// The arena: a harbour city on a coast. Sea to the west with a few rocky
-// islands; a bay cutting into the land with a suspension bridge across it,
-// high enough to fly under; towers downtown at both ends of the bridge,
-// low-rise blocks and parks around them; hills rising to mountains in the
-// east. Everything solid is here — the ground, the buildings, the bridge —
-// so the screen that draws it and the server that kills you on it agree.
+// The arena: the Land of Israel, pressed into a few kilometres. North is -z,
+// the Mediterranean to the west. In the middle the coastal city (Tel Aviv:
+// the towers, the river mouth with its bridge, the airfield to the south-
+// east); to the north Haifa — its bay, its port, the Carmel running down to
+// the sea — then the Galilee, the Kinneret in the rift and the Hermon with
+// snow on it, the Golan beyond; to the east the Jerusalem hills, and over
+// them the Jordan rift, the Dead Sea and Masada; to the south the Negev, the
+// Ramon crater, and Eilat at the head of the Red Sea. Everything solid is
+// here — the ground, the buildings, the bridge — so the screen that draws it
+// and the server that kills you on it agree.
 
 export const ARENA = {
   /** Past this radius the plane is turned back toward the middle. */
-  radius: 1150,
+  radius: 2300,
   /** Thin air: no climbing above it. */
   ceiling: 520,
   /** Fly lower than this over the ground (or the sea) and you hit it. */
   clearance: 2.5,
   /** Where a pilot comes in: on a ring, at height, facing the middle. */
-  spawnRadius: 780,
+  spawnRadius: 900,
   spawnAlt: 210,
 };
 
@@ -41,8 +45,14 @@ const lerp = (a, b, t) => a + (b - a) * t;
 
 // ---- the land and the water -----------------------------------------------
 
-/** Where the coast runs: land is east of this x. */
-export const coastX = (z) => 60 + 90 * Math.sin(z * 0.004) + 40 * Math.sin(z * 0.011 + 1.3);
+/**
+ * Where the coast runs: land is east of this x. Haifa's bay bites into it in
+ * the north, the Carmel's headland juts out just south of the bay, and south
+ * of the city the coast bends away west (towards Sinai).
+ */
+export const coastX = (z) => 60 + 90 * Math.sin(z * 0.004) + 40 * Math.sin(z * 0.011 + 1.3)
+  + 260 * Math.exp(-(((z + 1700) / 170) ** 2)) - 70 * Math.exp(-(((z + 1460) / 90) ** 2))
+  - Math.max(0, z - 1200) * 0.45;
 /** The bay: its middle line and its width, from the mouth inland. */
 export const BAY = { end: 780 };
 export const bayZ = (x) => 30 * Math.sin(x * 0.006);
@@ -56,13 +66,39 @@ export function inBay(x, z) {
   return (1 - smooth(half - 10, half + 25, off)) * endK;
 }
 
-/** Rocky islands out at sea. */
-export const ISLANDS = [
-  { x: -460, z: -520, r: 130, h: 46, peak: 40 },
-  { x: -720, z: 230, r: 95, h: 30, peak: 85 },
-  { x: -330, z: 640, r: 75, h: 22, peak: 0 },
-  { x: -880, z: -140, r: 60, h: 18, peak: 30 },
-];
+/** No islands off this coast. (Kept as a list: the drawing still asks.) */
+export const ISLANDS = [];
+
+/**
+ * The places, where they are on this map (x east, z south). The ground is
+ * shaped round them; the screen paints and plants by them.
+ */
+export const PLACES = {
+  jerusalem: { x: 1150, z: 150, r: 190, h: 225 },
+  carmel: { x0: -40, z0: -1470, x1: 520, z1: -1120 },
+  hermon: { x: 1560, z: -2130 },
+  kinneret: { x: 1760, z: -1300, rx: 150, rz: 240 },
+  deadSea: { x: 1790, z: 760, rx: 170, rz: 430 },
+  masada: { x: 1610, z: 1000, r: 55, h: 125 },
+  ramon: { x: 980, z: 1700, r: 280 },
+  eilat: { x: 1250, z: 1960 },
+};
+const ell = (x, z, o) => Math.hypot((x - o.x) / o.rx, (z - o.z) / o.rz);
+/** How much of the desert (the Negev, the rift by the Dead Sea) is here, 0..1. */
+export function desertAt(x, z) {
+  const negev = smooth(1050, 1350, z);
+  const rift = smooth(1520, 1640, x) * smooth(-300, 200, z);
+  return Math.min(1, Math.max(negev, rift));
+}
+/** The Jordan rift, 1 in its floor. */
+const riftK = (x, z) => smooth(1420, 1660, x) * (1 - smooth(1880, 2080, x)) * smooth(-1750, -1500, z) * (1 - smooth(2000, 2200, z));
+/** The Red Sea's gulf at Eilat: 1 in its water. */
+function gulfK(x, z) {
+  const E = PLACES.eilat;
+  if (z < E.z - 30) return 0;
+  const half = 30 + (z - E.z) * 0.55;
+  return (1 - smooth(half - 10, half + 25, Math.abs(x - E.x))) * smooth(E.z - 30, E.z + 20, z);
+}
 
 /**
  * The airfield, on the flat land north of the city: a runway along x, a
@@ -70,11 +106,11 @@ export const ISLANDS = [
  */
 export const AIRFIELD = { x0: 160, x1: 620, z0: 700, z1: 960, runway: { x0: 175, x1: 600, z: 790, w: 34 }, taxi: 832, apron: { x0: 240, x1: 540, z0: 846, z1: 900 } };
 /**
- * The port, on the coast south of the city: a straight quay at x0 with deep
+ * The port: Haifa's, at the back of the bay — a straight quay at x0 with deep
  * water off it, gantry cranes over the water, container stacks and sheds
  * behind, a freighter tied up alongside.
  */
-export const PORT = { x0: 70, x1: 300, z0: -880, z1: -660 };
+export const PORT = { x0: 330, x1: 560, z0: -1810, z1: -1590 };
 const portK = (z) => smooth(PORT.z0 - 30, PORT.z0, z) * (1 - smooth(PORT.z1, PORT.z1 + 30, z));
 const fieldK = (x, z) => smooth(AIRFIELD.x0 - 30, AIRFIELD.x0, x) * (1 - smooth(AIRFIELD.x1, AIRFIELD.x1 + 30, x)) * smooth(AIRFIELD.z0 - 30, AIRFIELD.z0, z) * (1 - smooth(AIRFIELD.z1, AIRFIELD.z1 + 30, z));
 /** Which site (x, z) is on, `m` metres round it counted in: 'airfield', 'port' or ''. */
@@ -88,12 +124,68 @@ export function siteAt(x, z, m = 0) {
 export function terrainAt(x, z) {
   const d = x - coastX(z);
   let h = lerp(-7, 5, smooth(-55, 25, d));
-  // the city is flat; the land beyond it rolls up into hills and mountains
-  const roll = smooth(560, 760, x);
-  h += 3 * fbm(x * 0.01, z * 0.01) * smooth(0, 60, d) * (0.4 + roll);
-  h += Math.max(0, x - 640) * 0.5 * (0.55 + 0.45 * fbm(x * 0.004 + 3, z * 0.004 - 7)) * roll;
-  // ridges on the mountains
-  h += roll * Math.max(0, x - 820) * 0.22 * (1 - Math.abs(noise(x * 0.007, z * 0.007) - 0.5) * 2);
+  const land = smooth(0, 60, d);
+  // the coastal plain: flat, a little roll
+  h += 3 * fbm(x * 0.01, z * 0.01) * land * 0.45;
+  // the highlands: the Galilee in the north, Samaria and the Jerusalem hills
+  // down the middle, a ridge of rolling hills up to the rift
+  const west = lerp(720, 600, smooth(-1050, -1350, z));
+  const hl = smooth(west, west + 320, x) * (1 - smooth(1380, 1620, x)) * (1 - smooth(950, 1250, z));
+  if (hl > 0) {
+    let up = 120 + 120 * fbm(x * 0.0032 + 3, z * 0.0032 - 7);
+    up += 60 * (1 - Math.abs(noise(x * 0.006, z * 0.006) - 0.5) * 2) * smooth(-900, -1300, z); // craggier in the Galilee
+    h += hl * up * land;
+  }
+  // Jerusalem: a broad plateau on the hilltops
+  const J = PLACES.jerusalem, jr = Math.hypot(x - J.x, z - J.z);
+  if (jr < J.r + 120) h = lerp(h, J.h + 8 * fbm(x * 0.02, z * 0.02), 1 - smooth(J.r, J.r + 120, jr));
+  // the Carmel: a long ridge from the sea up to the south-east
+  {
+    const C = PLACES.carmel, vx = C.x1 - C.x0, vz = C.z1 - C.z0;
+    const t = Math.max(0, Math.min(1, ((x - C.x0) * vx + (z - C.z0) * vz) / (vx * vx + vz * vz)));
+    const cd = Math.hypot(x - (C.x0 + vx * t), z - (C.z0 + vz * t));
+    if (cd < 220) h += (130 + 40 * fbm(x * 0.01, z * 0.01)) * (1 - smooth(30, 200, cd)) * land * (0.6 + 0.4 * Math.sin(t * Math.PI));
+  }
+  // the Golan, a high plateau east of the rift in the north, and the Hermon
+  // standing over it, snow on top; the mountains of Moab across from the Dead Sea
+  const east = smooth(1880, 2120, x);
+  if (east > 0) {
+    const golan = 1 - smooth(-1150, -950, z);
+    h = lerp(h, golan * (205 + 25 * fbm(x * 0.006, z * 0.006)) + (1 - golan) * (150 + 80 * fbm(x * 0.004 + 9, z * 0.004)), east);
+  }
+  const H = PLACES.hermon;
+  h += 390 * Math.exp(-(((x - H.x) ** 2 + (z - H.z) ** 2) / (2 * 260 * 260)));
+  // the Jordan rift: a long low valley; the Kinneret and the Dead Sea in it
+  const rk = riftK(x, z);
+  if (rk > 0) h = lerp(h, 14 + 6 * fbm(x * 0.01, z * 0.01), rk);
+  for (const L of [PLACES.kinneret, PLACES.deadSea]) {
+    const e = ell(x, z, L);
+    if (e < 1.25) h = lerp(h, -8, 1 - smooth(0.9, 1.2, e));
+  }
+  // the Negev: rolling desert, higher in the middle, the mountains of Eilat in the south
+  const neg = smooth(1050, 1350, z) * land;
+  if (neg > 0) {
+    let dh = 30 + 70 * fbm(x * 0.003 + 5, z * 0.003 + 1) + 6 * Math.sin(x * 0.05 + z * 0.02) * fbm(x * 0.02, z * 0.02);
+    dh += 110 * smooth(1700, 2100, z) * (1 - Math.abs(noise(x * 0.008, z * 0.008) - 0.5) * 2);
+    h = lerp(h, Math.max(h, dh) * (1 - rk) + h * rk, neg);
+  }
+  // the Ramon crater: a rim, and a deep floor inside it
+  {
+    const R = PLACES.ramon, rr = Math.hypot((x - R.x) / 1.6, z - R.z) * 1.0;
+    if (rr < R.r + 140) {
+      h += 70 * Math.exp(-(((rr - R.r) / 55) ** 2));
+      // the floor: deep, but dry land (never down to the sea)
+      h = lerp(h, Math.max(28, h - 80), 1 - smooth(R.r - 90, R.r, rr));
+    }
+  }
+  // Masada: a flat-topped rock by the Dead Sea
+  {
+    const M = PLACES.masada, mr = Math.hypot(x - M.x, z - M.z);
+    if (mr < M.r + 30) h = lerp(h, M.h, 1 - smooth(M.r - 8, M.r + 12, mr));
+  }
+  // the Red Sea at Eilat
+  const gk = gulfK(x, z);
+  if (gk > 0) h = lerp(h, -9, gk);
   // the bay
   const w = inBay(x, z) * smooth(-80, 0, d + 80);
   h = lerp(h, -7, w);
@@ -159,7 +251,7 @@ export function cityAt(x, z) {
 export const GRID = { block: BLOCK, street: STREET, x0: 0, z0: 0 };
 
 // where the repair pads stand (see HEALS): kept clear of buildings
-const PAD_SPOTS = [[433, 250], [139, 788], [69, -394], [520, -300], [156, -886]];
+const PAD_SPOTS = [[433, 250], [139, 788], [69, -394], [520, -300], [430, -1545], [1150, 150]];
 
 export const BUILDINGS = (() => {
   const r = rng(4242), out = [];
@@ -210,7 +302,8 @@ export const STRUCTURES = (() => {
   at('terminal', 565, 918, 46, 30, 11);
   for (const [x, z] of [[604, 900], [604, 926], [580, 950]]) at('tank', x, z, 16, 16, 12);
   // the port: three gantry cranes on the quay, their booms out over the water
-  for (const z of [-835, -775, -715]) {
+  const zc = (P.z0 + P.z1) / 2;
+  for (const z of [zc - 65, zc - 5, zc + 55]) {
     at('craneLeg', P.x0 + 6, z - 9, 3, 3, 46, { crane: z });
     at('craneLeg', P.x0 + 6, z + 9, 3, 3, 46, { crane: z });
     at('craneLeg', P.x0 + 30, z - 9, 3, 3, 46, { crane: z });
@@ -221,15 +314,15 @@ export const STRUCTURES = (() => {
   const r = rng(808);
   for (let x = P.x0 + 52; x < P.x0 + 150; x += 16) {
     for (let z = P.z0 + 22; z < P.z1 - 10; z += 34) {
-      if (Math.hypot(x - 156, z + 886) < 46 || r() < 0.15) continue;
+      if (r() < 0.15) continue;
       at('stack', x, z, 12, 28, 2.6 * (1 + Math.floor(r() * 4)), { seed: Math.floor(r() * 1e6) });
     }
   }
-  at('shed', P.x0 + 190, -800, 40, 110, 13);
-  at('shed', P.x0 + 190, -690, 40, 50, 11);
+  at('shed', P.x0 + 190, zc - 30, 40, 110, 13);
+  at('shed', P.x0 + 190, zc + 80, 40, 50, 11);
   // the freighter tied up at the quay
-  out.push({ kind: 'hull', x: P.x0 - 16, z: -770, w: 22, d: 150, h: 13, base: -4 });
-  out.push({ kind: 'bridgehouse', x: P.x0 - 16, z: -705, w: 18, d: 14, h: 16, base: 9 });
+  out.push({ kind: 'hull', x: P.x0 - 16, z: zc, w: 22, d: 150, h: 13, base: -4 });
+  out.push({ kind: 'bridgehouse', x: P.x0 - 16, z: zc + 65, w: 18, d: 14, h: 16, base: 9 });
   return out;
 })();
 
