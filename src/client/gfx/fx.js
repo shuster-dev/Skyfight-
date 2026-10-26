@@ -3,7 +3,8 @@
 // handful of draw calls.
 import {
   AdditiveBlending, BoxGeometry, Color, ConeGeometry, CylinderGeometry, DynamicDrawUsage, Group, IcosahedronGeometry,
-  InstancedMesh, Matrix4, ShaderMaterial, Mesh, MeshBasicMaterial, MeshStandardMaterial, Object3D, Quaternion, SphereGeometry, Vector3,
+  InstancedBufferAttribute, InstancedMesh, Matrix4, ShaderMaterial, Mesh, MeshBasicMaterial, MeshStandardMaterial, Object3D, Quaternion,
+  SphereGeometry, UniformsLib, UniformsUtils, Vector3,
 } from 'three';
 import { GUN, MISSILE } from '../../shared/combat.js';
 
@@ -19,8 +20,37 @@ export class Fx {
     this.tr.instanceMatrix.setUsage(DynamicDrawUsage);
     this.tr.frustumCulled = false;
     this.tracers = [];
-    // smoke and fire: one pool, coloured per puff
-    this.sm = new InstancedMesh(new IcosahedronGeometry(1, 1), new MeshStandardMaterial({ color: 0xffffff, flatShading: true, roughness: 1, transparent: true, opacity: 0.72, depthWrite: false }), 1400);
+    // smoke: one pool, coloured per puff. Soft — thin at the rim, denser in
+    // the middle, lit from above, thinning away as it ages — so a burst of
+    // smoke is a cloud, not a handful of dark stones
+    const smokeGeo = new IcosahedronGeometry(1, 2);
+    this.smFade = new InstancedBufferAttribute(new Float32Array(1400), 1);
+    this.smFade.setUsage(DynamicDrawUsage);
+    smokeGeo.setAttribute('aFade', this.smFade);
+    this.sm = new InstancedMesh(smokeGeo, new ShaderMaterial({
+      transparent: true, depthWrite: false, fog: true,
+      uniforms: UniformsUtils.merge([UniformsLib.fog]),
+      vertexShader: `attribute float aFade; varying vec3 vC; varying float vF; varying float vA; varying float vUp;
+        #include <fog_pars_vertex>
+        void main() {
+          vec4 mvPosition = modelViewMatrix * instanceMatrix * vec4(position, 1.0);
+          vec3 n = normalize(normalMatrix * mat3(instanceMatrix) * normal);
+          vF = abs(dot(n, normalize(-mvPosition.xyz)));
+          vUp = normalize(mat3(instanceMatrix) * normal).y;
+          vC = instanceColor; vA = aFade;
+          gl_Position = projectionMatrix * mvPosition;
+          #include <fog_vertex>
+        }`,
+      fragmentShader: `varying vec3 vC; varying float vF; varying float vA; varying float vUp;
+        #include <fog_pars_fragment>
+        void main() {
+          vec3 c = vC * (0.78 + 0.32 * vUp);
+          gl_FragColor = vec4(c, smoothstep(0.0, 0.85, vF) * 0.8 * vA);
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+          #include <fog_fragment>
+        }`,
+    }), 1400);
     this.sm.instanceMatrix.setUsage(DynamicDrawUsage);
     this.sm.frustumCulled = false;
     this.sm.setColorAt(0, C.set(0xffffff));
@@ -77,7 +107,7 @@ export class Fx {
     }
     for (let i = 0; i < 16 * big; i++) {
       const d = new Vector3(Math.random() - 0.5, Math.random() * 0.8, Math.random() - 0.5).normalize().multiplyScalar(8 + Math.random() * 10);
-      this.puff(p, { color: i % 3 ? 0x2b2b30 : 0x6b6b70, size: 3 * big, grow: 9, life: 2 + Math.random() * 1.5, drift: d });
+      this.puff(p, { color: i % 4 === 0 ? 0x7a6a5c : i % 3 ? 0x3a3a40 : 0x6b6b70, size: 3.5 * big, grow: 12, life: 2.4 + Math.random() * 1.6, drift: d });
     }
     for (let i = 0; i < 12 * big; i++) {
       if (this.bits.length >= 240) this.bits.shift();
@@ -113,6 +143,11 @@ export class Fx {
   /** The flash at a muzzle. */
   muzzle(p) {
     if (this.balls.length < 240) this.balls.push({ p: p.clone(), s: 0.7, t: 0, life: 0.045, flare: true });
+  }
+
+  /** The flash on a plane that is hit: bigger the farther it is drawn, so it reads. */
+  flash(p, k = 1) {
+    if (this.balls.length < 240) this.balls.push({ p: p.clone(), s: 2.6 * k, t: 0, life: 0.09, flare: true });
   }
 
   /** Sparks where a round hits a plane. */
@@ -199,15 +234,17 @@ export class Fx {
       p.v.multiplyScalar(1 - dt * 0.8);
       O.position.copy(p.p);
       O.rotation.set(p.t, p.t * 0.7, 0);
-      // grows, then shrinks away at the end (instances have no opacity)
-      O.scale.setScalar((p.s + p.g * k) * (k > 0.7 ? 1 - (k - 0.7) / 0.3 : 1));
+      // grows as it spreads, and thins away (quickly in, slowly out)
+      O.scale.setScalar(p.s + p.g * Math.sqrt(k));
       O.updateMatrix();
       this.sm.setMatrixAt(n, O.matrix);
       this.sm.setColorAt(n, p.c);
+      this.smFade.setX(n, Math.min(1, k * 12) * (1 - k) ** 1.3);
       n++;
     }
     this.sm.count = n;
     this.sm.instanceMatrix.needsUpdate = true;
+    this.smFade.needsUpdate = true;
     if (this.sm.instanceColor) this.sm.instanceColor.needsUpdate = true;
 
     n = 0;

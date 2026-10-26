@@ -387,6 +387,10 @@
   #cross::before { left: 50%; top: -9px; bottom: -9px; width: 2px; margin-left: -1px; clip-path: polygon(0 0, 100% 0, 100% 9px, 0 9px, 0 calc(100% - 9px), 100% calc(100% - 9px), 100% 100%, 0 100%); }
   #cross::after { top: 50%; left: -9px; right: -9px; height: 2px; margin-top: -1px; clip-path: polygon(0 0, 9px 0, 9px 100%, 0 100%, 0 0, calc(100% - 9px) 0, 100% 0, 100% 100%, calc(100% - 9px) 100%); }
   #cross.hit { border-color: #ffe14d; transform: scale(1.25); transition: transform 0.05s; }
+  /* a kill: the sight flares out red-gold and settles */
+  #cross.kill { animation: crossKill 0.42s cubic-bezier(.2,.9,.3,1.2); }
+  @keyframes crossKill { 0% { transform: scale(1) rotate(0); border-color: #fff; box-shadow: 0 0 0 0 rgba(255,180,60,0.9); } 30% { transform: scale(1.7) rotate(45deg); border-color: #ffb43c; box-shadow: 0 0 0 10px rgba(255,180,60,0); } 100% { transform: scale(1) rotate(90deg); } }
+  @media (prefers-reduced-motion: reduce) { #cross.kill { animation-duration: 0.01s; } }
   /* the missile lock: four thin corners round the target, nothing more */
   #lock { position: absolute; width: 30px; height: 30px; margin: -15px; --c: rgba(255, 92, 92, 0.95); opacity: 0.9;
     background:
@@ -816,6 +820,7 @@
     <h3>הגדרות</h3>
     <label class="switch">קול <input type="checkbox" id="set-sound"></label>
     <label class="switch">הפוך למעלה/למטה <input type="checkbox" id="set-invert"></label>
+    <label class="switch hidden" id="set-buzz-row">רטט בפגיעות ובהפלות <input type="checkbox" id="set-buzz"></label>
     <label class="switch hidden" id="set-control-row">שליטה במטוס
       <select id="set-control" class="sel">
         <option value="stick">ג׳ויסטיק על המסך</option><option value="tilt">הטיית הטלפון</option>

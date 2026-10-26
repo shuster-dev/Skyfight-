@@ -4,7 +4,7 @@ import { Net } from './net.js';
 import { Controls } from './controls.js';
 import { sound } from './audio.js';
 import { makeRenderer, makeWorld, inCloud, makePads } from './gfx/scene.js';
-import { buildPlane, buildBomber, animatePlane } from './gfx/planes.js';
+import { buildPlane, buildBomber, animatePlane, lodPlane } from './gfx/planes.js';
 import { Fx } from './gfx/fx.js';
 import { Hangar } from './gfx/hangar.js';
 import { Voice } from './voice.js';
@@ -56,6 +56,10 @@ const S = {
   preview: [], previewKind: '',
 };
 window.__sky = S; // the browser tests look in here
+// motion turned down in the system's settings: less shake, no kick
+const CALM = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+/** A buzz in the hand, where the phone can (and the vibration setting is on). */
+function buzz(p) { try { if (localStorage.getItem('sky.buzz') !== '0') navigator.vibrate?.(p); } catch {} }
 S.hangarShows = () => hangar.armKey;
 S.renderHangar = () => renderHangar();
 // how many weapons stand on the pad (for the tests: none, out of the market)
@@ -63,7 +67,7 @@ S.hangarArms = () => hangar.scene.children.filter((c) => c.children[0]?.userData
 S.note = (t, c) => toast(t, c);
 S.reward = (m) => onReward(m); // the screenshot tools play a run of kills through it
 S.voice = voice;
-S.world = world; S.camera = camera; S.buildPlane = buildPlane; S.buildBomber = buildBomber; S.scene = scene;
+S.world = world; S.camera = camera; S.buildPlane = buildPlane; S.buildBomber = buildBomber; S.scene = scene; S.renderer = renderer; S.fx = fx;
 S.look = controls.look;
 
 // ---- the camera's rig, and the showcase behind the menus ------------------
@@ -254,6 +258,9 @@ function openSettings() {
   $('#set-sound').checked = !sound.muted;
   $('#set-invert').checked = controls.invert;
   $('#set-marks').value = marks;
+  // (only where the phone can buzz)
+  show('#set-buzz-row', !!navigator.vibrate && controls.touch);
+  $('#set-buzz').checked = (() => { try { return localStorage.getItem('sky.buzz') !== '0'; } catch { return true; } })();
   show('#set-control-row', controls.touch);
   $('#set-control').value = controls.scheme;
   $('#set-quality').value = Q.pick;
@@ -268,6 +275,7 @@ $('#btn-settings2').addEventListener('click', openSettings);
 $('#btn-settings-close').addEventListener('click', () => show('#sheet-settings', false));
 $('#set-sound').addEventListener('change', (e) => { sound.setMuted(!e.target.checked); paintSoundBtn(); });
 $('#set-invert').addEventListener('change', (e) => controls.setInvert(e.target.checked));
+$('#set-buzz').addEventListener('change', (e) => { try { localStorage.setItem('sky.buzz', e.target.checked ? '1' : '0'); } catch {} });
 $('#set-marks').addEventListener('change', (e) => { marks = e.target.value in MARKS ? e.target.value : 'near'; try { localStorage.setItem('sky.marks', marks); } catch {} });
 // how a phone flies: the stick on the screen, or tilting the phone
 $('#set-control').addEventListener('change', (e) => {
@@ -943,7 +951,7 @@ function hook(room) {
     S.hitFlash = 0.12;
     sound.hit();
     const o = m.v === 'boss' ? S.boss : S.others.get(m.v);
-    o && fx.spark(o.mesh.position);
+    if (o) { fx.spark(o.mesh.position); fx.flash(o.mesh.position, o.mesh.scale.x); }
     // its health as the room has it now, not a snapshot later: the bar drops as the rounds land
     if (o && m.hp != null && m.v !== 'boss') o.hp = m.hp, o.hitAt = performance.now();
   });
@@ -952,6 +960,7 @@ function hook(room) {
     S.me.hp = m.hp;
     const big = m.how === 'missile' || m.how === 'collision';
     S.shake = Math.min(1, S.shake + (big ? 0.9 : 0.25));
+    buzz(big ? [60, 40, 90] : 25);
     $('#vig').style.opacity = big ? 1 : 0.6;
     setTimeout(() => ($('#vig').style.opacity = 0), 160);
     sound.hurt();
@@ -1140,6 +1149,13 @@ function onDown(m) {
   fx.explode(p, 1);
   sound.boom(near(p) + 0.3);
   const mine = m.k === S.myKey, me = m.v === S.myKey;
+  // mine: felt, not only read — a kick of the camera, the sight flares, a buzz
+  if (mine && !me) {
+    S.shake = Math.min(1, S.shake + 0.35);
+    S.fovKick = Math.min(10, (S.fovKick || 0) + 6);
+    const c = $('#cross'); c.classList.remove('kill'); void c.offsetWidth; c.classList.add('kill');
+    buzz([30, 30, 50]);
+  } else if (!me && S.me?.mesh && p.distanceTo(S.me.mesh.position) < 250) S.shake = Math.min(1, S.shake + 0.2);
   const how = m.how === 'missile' ? 'טיל' : m.how === 'crash' ? 'התרסקות' : m.how === 'collision' ? 'התנגשות' : 'תותח';
   feed(m.k ? `${esc(nameOf(m.k))} <span class="w">${how}</span> ${esc(nameOf(m.v))}` : `${esc(nameOf(m.v))} <span class="w">${m.how === 'collision' ? 'התנגש' : 'התרסק'}</span>`, mine || me);
   if (me && S.me) {
@@ -1249,7 +1265,12 @@ function air(dt, time) {
     o.mesh.visible = o.alive;
     // far off, a plane is drawn bigger than it is: a speck at 700 m is a
     // plane you can see (it is only the picture; what you hit is the same)
-    if (S.me?.mesh) o.mesh.scale.setScalar(1 + MathUtils.clamp((o.mesh.position.distanceTo(S.me.mesh.position) - 150) / 450, 0, 1.3));
+    if (S.me?.mesh) {
+      const d = o.mesh.position.distanceTo(S.me.mesh.position);
+      o.mesh.scale.setScalar(1 + MathUtils.clamp((d - 150) / 450, 0, 1.3));
+      // and drawn as one piece: a few pixels do not need forty parts
+      lodPlane(o.mesh, d);
+    }
     o.x = o.mesh.position.x; o.y = o.mesh.position.y; o.z = o.mesh.position.z;
     const fv = tmpV.set(0, 0, -1).applyQuaternion(o.mesh.quaternion);
     o.yaw = Math.atan2(-fv.x, -fv.z); o.pitch = Math.asin(MathUtils.clamp(fv.y, -1, 1)); o.speed = c.speed;
@@ -1354,16 +1375,22 @@ function chase(b, dt, input) {
   camera.position.lerp(camPos, Math.min(1, dt * 7));
   camLook.set(b.x, b.y, b.z).addScaledVector(fwd, 40 * (1 - lk)).addScaledVector(S.camUp, 2.5 - lk);
   if (S.shake > 0) {
-    camLook.x += (Math.random() - 0.5) * S.shake * 3; camLook.y += (Math.random() - 0.5) * S.shake * 3;
-    S.shake = Math.max(0, S.shake - dt * 2.5);
+    // the shake goes as the square of the jolt: a graze barely moves it, a
+    // missile throws it — and it wanders smoothly rather than jittering
+    const k = S.shake * S.shake * 4.5 * (CALM ? 0.3 : 1), t = performance.now() / 1000;
+    camLook.x += k * (Math.sin(t * 37.1) * 0.6 + Math.sin(t * 61.7 + 1.3) * 0.4);
+    camLook.y += k * (Math.sin(t * 43.3 + 2.1) * 0.6 + Math.sin(t * 71.9) * 0.4);
+    S.shake = Math.max(0, S.shake - dt * 1.6);
   }
   // lean a little with the bank
   QL.setFromAxisAngle(fwd, -b.roll * 0.3 * (1 - lk));
   camera.up.copy(S.camUp).applyQuaternion(QL);
   camera.lookAt(camLook);
   // the burner widens the view, the brake draws it in a little
-  const fov = b.boosting ? 72 : b.braking ? 58 : 62;
-  if (Math.abs(camera.fov - fov) > 0.1) { camera.fov += (fov - camera.fov) * Math.min(1, dt * 4); camera.updateProjectionMatrix(); }
+  // (a kill kicks it wide for a moment)
+  S.fovKick = (S.fovKick || 0) * Math.exp(-dt / 0.2);
+  const fov = (b.boosting ? 72 : b.braking ? 58 : 62) + (CALM ? 0 : S.fovKick);
+  if (Math.abs(camera.fov - fov) > 0.1) { camera.fov += (fov - camera.fov) * Math.min(1, dt * (S.fovKick > 0.5 ? 12 : 4)); camera.updateProjectionMatrix(); }
 }
 
 // cannons thump; machine guns rattle

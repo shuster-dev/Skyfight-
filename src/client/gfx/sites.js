@@ -8,7 +8,7 @@ import {
   AdditiveBlending, BoxGeometry, CanvasTexture, Color, CylinderGeometry, Group, InstancedMesh, Mesh, MeshBasicMaterial,
   MeshStandardMaterial, Object3D, RepeatWrapping, SphereGeometry, SRGBColorSpace, ConeGeometry, PlaneGeometry,
 } from 'three';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { bakeInPlace } from './bake.js';
 import { AIRFIELD, PORT, STRUCTURES, groundAt } from '../../shared/arena.js';
 import { buildPlane } from './planes.js';
 
@@ -38,33 +38,6 @@ function windowBand() {
   t.colorSpace = SRGBColorSpace;
   t.wrapS = RepeatWrapping;
   return t;
-}
-
-/**
- * Nothing here moves: so every plain mesh is baked into one mesh per
- * material — a few dozen draws for the lot instead of hundreds (phones, and
- * software rendering, count draws).
- */
-function bake(group) {
-  group.updateMatrixWorld(true);
-  const by = new Map(), keep = [];
-  group.traverse((o) => {
-    if (!o.isMesh) return;
-    if (o.isInstancedMesh || Array.isArray(o.material) || !o.geometry.index) { keep.push(o); return; }
-    const g = o.geometry.clone().applyMatrix4(o.matrixWorld);
-    for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(k)) g.deleteAttribute(k);
-    if (!g.attributes.uv || !g.attributes.normal) { keep.push(o); return; }
-    if (!by.has(o.material)) by.set(o.material, []);
-    by.get(o.material).push(g);
-  });
-  const out = new Group();
-  for (const [m, gs] of by) {
-    const merged = mergeGeometries(gs);
-    if (merged) out.add(new Mesh(merged, m));
-  }
-  // what could not be merged stays as it was, where it was
-  for (const o of keep) { o.updateWorldMatrix(true, false); o.matrixWorld.decompose(o.position, o.quaternion, o.scale); out.add(o); }
-  return out;
 }
 
 export function makeSites() {
@@ -235,5 +208,6 @@ export function makeSites() {
     funnel.position.set(b.x, b.base + b.h, b.z + 3);
     group.add(m, funnel);
   }
-  return bake(group);
+  // nothing here moves: one mesh per look for the lot (phones count draws)
+  return bakeInPlace(group);
 }
