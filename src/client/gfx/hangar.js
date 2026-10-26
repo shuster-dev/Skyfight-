@@ -156,13 +156,19 @@ export class Hangar {
     const shell = new MeshStandardMaterial({ color: 0x8c949c, roughness: 0.5, metalness: 0.55, map: ribTexture() });
     const hangar = new Group();
     hangar.position.set(-16, 0, -78);
-    const arch = new Mesh(new CylinderGeometry(1, 1, 1, 40, 1, true, -Math.PI / 2, Math.PI).rotateX(Math.PI / 2), shell);
+    const arch = new Mesh(new CylinderGeometry(1, 1, 1, 40, 1, true, Math.PI / 2, Math.PI).rotateX(Math.PI / 2), shell);
     arch.material.side = DoubleSide;
     arch.scale.set(26, 17, 36);
-    const backWall = new Mesh(new CylinderGeometry(1, 1, 0.3, 40, 1, false, -Math.PI / 2, Math.PI).rotateX(Math.PI / 2), shell);
+    const backWall = new Mesh(new CylinderGeometry(1, 1, 0.3, 40, 1, false, Math.PI / 2, Math.PI).rotateX(Math.PI / 2), shell);
     backWall.scale.set(26, 17, 1); backWall.position.z = -18;
     // inside: a warm glow on the back wall, rows of lamps under the roof
-    const glowWall = new Mesh(new PlaneGeometry(46, 15), new MeshBasicMaterial({ color: 0xc98a4c }));
+    // (lit from the lamps above: bright under the roof, dimmer down to the floor)
+    const wallTex = canvas(16, 128, (g) => {
+      const gr = g.createLinearGradient(0, 0, 0, 128);
+      gr.addColorStop(0, '#f3c78e'); gr.addColorStop(0.45, '#b9824e'); gr.addColorStop(1, '#4a3324');
+      g.fillStyle = gr; g.fillRect(0, 0, 16, 128);
+    });
+    const glowWall = new Mesh(new PlaneGeometry(46, 15), new MeshBasicMaterial({ map: wallTex }));
     glowWall.position.set(0, 7.5, -17.6);
     const floorIn = new Mesh(new PlaneGeometry(50, 36).rotateX(-Math.PI / 2), new MeshStandardMaterial({ color: 0x9a9890, roughness: 0.6, emissive: 0x3a2a14, emissiveIntensity: 0.6 }));
     floorIn.position.set(0, 0.03, 0);
@@ -185,11 +191,34 @@ export class Hangar {
     }
     const inLight = new PointLight(0xffc98a, 600, 60, 1.6); inLight.position.set(0, 10, 0);
     hangar.add(inLight);
+    // the frames of the roof seen from inside, going back into the dark
+    const ribM = new MeshStandardMaterial({ color: 0x3b3f46, roughness: 0.6, metalness: 0.5 });
+    for (let i = 0; i < 4; i++) {
+      const rib = new Mesh(new TorusGeometry(25.2, 0.35, 4, 40, Math.PI), ribM);
+      rib.scale.y = 16.4 / 25.2;
+      rib.position.z = 12 - i * 9;
+      hangar.add(rib);
+    }
+    // and a fighter inside, nose out, under the lamps
+    const inside = buildPlane('shahak');
+    inside.position.set(-4, addGear(inside) + 0.05, -3);
+    inside.rotation.y = 0.25;
+    for (const f of inside.userData.flames || []) f.visible = false;
+    hangar.add(inside);
     base.add(hangar);
     // a second, smaller hangar beside it, doors shut
-    const h2 = new Mesh(new CylinderGeometry(1, 1, 1, 32, 1, false, -Math.PI / 2, Math.PI).rotateX(Math.PI / 2), shell);
+    const h2 = new Mesh(new CylinderGeometry(1, 1, 1, 32, 1, false, Math.PI / 2, Math.PI).rotateX(Math.PI / 2), shell);
     h2.scale.set(16, 11, 26); h2.position.set(-70, 0, -82);
     base.add(h2);
+    // two more fighters parked out on the apron, on their wheels, so it is plainly an airfield
+    for (const [kind, x, z, ry] of [['phantom', 30, -36, -2.2], ['skyhawk', -34, -40, 2.5]]) {
+      const p = buildPlane(kind);
+      const reach = addGear(p);
+      for (const f of p.userData.flames || []) f.visible = false;
+      p.position.set(x, reach + 0.05, z);
+      p.rotation.y = ry;
+      base.add(p);
+    }
     // the control tower off to one side, its cab lit
     const tower = new Group();
     tower.position.set(40, 0, -96);
