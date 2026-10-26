@@ -30,6 +30,8 @@ const BOT_NAMES = ['נץ', 'עיט', 'ברק', 'סערה', 'שחף', 'רעם', '
 /** How many planes the room wants in the air; bots make up the difference. */
 /** Every sky has this many planes: bots fill what people do not. Teams are half each. */
 export const SKY_SIZE = 10;
+/** And at most this many of them bots, graded from easy up to a fair match, never above you. */
+export const MAX_BOTS = 7;
 
 const q = (v, k = 10) => Math.round(v * k);
 /** Bots' rounds on people count for this much (bots on bots, people on anyone: in full). */
@@ -663,7 +665,9 @@ export class ArenaRoom extends Room {
     } else if (p.bot) {
       // bots grow a little too, so a long-lived one is a real threat
       p.bot.xp += killReward(victim.level, { bot: victim.bot, ...opt }).xp;
-      p.level = Math.min(30, Math.max(p.level, levelOf(p.bot.xp)));
+      // (but never past the person they were made for)
+      const cap = Math.max(1, (this.planes.get(p.bot.forKey)?.level || 30) - 1);
+      p.level = Math.min(cap, Math.max(p.level, levelOf(p.bot.xp)));
     }
   }
 
@@ -774,15 +778,21 @@ export class ArenaRoom extends Room {
     const humans = all.filter((p) => !p.bot);
     const sides = this.teams ? ['b', 'r'] : [''];
     const seats = this.teams ? SKY_SIZE / 2 : SKY_SIZE;
+    const people = Object.fromEntries(sides.map((side) => [side, humans.filter((p) => !this.teams || p.team === side).length]));
+    const want = Object.fromEntries(sides.map((side) => [side, this.noBots || !humans.length ? 0 : Math.max(0, seats - people[side])]));
+    // no more than MAX_BOTS in all: taken from the bigger side, so teams stay even
+    const size = (side) => people[side] + want[side];
+    while (sides.reduce((n, side) => n + want[side], 0) > MAX_BOTS) {
+      const side = sides.slice().sort((a, b) => size(b) - size(a) || want[b] - want[a])[0];
+      want[side]--;
+    }
     for (const side of sides) {
       const mine = (p) => !this.teams || p.team === side;
-      const people = humans.filter(mine).length;
       const bots = all.filter((p) => p.bot && mine(p));
-      const want = this.noBots || !humans.length ? 0 : Math.max(0, seats - people);
       // the one doing worst goes home first
       bots.sort((a, b) => a.kills - b.kills);
-      while (bots.length > want) this.drop(bots.shift().key);
-      for (let n = bots.length; n < want; n++) this.addBot(side, humans);
+      while (bots.length > want[side]) this.drop(bots.shift().key);
+      for (let n = bots.length; n < want[side]; n++) this.addBot(side, humans);
     }
     this.rebalanceBots(humans);
   }
@@ -814,10 +824,10 @@ export class ArenaRoom extends Room {
 
   /**
    * A bot of its own make, for one person in the sky (the one with fewest
-   * bots of their own): a plane, a level, upgrades and weapons drawn round
-   * that person's level — mostly a little weaker, sometimes a little
-   * stronger — and a pilot about as sharp as that level, so a newcomer
-   * meets newcomers and a veteran meets veterans.
+   * bots of their own). Each person's bots are a ladder, from easy up to
+   * about a fair match and never above them: the first a good few levels
+   * under, slow to aim; the last a level or so under, sharp. The plane,
+   * upgrades and weapons follow the bot's level, the pilot's eye its rung.
    */
   addBot(team, humans) {
     const share = new Map(humans.map((h) => [h.key, 0]));
@@ -827,10 +837,12 @@ export class ArenaRoom extends Room {
     const used = new Set([...this.planes.values()].map((p) => p.name));
     const free = BOT_NAMES.filter((x) => !used.has(x));
     const name = free[Math.floor(Math.random() * free.length)] || 'Bot';
-    // round that person's level, mostly a little under it; now and then one a
-    // few levels over (not for someone just starting)
-    const ace = lv >= 4 && Math.random() < 0.15 ? 2 + Math.floor(Math.random() * 3) : 0;
-    const level = Math.max(1, Math.min(30, lv + Math.round(Math.random() * 4 - 3) + ace));
+    // the lowest rung of this person's ladder not yet taken: 0 is the easiest
+    const rungs = new Set([...this.planes.values()].filter((b) => b.bot && b.bot.forKey === forH?.key).map((b) => b.bot.rung));
+    let rung = 0;
+    while (rungs.has(rung)) rung++;
+    const d = Math.min(1, rung / (MAX_BOTS - 1));
+    const level = Math.max(1, Math.min(30, lv - 1 - Math.round((1 - d) * 6) - Math.floor(Math.random() * 2)));
     const pick = (list) => list[Math.floor(Math.random() * list.length)];
     // one of the last few planes its level opens, not a starter at level 25
     const plane = pick(PLANE_ORDER.filter((k) => PLANES[k].level <= level).slice(-4));
@@ -840,7 +852,9 @@ export class ArenaRoom extends Room {
     const arms = { gun: pick(GUN_ORDER.filter((k) => GUNS[k].level <= level)), missile: pick(MISSILE_ORDER.filter((k) => MISSILES[k].level <= level)) };
     // some bots fly in paint, as pilots who have earned it would
     const paint = Math.random() < 0.4 ? PAINT_ORDER[1 + Math.floor(Math.random() * (PAINT_ORDER.length - 2))] : 'stock';
-    const p = this.addPlane({ team, name, plane, paint, level, upgrades, arms, bot: { forKey: forH?.key || '', xp: 0, skill: Math.min(0.85, 0.3 + 0.4 * Math.min(1, level / 20) + Math.random() * 0.2), target: '', think: 0, jink: 0, jinkDir: 1, hurtAt: 0, style: pick(Object.keys(BOT_STYLES)), mode: 'attack', modeT: 0, circleT: 0, side: Math.random() < 0.5 ? -1 : 1 } });
+    // the eye: a beginner's bots are clumsy whatever their rung; a veteran's go from fair to sharp
+    const skill = Math.min(0.62, 0.22 + 0.2 * Math.min(1, lv / 20) + 0.2 * d + Math.random() * 0.06);
+    const p = this.addPlane({ team, name, plane, paint, level, upgrades, arms, bot: { forKey: forH?.key || '', rung, xp: 0, skill, target: '', think: 0, jink: 0, jinkDir: 1, hurtAt: 0, style: pick(Object.keys(BOT_STYLES)), mode: 'attack', modeT: 0, circleT: 0, side: Math.random() < 0.5 ? -1 : 1 } });
     this.spawn(p);
   }
 

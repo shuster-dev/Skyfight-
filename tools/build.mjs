@@ -16,6 +16,6 @@ const r = await esbuild.build({
 const hash = (await import('node:crypto')).createHash('sha1').update(fs.readFileSync(`${out}/main.js`)).digest('hex').slice(0, 10);
 fs.renameSync(`${out}/main.js`, `${out}/main.${hash}.js`);
 fs.writeFileSync(`${out}/index.html`, fs.readFileSync('src/client/index.html', 'utf8').replace('./main.js', `./main.${hash}.js`));
-for (const f of ['og.jpg', 'icon.png']) fs.existsSync(`src/client/${f}`) && fs.copyFileSync(`src/client/${f}`, `${out}/${f}`);
+for (const f of ['og.jpg', 'icon.png', 'apple-touch-icon.png', 'manifest.webmanifest']) fs.existsSync(`src/client/${f}`) && fs.copyFileSync(`src/client/${f}`, `${out}/${f}`);
 const kb = Math.round(fs.statSync(`${out}/main.${hash}.js`).size / 1024);
 console.log(`dist/web: main.${hash}.js ${kb} KB`);

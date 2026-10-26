@@ -6,7 +6,11 @@
 <meta name="theme-color" content="#0e1a2e">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%E2%9C%88%EF%B8%8F%3C/text%3E%3C/svg%3E">
+<link rel="icon" type="image/png" href="./icon.png">
+<!-- the picture on a phone's home screen -->
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+<link rel="manifest" href="./manifest.webmanifest">
+<meta name="apple-mobile-web-app-title" content="Skyfight">
 <title>Skyfight — קרב שמיים</title>
 <meta name="description" content="קרב מטוסים אונליין בדפדפן: כולם נגד כולם. בוחרים שם, בוחרים מטוס, ומשוגרים לשמיים.">
 <meta property="og:type" content="website">
@@ -273,6 +277,55 @@
   .f-row .t small { display: block; color: var(--dim); font-size: 12px; margin-top: 2px; }
   .f-row .join { padding: 9px 16px; font-weight: 800; font-size: 13px; color: #04201c; background: linear-gradient(90deg, #2fd3bd, #6fe6ff); border-radius: 999px; }
   .f-row .rm { width: 30px; height: 30px; font-size: 18px; line-height: 1; color: rgba(255,255,255,0.4); background: none; }
+  /* ---- the flight deck: upgrades and the market in the airbase's own look ----
+     plates cut at the corners instead of rounded cards, gauges in segments like
+     an instrument, rank chevrons for the tiers, price tags cut like stencil
+     plates, an amber tick where a plate starts */
+  :root { --plate: rgba(8, 15, 26, 0.88); --plate2: rgba(16, 28, 46, 0.92); --amber: #f2c230; --cut: 12px; }
+  .cut, .h-panel.ups, .ucard, .h-plane.market .specs .dl { clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut)); }
+  .h-panel.ups { border-radius: 0; border: 1px solid rgba(57,230,200,0.3);
+    background: linear-gradient(90deg, transparent calc(100% - 46px), var(--amber) calc(100% - 46px)) top / 100% 3px no-repeat,
+      repeating-linear-gradient(0deg, rgba(57,230,200,0.045) 0 1px, transparent 1px 24px), var(--plate); }
+  .h-panel.ups .up-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; padding-bottom: 8px; border-bottom: 1px dashed rgba(57,230,200,0.3); }
+  .h-panel.ups .up-head b { font-size: 21px; font-weight: 900; letter-spacing: 1px; }
+  .h-panel.ups .up-head small { font-size: 11.5px; font-weight: 700; letter-spacing: 0.5px; color: var(--teal); }
+  .bars { border-radius: 0; background: rgba(0,0,0,0.22); border: none; border-inline-start: 3px solid rgba(57,230,200,0.55); }
+  .bar .k { font-size: 12px; letter-spacing: 0.5px; color: rgba(220,236,255,0.8); }
+  /* the gauge: lit segments, the next tier's gain hatched green */
+  .bar .track { height: 10px; border-radius: 0; background: rgba(255,255,255,0.07);
+    -webkit-mask: repeating-linear-gradient(90deg, #000 0 7px, transparent 7px 9px); mask: repeating-linear-gradient(90deg, #000 0 7px, transparent 7px 9px); }
+  .bar .track i { border-radius: 0; }
+  .bar .track .now { background: linear-gradient(270deg, #22b8a4, #6ff5e2); box-shadow: none; }
+  .bar .track .next { background: repeating-linear-gradient(135deg, #4dff9a 0 4px, #1fbf6a 4px 8px); box-shadow: none; }
+  .ucard { border-radius: 0; border: 1px solid rgba(255,255,255,0.1); background: linear-gradient(180deg, var(--plate2), var(--plate)); transform: none !important; }
+  .ucard.on { border-color: rgba(57,230,200,0.85); background: linear-gradient(180deg, rgba(57,230,200,0.2), rgba(57,230,200,0.04)) , var(--plate); box-shadow: inset 0 0 0 1px rgba(57,230,200,0.5), inset 0 -18px 30px -18px rgba(57,230,200,0.45); }
+  /* the icon on a hexagon, like a squadron patch */
+  .up-ic { border-radius: 0; border: none; clip-path: polygon(25% 4%, 75% 4%, 100% 50%, 75% 96%, 25% 96%, 0 50%); background: linear-gradient(180deg, rgba(57,230,200,0.28), rgba(57,230,200,0.08)); box-shadow: none; }
+  .ucard.full .up-ic { color: #1d1405; background: linear-gradient(180deg, #ffe08a, #e0a93a); }
+  /* the tiers as rank chevrons */
+  .ucard .pips { gap: 2px; }
+  .ucard .pips i { width: 12px; height: 8px; border-radius: 0; clip-path: polygon(0 100%, 50% 35%, 100% 100%, 100% 65%, 50% 0, 0 65%); background: rgba(255,255,255,0.18); box-shadow: none; }
+  .ucard .pips i.on { background: var(--amber); box-shadow: none; }
+  /* a price: an amber tag, slanted */
+  .ucard .buy, .h-act.buy, .h-act.big.buy:not(:disabled) { border-radius: 0; clip-path: polygon(9px 0, 100% 0, calc(100% - 9px) 100%, 0 100%); background: linear-gradient(180deg, #ffd96a, #e9a92c); color: #1d1405; border-color: transparent; box-shadow: none; }
+  .ucard .buy:disabled { background: rgba(255,255,255,0.08); color: var(--dim); clip-path: polygon(9px 0, 100% 0, calc(100% - 9px) 100%, 0 100%); }
+  /* the market's card */
+  .shelves { gap: 4px; border: none; border-radius: 0; overflow: visible; }
+  .shelves button { clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%); padding: 7px 18px; background: var(--plate); color: rgba(220,236,255,0.6); }
+  .shelves button.on { color: #04201c; background: var(--teal); }
+  .h-plane.market .era { display: block; width: fit-content; border-inline-start: 3px solid var(--amber); padding-inline-start: 8px; }
+  /* its numbers as a data plate: three cells, the name over the number */
+  .h-plane.market .specs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; max-width: 420px; }
+  .h-plane.market .specs .dl { display: grid; grid-template-rows: auto auto; grid-auto-flow: column; justify-content: start; align-items: baseline; column-gap: 4px; row-gap: 2px;
+    padding: 8px 10px 9px; background: var(--plate); border-top: 2px solid rgba(57,230,200,0.7); }
+  .h-plane.market .specs .dl > span:first-child { grid-row: 1; grid-column: 1 / span 3; font-size: 11px; font-weight: 700; color: var(--dim); white-space: nowrap; }
+  .h-plane.market .specs .dl > :not(span:first-child) { grid-row: 2; }
+  .h-plane.market .specs .vs { grid-column: 1 / -1; }
+  /* the buttons beside them: cut, not round */
+  .chev { border-radius: 0; clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px); background: var(--plate); border: none; }
+  .h-act { border-radius: 0; clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%); }
+  .h-act.ok, .h-act.big.ok, .h-act.big.ok:disabled { background: rgba(6, 26, 30, 0.86); color: #bff6ec; border-color: rgba(57,230,200,0.8); box-shadow: inset 0 0 0 1.5px rgba(57,230,200,0.75); }
+  .h-act:not(.ok):not(.buy) { background: var(--plate); color: #eef4ff; box-shadow: inset 0 0 0 1.5px rgba(220,236,255,0.32); }
   @media (orientation: landscape) {
     .h-plane { top: 96px; bottom: 96px; left: auto; width: min(420px, 42vw); display: flex; flex-direction: column; justify-content: center; }
     .h-panel { left: auto; width: min(560px, 56vw); }
@@ -583,14 +636,30 @@
   #boot { position: fixed; inset: 0; display: grid; place-items: center; background: #0e1a2e; z-index: 50; text-align: center; color: var(--dim); }
   .spinner { width: 34px; height: 34px; border-radius: 50%; border: 3px solid rgba(255, 255, 255, 0.15); border-top-color: var(--teal); animation: spin 0.8s linear infinite; margin: 0 auto 12px; }
   @keyframes spin { to { transform: rotate(360deg); } }
-  .sheet { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; background: rgba(5, 10, 20, 0.6); padding: 16px; }
+  .sheet { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; background: rgba(5, 10, 20, 0.6);
+    padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
   .sheet .card h3 { margin: 0 0 12px; font-size: 20px; }
+  /* a sheet longer than the screen scrolls inside itself (the page around never does) */
+  .sheet .card { max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; -webkit-overflow-scrolling: touch; }
+  /* its title and the ✕ stay at the top while it scrolls */
+  .sheet-head { position: sticky; top: -18px; z-index: 2; display: flex; align-items: center; justify-content: space-between; margin: -18px -18px 4px; padding: 14px 18px 8px; background: #172235; border-radius: 20px 20px 0 0; }
+  .sheet-head h3 { margin: 0 !important; }
+  .sheet-head .x { width: 40px; height: 40px; border-radius: 12px; font-size: 18px; line-height: 1; color: #dfe7f2; background: rgba(255,255,255,0.08); border: 1px solid var(--line); }
+  /* a choice of two, as buttons: a tap on one is what lets the phone ask for the tilt */
+  .seg { display: inline-flex; padding: 3px; gap: 3px; border-radius: 10px; background: rgba(255,255,255,0.06); border: 1px solid var(--line); }
+  .seg button { padding: 7px 12px; min-height: 36px; border-radius: 8px; font: 700 13.5px var(--font); color: var(--dim); background: none; }
+  .seg button.on { color: #04201c; background: var(--teal); }
   .row2 { display: flex; gap: 8px; }
   .row2 > * { flex: 1; }
   .switch { display: flex; align-items: center; justify-content: space-between; padding: 10px 2px; font-size: 15px; border-bottom: 1px solid var(--line); }
   .switch input { width: 22px; height: 22px; }
   .sel { background: rgba(255,255,255,0.08); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-family: inherit; font-size: 14px; }
   @media (orientation: landscape) and (max-height: 500px) {
+    /* the settings side by side in two columns, so most of it fits without scrolling */
+    #sheet-settings .card { width: min(780px, 100%); display: grid; grid-template-columns: 1fr 1fr; column-gap: 26px; align-content: start; }
+    #sheet-settings .card > .sheet-head, #sheet-settings .card > .note, #sheet-settings .card > form, #sheet-settings .card > button { grid-column: 1 / -1; }
+    #sheet-settings .card > button.ghost { grid-column: auto; }
+    #sheet-settings .switch { padding: 7px 2px; }
     .logo { width: min(300px, 40vw); }
     .tag { margin-bottom: 10px; }
     #btn-fire { bottom: max(30px, env(safe-area-inset-bottom)); }
@@ -817,15 +886,13 @@
 
 <div id="sheet-settings" class="sheet hidden">
   <div class="card">
-    <h3>הגדרות</h3>
+    <div class="sheet-head"><h3>הגדרות</h3><button class="x" id="btn-settings-x" type="button" aria-label="סגור">✕</button></div>
     <label class="switch">קול <input type="checkbox" id="set-sound"></label>
     <label class="switch">הפוך למעלה/למטה <input type="checkbox" id="set-invert"></label>
     <label class="switch hidden" id="set-buzz-row">רטט בפגיעות ובהפלות <input type="checkbox" id="set-buzz"></label>
-    <label class="switch hidden" id="set-control-row">שליטה במטוס
-      <select id="set-control" class="sel">
-        <option value="stick">ג׳ויסטיק על המסך</option><option value="tilt">הטיית הטלפון</option>
-      </select>
-    </label>
+    <div class="switch hidden" id="set-control-row">שליטה במטוס
+      <div class="seg" id="set-control"><button type="button" data-v="stick">ג׳ויסטיק</button><button type="button" data-v="tilt">הטיית הטלפון</button></div>
+    </div>
     <label class="switch">סימון אויבים
       <select id="set-marks" class="sel">
         <option value="near">קרובים בלבד (250 מ')</option><option value="full">הכול (עד 2.5 ק"מ)</option><option value="off">כבוי</option>

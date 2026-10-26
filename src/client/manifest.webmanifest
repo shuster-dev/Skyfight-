@@ -1,0 +1,14 @@
+{
+  "name": "Skyfight — קרב שמיים",
+  "short_name": "Skyfight",
+  "lang": "he",
+  "dir": "rtl",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0e1a2e",
+  "theme_color": "#0e1a2e",
+  "icons": [
+    { "src": "./apple-touch-icon.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "./icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

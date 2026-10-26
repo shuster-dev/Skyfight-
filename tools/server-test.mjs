@@ -68,15 +68,17 @@ try {
     const solo = await pilot(g.token);
     ok('welcome: a key and the plane\'s numbers', await until(() => !!solo.key && got(solo, 'welcome')[0]?.m.stats?.hp === 250));
     ok('in the air at a spawn point', await until(() => solo.pose && solo.pose.y > 100));
-    ok('bots fill the sky to ten planes', await until(() => solo.snap?.p?.length === 10, 4000), solo.snap?.p?.length);
-    ok('the roster marks them as bots: nine, and me', await until(() => got(solo, 'roster').at(-1)?.m.filter((r) => r.bot).length === 9));
+    ok('seven bots in the sky with me: eight planes', await until(() => solo.snap?.p?.length === 8, 4000), solo.snap?.p?.length);
+    ok('the roster marks them as bots: seven, and me', await until(() => got(solo, 'roster').at(-1)?.m.filter((r) => r.bot).length === 7));
+    const ladder = got(solo, 'roster').at(-1).m.filter((r) => r.bot).map((r) => r.level);
+    ok('none of them above me (level 1: all level 1)', ladder.every((l) => l === 1), ladder);
     const kinds = got(solo, 'roster').at(-1).m.filter((r) => r.bot);
     ok('the bots fly different things', new Set(kinds.map((r) => `${r.plane}/${r.paint}/${r.gun}/${r.level}`)).size > 1, kinds.map((r) => `${r.plane}/${r.paint}/${r.gun}/${r.level}`));
     // a second person takes a bot's seat
     const two = await pilot(h.token);
-    ok('a second pilot in: still ten, one bot fewer', await until(() => { const r = got(solo, 'roster').at(-1)?.m || []; return r.length === 10 && r.filter((x) => x.bot).length === 8; }, 4000), (got(solo, 'roster').at(-1)?.m || []).map((x) => x.bot));
+    ok('a second pilot in: still seven bots, nine planes', await until(() => { const r = got(solo, 'roster').at(-1)?.m || []; return r.length === 9 && r.filter((x) => x.bot).length === 7; }, 4000), (got(solo, 'roster').at(-1)?.m || []).map((x) => x.bot));
     await two.room.leave();
-    ok('and the bot comes back when they leave', await until(() => (got(solo, 'roster').at(-1)?.m || []).filter((x) => x.bot).length === 9, 4000));
+    ok('and still seven when they leave', await until(() => { const r = got(solo, 'roster').at(-1)?.m || []; return r.length === 8 && r.filter((x) => x.bot).length === 7; }, 4000));
     // a pose no plane could fly is put back
     solo.room.send('pose', [solo.pose.x + 900, solo.pose.y, solo.pose.z, 0, 0, 0, 60, 0]);
     ok('a teleport is corrected', await until(() => got(solo, 'fix').length > 0));
@@ -232,9 +234,9 @@ try {
 
   {
     // people on right now: whoever is flying or was in the hangar this last
-    // minute and a half; the nine bots in the sky are not counted
+    // minute and a half; the seven bots in the sky are not counted
     const on = await api('/api/online', null, g.token);
-    ok('online: people only, not the bots', on.n >= 1 && on.n < 9, on);
+    ok('online: people only, not the bots', on.n >= 1 && on.n < 7, on);
   }
   console.log('\nsaving');
   ok('pilots are on the board from the start, by name and number', ((await api('/api/leaderboard')).rows || []).some((r) => r.name === 'צייד#1'));
@@ -320,15 +322,15 @@ try {
     const nw = await pilot(fresh.token, 'arena_mix_test');
     await wait(4500); // the bots rearrange as the second person comes in
     const rosterNow = () => got(nw, 'roster').at(-1)?.m || got(nw, 'welcome')[0]?.m.roster || [];
-    await until(() => rosterNow().filter((r) => r.bot).length === 8, 6000);
+    await until(() => rosterNow().filter((r) => r.bot).length === 7, 6000);
     // a few more rounds of rearranging, a bot at a time as each goes down
     for (let i = 0; i < 12; i++) {
       const bl = rosterNow().filter((r) => r.bot).map((r) => r.level);
-      if (bl.filter((l) => l <= 4).length >= 3 && bl.filter((l) => l >= 25).length >= 3) break;
+      if (bl.filter((l) => l <= 4).length >= 3 && bl.filter((l) => l >= 22).length >= 3) break;
       await wait(1000);
     }
     const lv = rosterNow().filter((r) => r.bot).map((r) => r.level).sort((x, y) => x - y);
-    ok('the newcomer has bots their own level, the veteran theirs', lv.filter((l) => l <= 4).length >= 3 && lv.filter((l) => l >= 25).length >= 3, lv);
+    ok('the newcomer has bots their own level, the veteran a ladder up to just under theirs', lv.filter((l) => l <= 4).length >= 3 && lv.filter((l) => l >= 22).length >= 3 && lv.every((l) => l < 30), lv);
     await vet.room.leave(); await nw.room.leave();
     await api('/api/admin/edit', { code: 'צייד#1', level: 1 }, admin);
   }
@@ -489,10 +491,10 @@ try {
   ok('and the pad is spent for a while, for everyone', got(rp, 'pad').some((e) => e.m.i === 0 && e.m.s === HEAL.every));
   await rp.room.leave();
 
-  console.log('\nfive against five');
+  console.log('\nteams');
   {
     const tm = await pilot(g2.token, 'arena_teams');
-    ok('a teams sky is five a side', await until(() => { const r = got(tm, 'roster').at(-1)?.m || []; return r.length === 10 && r.filter((x) => x.team === 'b').length === 5 && r.filter((x) => x.team === 'r').length === 5; }, 4000), (got(tm, 'roster').at(-1)?.m || []).map((x) => x.team + (x.bot ? '*' : '')));
+    ok('a teams sky with seven bots is four a side', await until(() => { const r = got(tm, 'roster').at(-1)?.m || []; return r.length === 8 && r.filter((x) => x.team === 'b').length === 4 && r.filter((x) => x.team === 'r').length === 4; }, 4000), (got(tm, 'roster').at(-1)?.m || []).map((x) => x.team + (x.bot ? '*' : '')));
     await tm.room.leave();
   }
 

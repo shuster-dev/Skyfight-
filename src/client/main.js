@@ -61,6 +61,7 @@ const CALM = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-m
 /** A buzz in the hand, where the phone can (and the vibration setting is on). */
 function buzz(p) { try { if (localStorage.getItem('sky.buzz') !== '0') navigator.vibrate?.(p); } catch {} }
 S.hangarShows = () => hangar.armKey;
+S.hangar = hangar;
 S.renderHangar = () => renderHangar();
 // how many weapons stand on the pad (for the tests: none, out of the market)
 S.hangarArms = () => hangar.scene.children.filter((c) => c.children[0]?.userData?.model).length;
@@ -262,7 +263,7 @@ function openSettings() {
   show('#set-buzz-row', !!navigator.vibrate && controls.touch);
   $('#set-buzz').checked = (() => { try { return localStorage.getItem('sky.buzz') !== '0'; } catch { return true; } })();
   show('#set-control-row', controls.touch);
-  $('#set-control').value = controls.scheme;
+  paintScheme();
   $('#set-quality').value = Q.pick;
   $('#set-sky').value = world.time;
   $('#set-voice').value = voice.mode;
@@ -277,15 +278,22 @@ $('#set-sound').addEventListener('change', (e) => { sound.setMuted(!e.target.che
 $('#set-invert').addEventListener('change', (e) => controls.setInvert(e.target.checked));
 $('#set-buzz').addEventListener('change', (e) => { try { localStorage.setItem('sky.buzz', e.target.checked ? '1' : '0'); } catch {} });
 $('#set-marks').addEventListener('change', (e) => { marks = e.target.value in MARKS ? e.target.value : 'near'; try { localStorage.setItem('sky.marks', marks); } catch {} });
-// how a phone flies: the stick on the screen, or tilting the phone
-$('#set-control').addEventListener('change', (e) => {
-  if (e.target.value !== 'tilt') return void (controls.setScheme('stick'), paintControls());
+// how a phone flies: the stick on the screen, or tilting the phone. Buttons,
+// not a list: the iPhone asks for the tilt only straight from a tap
+const paintScheme = () => document.querySelectorAll('#set-control button').forEach((b) => b.classList.toggle('on', b.dataset.v === controls.scheme));
+$('#set-control').addEventListener('click', (e) => {
+  const v = e.target.closest('button')?.dataset.v;
+  if (!v) return;
+  if (v !== 'tilt') return void (controls.setScheme('stick'), paintControls(), paintScheme());
   controls.enableTilt().then((ok) => {
-    if (!ok) { e.target.value = 'stick'; toast('הטלפון הזה לא נותן לקרוא את ההטיה', 'bad'); return; }
-    controls.setScheme('tilt'); paintControls();
+    if (!ok) { paintScheme(); toast('אין הרשאה להטיה — אשרו את החלון שקופץ (אם סירבתם: סגרו את המשחק ופתחו מחדש)', 'bad'); return; }
+    controls.setScheme('tilt'); paintControls(); paintScheme();
     toast('מחזיקים את הטלפון כמו בטיסה ישרה — ו"ישר כאן" מכייל מחדש');
   });
 });
+// closing: the ✕, the button at the bottom, or a tap outside the card
+$('#btn-settings-x').addEventListener('click', () => show('#sheet-settings', false));
+$('#sheet-settings').addEventListener('click', (e) => { if (e.target.id === 'sheet-settings') show('#sheet-settings', false); });
 $('#btn-tut').addEventListener('click', () => { try { localStorage.removeItem('sky.tut'); } catch {} toast('ההדרכה תופיע בטיסה הבאה'); show('#sheet-settings', false); });
 /** The resting stick, and the button that says "this is level" (with the tilt on). */
 function paintControls() {
