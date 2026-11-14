@@ -120,6 +120,18 @@ export const PLANES = {
     vtol: true,
     banner: 'שוסטר הצטרף לקרב',
   },
+  // the B-2: a flying wing, with every power of the שוסטר
+  b2: {
+    id: 'b2', he: 'B-2', role: 'מפציץ חמקן · מתנה', era: 'מתנה', kind: 'כנף מעופפת', level: 1, price: 0, ace: true, gift: true,
+    desc: 'מפציץ הכנף החמקן — עם כל הכוח של השוסטר: מקלעים לטווח 2,000 מטר, טילים לטווח 5,000 מטר שמפילים בפגיעה אחת, חצי שנייה בין טיל לטיל, ועומד באוויר.',
+    hp: 900, speed: 100, boost: 165, turn: 1.6, climb: 1.5, rate: 30, dmg: 10, missiles: 3, flares: 6, reload: 0.5, fill: 0.26,
+    gunRange: 2000, mRange: 5000,
+    shake: 2, shakeSure: 3,
+    oneShot: true,
+    launchGap: 0.5,
+    vtol: true,
+    banner: 'המפציץ הצטרף לקרב',
+  },
 };
 /** Planes that come only with a gift code: not on the ladder, not in the shop. */
 export const GIFT_PLANES = Object.keys(PLANES).filter((k) => PLANES[k].gift);

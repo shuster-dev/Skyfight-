@@ -107,6 +107,15 @@ console.log('\nthe gift fighter, and neon');
   ok('not on a plane you do not own', setNeon(g, true, 'phantom').error === 'not_owned');
   const back = normalize(JSON.parse(JSON.stringify(g)));
   ok('kept through a save and a load', back.neon && back.neonOf.sparrow && !back.neonOf.shuster);
+  // the B-2: a gift too, with every power the שוסטר has
+  const b = statsOf('b2');
+  ok('B2: not on the ladder, not in the shop', !PLANE_ORDER.includes('b2') && PLANES.b2.gift && buyPlane(normalize({ id: 'q3', xp: 1e9, gold: 1e9 }), 'b2').error === 'gift_only');
+  const same = (k) => k === 'plane' || b[k] === st[k];
+  ok('the B-2 has every number and power of the שוסטר', Object.keys(st).every(same) && PLANES.b2.vtol && PLANES.b2.oneShot, Object.keys(st).filter((k) => !same(k)));
+  ok('its banner: המפציץ הצטרף לקרב', PLANES.b2.banner === 'המפציץ הצטרף לקרב');
+  const g2 = newPilot('b2');
+  ok('B2 gives it and puts it on the table', redeemGift(g2, 'B2').ok && g2.plane === 'b2' && g2.planes.includes('b2'));
+  ok('typed "b-2" it is the same code, already used', redeemGift(g2, 'b-2').error === 'gift_used');
 }
 
 console.log('\nstanding in the air');
@@ -141,7 +150,7 @@ console.log('\nhow a plane turns');
   const T5 = { engine: 5, weapons: 5, armor: 5 };
   const top = (k) => statsOf(k, T5).turn;
   ok('no plane on the ladder, maxed, turns faster than 2 rad/s (1.9 s for a full circle at the very best)', PLANE_ORDER.every((k) => top(k) <= 2), PLANE_ORDER.map((k) => +top(k).toFixed(2)));
-  ok('the gift planes turn no faster either: extreme in everything else, not in a pivot', ['alfasi', 'shuster'].every((k) => top(k) <= 2.05));
+  ok('the gift planes turn no faster either: extreme in everything else, not in a pivot', ['alfasi', 'shuster', 'b2'].every((k) => top(k) <= 2.05));
   ok('the brake tightens a turn by a quarter, not more', BRAKE.turn <= 1.25);
   ok('better planes turn better: the best twice what the first does at most', statsOf('phantom').turn / statsOf('sparrow').turn < 1.7 && statsOf('phantom').turn > statsOf('sparrow').turn);
   // a full stick: the turn builds up, it does not snap
