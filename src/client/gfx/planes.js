@@ -172,6 +172,8 @@ const canvas = (w, h) => { const c = document.createElement('canvas'); c.width =
 const SCHEMES = {
   // the strongest in the game: a deep sweep of cyan to violet to magenta, a white belly, the flag on both tails
   shuster: { top: '#3a3fd6', grad: ['#00e1ff', '#5b4bff', '#ff2fa8'], blot: [], under: '#eef1f6', metal: 0.55, rough: 0.22, band: '#ffd25e', low: false, num: '1', ace: '#ff4fd8', hi: true },
+  // the B-2: smooth stealth grey all over, low-vis markings
+  b2: { top: '#3c4047', blot: [], under: '#353940', metal: 0.3, rough: 0.48, low: true, num: '', ace: '#7fd0ff' },
   // the king's attack helicopter: dark olive, a gold band, the flag on both flanks
   alfasi: { top: '#3f4a2c', blot: ['#343d24', '#4a5634'], under: '#4b5636', metal: 0.25, rough: 0.55, band: '#e8c04a', low: false, num: '1', ace: '#f2c230' },
   // olive drab over neutral grey, yellow nose band — late war
@@ -480,7 +482,102 @@ function neonLine(a, b, color, r = 0.035) {
   return m;
 }
 
+/**
+ * A flying wing: one smooth skin from tip to tip, no body apart from it.
+ * `le(x)` and `te(x)` are where the leading and trailing edges are at a
+ * distance x out from the middle (z, nose toward -z), `thick(x)` how deep
+ * the wing is there; `kinks` are spans where an edge turns, so its corners
+ * stay sharp. Built for one half and mirrored. UVs as a wing's paint wants:
+ * u out along the span, v down the chord, the upper skin in the top half.
+ */
+function flyingWing({ half, le, te, thick, kinks = [], camber = 0.68, nx = 30, nc = 22 }) {
+  // a symmetric airfoil's thickness, 0..1, closed at both edges
+  const yt = (s) => 10 * Math.max(0, 0.2969 * Math.sqrt(s) - 0.126 * s - 0.3516 * s * s + 0.2843 * s ** 3 - 0.1036 * s ** 4) / 1.0;
+  const xs = [...new Set([...Array.from({ length: nx + 1 }, (_, i) => half * (i / nx) ** 1.3), ...kinks])].sort((a, b) => a - b);
+  const pos = [], uv = [], idx = [];
+  for (const side of [1, -1]) {
+    const base = pos.length / 3;
+    for (const x of xs) {
+      const z0 = le(x), z1 = te(x), th = thick(x);
+      for (let j = 0; j <= nc; j++) {
+        const sc = (1 - Math.cos(Math.PI * j / nc)) / 2, z = z0 + (z1 - z0) * sc, h = th * yt(sc);
+        pos.push(side * x, h * camber, z); uv.push(x / half, sc * 0.5);
+        pos.push(side * x, -h * (1 - camber), z); uv.push(x / half, 0.5 + sc * 0.5);
+      }
+    }
+    const at = (i, j, b) => base + (i * (nc + 1) + j) * 2 + b;
+    for (let i = 0; i < xs.length - 1; i++) for (let j = 0; j < nc; j++) {
+      const q = (b) => [at(i, j, b), at(i + 1, j, b), at(i + 1, j + 1, b), at(i, j + 1, b)];
+      const [a, b, c, d] = q(0), [e, f, g, h] = q(1);
+      // the upper skin faces up, the lower down; the mirrored half winds the other way
+      if (side > 0) idx.push(a, d, b, b, d, c, e, f, h, f, g, h);
+      else idx.push(a, b, d, b, c, d, e, h, f, f, h, g);
+    }
+  }
+  const geo = new BufferGeometry();
+  geo.setAttribute('position', new BufferAttribute(new Float32Array(pos), 3));
+  geo.setAttribute('uv', new BufferAttribute(new Float32Array(uv), 2));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  return geo;
+}
+
 const BUILD = {
+  // the B-2 (gift code only): a flying wing, nothing but wing — the leading
+  // edge one straight sweep to each tip, the trailing edge the sawtooth
+  // double W, the middle swelling into the cockpit and the engine humps,
+  // the exhausts on top near the trailing edge, stealth grey all over
+  b2() {
+    const M = mats('b2'), g = new Group();
+    const half = 8.6, sweep = 0.72;
+    const le = (x) => -4.6 + sweep * x - 0.35 * Math.exp(-((x / 0.9) ** 2)) + 0.35;
+    // the trailing edge, worked in from the tip: point, notch, point, the notch in the middle — every edge parallel to a leading edge
+    const tip = le(half) + 0.35, TE = [[half, tip]];
+    for (const [x, dir] of [[5.6, 1], [3.6, -1], [1.8, 1], [0, -1]]) { const [px, pz] = TE[0]; TE.unshift([x, pz + dir * (px - x) * sweep]); }
+    const te = (x) => { for (let i = 1; i < TE.length; i++) if (x <= TE[i][0]) { const [x0, z0] = TE[i - 1], [x1, z1] = TE[i]; return z0 + (z1 - z0) * (x - x0) / (x1 - x0); } return tip; };
+    const thick = (x) => 1.25 * Math.exp(-((x / 1.9) ** 2)) + 0.22 * (1 - x / half) ** 1.2;
+    g.add(new Mesh(flyingWing({ half, le, te, thick, kinks: TE.map((p) => p[0]) }), M.wing));
+    // the cockpit's dark windows in the hump, and its little cap
+    const glass = new MeshPhysicalMaterial({ color: 0x0c1218, roughness: 0.05, metalness: 0.9, clearcoat: 1 });
+    for (const sx of [-1, 1]) {
+      const w = new Mesh(new PlaneGeometry(0.42, 0.26), glass);
+      w.position.set(sx * 0.3, 1.02, -2.62); w.rotation.set(-1.05, sx * 0.32, 0);
+      g.add(w);
+    }
+    // the engines: a long hump each side of the middle, a dark intake at the front, a flat exhaust trough behind
+    const dark = DARK();
+    for (const sx of [-1, 1]) {
+      const hump = new Mesh(new SphereGeometry(1, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), M.wing);
+      hump.scale.set(0.72, 0.36, 2.7); hump.position.set(sx * 1.75, 0.36, -0.3);
+      const intake = new Mesh(new BoxGeometry(1.05, 0.16, 0.5), dark);
+      intake.position.set(sx * 1.75, 0.62, -2.35); intake.rotation.x = -0.32;
+      // (sunk in the skin, ending short of the trailing edge)
+      const trough = new Mesh(new BoxGeometry(1.15, 0.05, 1.0), dark);
+      trough.position.set(sx * 1.85, 0.17, te(1.85) - 1.25);
+      g.add(hump, intake, trough);
+    }
+    // the burners: flat, wide, out of the troughs; in a hover, jets of light straight down
+    const flames = [], lift = [];
+    for (const sx of [-1, 1]) {
+      const f = flame(sx * 1.85, 0.2, te(1.85) - 0.75, 0.34, 0x8fe0ff);
+      f.scale.set(1.9, 0.35, 1.2);
+      g.add(f); flames.push(f);
+    }
+    for (const [lx, lz] of [[-1.75, 0.4], [1.75, 0.4], [-4.2, 1.6], [4.2, 1.6]]) {
+      const j = flame(lx, -0.45, lz, 0.4, 0x7fe8ff);
+      j.rotation.set(Math.PI / 2, 0, 0);
+      j.visible = false;
+      g.add(j); lift.push(j);
+    }
+    // the load, half sunk in the bays under the middle
+    const missiles = [store(1.1, -0.55, 0.6, LOAD.missile), store(-1.1, -0.55, 0.6, LOAD.missile), store(2.5, -0.4, 1.4, LOAD.missile), store(-2.5, -0.4, 1.4, LOAD.missile)];
+    missiles.forEach((m) => g.add(m));
+    const guns = [new Vector3(-0.9, 0.0, -3.7), new Vector3(0.9, 0.0, -3.7)];
+    g.userData = { props: [], flames, lift, guns, tips: [new Vector3(-half + 0.1, 0, tip - 0.15), new Vector3(half - 0.1, 0, tip - 0.15)], missiles, len: 15, ace: true };
+    return g;
+  },
+
+
   // the strongest plane (gift code only): a long smooth body with chined
   // nose and canards, a cranked delta, twin canted tails with the flag of
   // Israel, twin engines burning blue, a gradient paint under a glossy

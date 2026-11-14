@@ -136,10 +136,11 @@ export function adminEdit(p, b = {}) {
 export const GIFTS = {
   ALFASI: { plane: 'alfasi', he: 'מסוק הקרב של אלפסי' },
   SHUSTER: { plane: 'shuster', he: 'מטוס הקרב של שוסטר' },
+  B2: { plane: 'b2', he: 'מפציץ ה־B-2' },
   // not a plane: a glow for every paint, on any plane you choose
   NEON: { neon: true, he: 'ניאון — כל צבע זוהר' },
 };
-export const giftKey = (code) => String(code || '').trim().toUpperCase().replace(/\s+/g, '');
+export const giftKey = (code) => String(code || '').trim().toUpperCase().replace(/[\s-]+/g, '');
 export function redeemGift(p, code) {
   const k = giftKey(code);
   const g = Object.hasOwn(GIFTS, k) ? GIFTS[k] : null;

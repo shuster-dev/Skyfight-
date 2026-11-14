@@ -73,7 +73,8 @@ try {
     const ladder = got(solo, 'roster').at(-1).m.filter((r) => r.bot).map((r) => r.level);
     ok('none of them above me (level 1: all level 1)', ladder.every((l) => l === 1), ladder);
     const kinds = got(solo, 'roster').at(-1).m.filter((r) => r.bot);
-    ok('the bots fly different things', new Set(kinds.map((r) => `${r.plane}/${r.paint}/${r.gun}/${r.level}`)).size > 1, kinds.map((r) => `${r.plane}/${r.paint}/${r.gun}/${r.level}`));
+    // (at level 1 every bot flies the first plane, so it is the pilots that differ)
+    ok('seven different pilots', new Set(kinds.map((r) => r.name)).size === kinds.length, kinds.map((r) => r.name));
     // a second person takes a bot's seat
     const two = await pilot(h.token);
     ok('a second pilot in: still seven bots, nine planes', await until(() => { const r = got(solo, 'roster').at(-1)?.m || []; return r.length === 9 && r.filter((x) => x.bot).length === 7; }, 4000), (got(solo, 'roster').at(-1)?.m || []).map((x) => x.bot));
@@ -275,7 +276,7 @@ try {
     ok('sets gold', g1.pilot?.gold === 50000 && (await api('/api/me', null, back.token)).pilot.gold === 50000, g1);
     ok('adds gold, never below nothing', (await api('/api/admin/edit', { code: 'צייד#1', addGold: 2500 }, adm.token)).pilot?.gold === 52500 && (await api('/api/admin/edit', { code: 'צייד#1', addGold: -1e9 }, adm.token)).pilot?.gold === 0);
     ok('gives a plane, whatever the level', (await api('/api/admin/edit', { code: 'צייד#1', plane: 'phantom' }, adm.token)).pilot?.planes.includes('phantom') && (await api('/api/pilot/plane', { plane: 'phantom' }, back.token)).pilot?.plane === 'phantom');
-    ok('or all of them, the gift planes too', (await api('/api/admin/edit', { code: 'צייד#1', plane: 'all' }, adm.token)).pilot?.planes.length === 17);
+    ok('or all of them, the gift planes too', (await api('/api/admin/edit', { code: 'צייד#1', plane: 'all' }, adm.token)).pilot?.planes.length === 18);
     ok('sets the level', (await api('/api/admin/edit', { code: 'צייד#1', level: 12 }, adm.token)).pilot?.level === 12);
     ok('nonsense is refused', (await api('/api/admin/edit', { code: 'צייד#1', plane: '__proto__' }, adm.token)).error === 'no_such_plane' && (await api('/api/admin/edit', { code: 'צייד#1', level: 99 }, adm.token)).error === 'bad_level' && (await api('/api/admin/edit', { code: 'nobody#9', gold: 1 }, adm.token)).status === 404);
     await api('/api/admin/edit', { code: 'צייד#1', level: 1, plane: 'sparrow' }, adm.token);
@@ -377,6 +378,19 @@ try {
     await wait(250);
     ok('three at once: one goes; half a second later, the next', first === 1 && got(ace, 'fired').length === 2, { first, then: got(ace, 'fired').length });
     await ace.room.leave(); await watcher.room.leave();
+  }
+  {
+    // B2: the flying wing, and its own banner
+    const s3 = await api('/api/guest', {});
+    await api('/api/pilot/name', { name: 'רוח' }, s3.token);
+    ok('B2 gives the B-2', (await api('/api/pilot/gift', { code: 'B2' }, s3.token)).pilot?.plane === 'b2');
+    const watcher = await pilot(back.token, 'arena_gift_test');
+    const wing = await pilot(s3.token, 'arena_gift_test');
+    await until(() => got(watcher, 'royal').length && got(wing, 'spawn').length, 4000);
+    ok('it takes off: the sky is told המפציץ הצטרף לקרב', got(watcher, 'royal').some((e) => e.m.text === 'המפציץ הצטרף לקרב'), got(watcher, 'royal').map((e) => e.m));
+    const st = got(wing, 'welcome')[0]?.m.stats;
+    ok('the B-2 flies with the שוסטר\'s guns and missiles', st?.gunRange === 2000 && st?.mRange === 5000 && st?.hp === 900, st);
+    await wing.room.leave(); await watcher.room.leave();
   }
 
   console.log('\na phone\'s network');
